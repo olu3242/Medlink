@@ -1,0 +1,1 @@
+export interface Reservation {readonly id:string;readonly tenantId:string;readonly marId:string;readonly patientId:string;readonly pharmacyId:string;readonly inventoryItemId:string;readonly inventoryLockId:string;readonly quantity:number;readonly status:"active"|"expired"|"cancelled"|"fulfilled";readonly expiresAt:Date;readonly createdAt:Date;}

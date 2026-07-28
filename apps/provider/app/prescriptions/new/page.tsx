@@ -1,0 +1,1 @@
+import{SubmissionForm}from"../../../components/submission-form";export default function Page(){return <><header className="head"><div><div className="eyebrow">Clinical order</div><h1>New e-prescription</h1><p className="muted">The API validates credentials, medicine data, and prescribing policy before acceptance.</p></div></header><SubmissionForm kind="prescription"/></>}

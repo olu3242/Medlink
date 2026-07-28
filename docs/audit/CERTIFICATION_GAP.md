@@ -1,0 +1,94 @@
+# RC1 Certification Gap
+
+## Current result
+
+**CONDITIONAL PASS — architecture baseline only**
+
+This audit certifies that repository gaps are identified and prioritized. It
+does not certify RC1 or any engine for production.
+
+## Gate evidence
+
+| Gate | Result | Evidence/gap |
+| --- | --- | --- |
+| Lint | Pass | `npm.cmd run lint` |
+| Unit/runtime/architecture tests | Pass | 26 files, 40 tests |
+| Live database runtime tests | Blocked | One suite skipped; Docker/Podman unavailable |
+| Root typecheck | Pass | Covers all apps and packages |
+| Migrated app builds | Pass | Admin, patient, and web production builds |
+| Coverage | Fail | No configured threshold/report |
+| Migration apply | Not evidenced | Migration 006 statically certifies; no PostgreSQL/Supabase runtime |
+| RLS runtime | Fail | No cross-tenant test suite |
+| API integration | Fail | No integration suite |
+| API architecture contracts | Pass | Protected v1 routes enforce canonical boundaries |
+| API integration contracts | Fail | No live-database/provider contract suite |
+| Workflow identity | Pass | All 15 stable IDs are executable contracts |
+| Workflow behavior | Fail | Canonical end-to-end workflow suites are absent |
+| CDA conformance | Fail | No Conversation Engine or WhatsApp adapter |
+| Audit/event completeness | Fail | No general outbox; routes bypass services |
+| Observability | Fail | No metrics/tracing/SLO evidence |
+| Performance | Not evidenced | No load/latency evidence |
+| Security | Conditional | Static controls exist; no threat/pen/secret evidence |
+| Backup/restore/DR | Not evidenced | No exercise reports |
+| External conformance | Not evidenced | No provider/partner environments |
+| Documentation | Conditional | Governance aligned; legacy docs conflict |
+| Enterprise runtime lifecycle | Conditional | Audit/outbox journal is atomic; business-state transaction integration and live evidence remain |
+
+## Certification gaps by wave
+
+### Wave 1
+
+- Canonical API pipeline is not used repository-wide.
+- Workspace-wide build/typecheck and coverage gates are absent.
+- Runtime RLS, observability, secrets, backup, and recovery evidence is absent.
+
+### Wave 2
+
+- Domain unit tests are positive but narrow.
+- OCR provider, application repositories, API integration, RLS, search adapter,
+  clinical rule evidence, and batch certification are incomplete.
+
+### Wave 3
+
+- Conversation Engine, WhatsApp adapter, durable canonical workflows, general
+  event outbox, and full conversational journey are missing.
+- MAR/inventory/reservation artifacts are partial and not integrated through
+  compliant APIs.
+
+### Wave 4
+
+- Professional portals are UI scaffolds or partial applications.
+- Authentication, authorization, complete backing APIs, workflow integration,
+  and end-to-end certification are missing.
+
+### Wave 5
+
+- Enterprise packages are largely contract scaffolds.
+- Provider adapters, operational tooling, metrics/tracing, security exercises,
+  external conformance, and production certification remain incomplete.
+
+## Evidence required for PASS
+
+1. Immutable CI record of workspace lint, typecheck, builds, tests, and coverage.
+2. Clean migration apply and rollback/forward-fix evidence.
+3. Automated RLS denial/allowance matrix for every tenant-scoped table.
+4. Versioned API and event contract tests.
+5. All 15 workflow tests, including timeout, retry, compensation, escalation,
+   idempotency, replay, and recovery.
+6. Complete WhatsApp patient journey evidence with no website dependency.
+7. Professional portal RBAC and end-to-end evidence.
+8. Metrics, traces, health, SLO, alert, and incident evidence.
+9. Security threat model, secret scan, dependency scan, penetration results, and
+   remediation.
+10. Load, backup, restore, and disaster-recovery exercise reports.
+11. Required OCR, WhatsApp, payment, FHIR/HL7, and approved partner conformance
+    reports.
+12. Signed clinical, privacy, security, and operational approvals.
+13. Certification evidence for API, Conversation, Background, AI, and
+    Administrative Runtime profiles against the Enterprise Runtime Contract.
+
+## Exit decision
+
+S01.5 succeeds when these six audit documents are accepted as the baseline.
+Feature development should resume with P0 conformance remediation, followed by
+Wave 2.1 Medicine Knowledge.

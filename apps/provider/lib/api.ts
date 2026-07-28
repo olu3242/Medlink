@@ -1,0 +1,2 @@
+export interface Activity{id:string;patientReference:string;kind:"prescription"|"referral";summary:string;status:string;createdAt:string}
+const origin=process.env.MEDLINK_API_URL??"http://localhost:3000";export async function activity(){const r=await fetch(new URL("/api/v1/provider/activity",origin),{headers:{Accept:"application/json"},cache:"no-store"});if(!r.ok)throw new Error();return(await r.json()as{data:Activity[]}).data}

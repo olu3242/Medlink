@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{WorkflowService}from"./service";
+describe("workflows",()=>{it("skips durably completed steps",async()=>{let ran=0;const done={id:"w",tenantId:"t",type:"x",status:"running" as const,completedSteps:["a"]};const s=new WorkflowService({findByKey:async()=>done,create:async()=>done,markStep:async()=>done,complete:async x=>({...done,id:x,status:"completed"})});await s.run({tenantId:"t",type:"x",idempotencyKey:"k",steps:[{name:"a",execute:async()=>{ran++}}]});expect(ran).toBe(0);});});

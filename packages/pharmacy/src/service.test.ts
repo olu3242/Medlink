@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{PharmacyDiscoveryService}from"./service";
+describe("discovery",()=>{it("prioritizes verified stock",async()=>{const base={tenantId:"t",location:{latitude:0,longitude:0},active:true,open24Hours:false};const s=new PharmacyDiscoveryService({findNear:async()=>[{...base,id:"a",name:"A"},{...base,id:"b",name:"B"}]},{confidence:async id=>id==="b"?1:.1});expect((await s.discover({tenantId:"t",medicineId:"m",origin:base.location,radiusKm:10}))[0]?.pharmacy.id).toBe("b");});});

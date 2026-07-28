@@ -1,0 +1,10 @@
+node_modules/
+.next/
+coverage/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+.supabase/
+npm-debug.log*

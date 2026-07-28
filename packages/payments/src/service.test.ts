@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{PaymentService}from"./service";
+describe("payments",()=>{it("rejects over-refunds",async()=>{const s=new PaymentService({authorize:async()=>({providerReference:"x"}),refund:async()=>{}},{findByKey:async()=>null,save:async p=>p,updateRefund:async()=>{throw 0}},()=>"p");const p=await s.authorize({tenantId:"t",reservationId:"r",amount:{amountMinor:100,currency:"USD"},paymentMethodToken:"token",idempotencyKey:"k"});await expect(s.refund(p,101,"r")).rejects.toMatchObject({code:"invalid_refund"});});});

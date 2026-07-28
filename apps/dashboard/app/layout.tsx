@@ -1,0 +1,3 @@
+import type{Metadata}from"next";import type{ReactNode}from"react";import Link from"next/link";import"./globals.css";
+export const metadata:Metadata={title:"MedLink Dashboard",description:"Medication access dashboard"};
+export default function Layout({children}:{children:ReactNode}){return <html lang="en"><body><a className="skip" href="#main">Skip to content</a><header className="top"><Link className="brand" href="/">MedLink Dashboard</Link><nav className="nav" aria-label="Dashboard navigation"><Link href="/">Overview</Link><Link href="/notifications">Notifications</Link><Link href="/payments">Payments</Link><Link href="/adherence">Adherence</Link></nav></header><main className="main" id="main">{children}</main></body></html>}

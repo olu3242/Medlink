@@ -1,0 +1,14 @@
+{
+  "name": "@medlink/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@medlink/observability": "*",
+    "@medlink/platform": "*",
+    "@medlink/runtime": "*",
+    "@supabase/supabase-js": "^2.52.0",
+    "zod": "^3.25.0"
+  }
+}
