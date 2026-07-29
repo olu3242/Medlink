@@ -4,7 +4,7 @@ import { runApi } from "../../../../../lib/api-server";
 
 const idSchema = z.string().uuid();
 const decisionSchema = z.object({
-  decision: z.enum(["approved", "rejected", "changes_requested"]),
+  decision: z.enum(["approved", "rejected", "needs_information"]),
   recommendation: z.string().min(3).max(4000),
 });
 type Context = { params: Promise<{ id: string }> };
