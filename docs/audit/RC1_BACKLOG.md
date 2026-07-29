@@ -159,7 +159,38 @@ not authorization to implement multiple batches at once.
     real WhatsApp adapter, or a Supabase-backed port implementation — see
     item 15 below, the natural next step.
 15. Implement WhatsApp webhook, signature, media, identity, consent, and
-    delivery adapter.
+    delivery adapter. Partial: `packages/whatsapp` implements the transport
+    slice ADR 0003 scopes to channel adapters — `verifyWebhookSignature`
+    (HMAC-SHA256 over the raw body, per the Cloud API's
+    `X-Hub-Signature-256` header), `normalizeInboundPayload` (Cloud API
+    webhook JSON → a flat list of typed message/unsupported-message/status
+    events), and `GraphApiWhatsAppSender` (outbound send via injected
+    `fetch`, so it's unit-testable without live network) — plus migration
+    `202607290013`'s `conversation_channel_bindings` table for resolving
+    which organization a `phone_number_id` belongs to. **Not built: the
+    webhook route itself.** Wiring one exposed a genuine architecture gap
+    rather than a wiring gap — see the new finding below.
+    - **`RuntimeContext.userId` blocks the Conversation Runtime profile.**
+      `docs/ENTERPRISE_RUNTIME_CONTRACT.md` documents `userId` as optional
+      (`userId?: string`) specifically so profiles without an authenticated
+      end user (Conversation Runtime's webhooks, Background Runtime's
+      workers) can populate a context. `packages/runtime`'s actual
+      `runtimeContextSchema` requires it as a non-optional
+      `z.string().uuid()` — an inbound WhatsApp webhook, which by
+      definition has no Supabase-authenticated user, cannot construct a
+      valid `RuntimeContext` and therefore cannot call `createRuntime()`'s
+      `run()` at all. This is not a bug in `packages/whatsapp` or
+      `packages/conversation` to route around; `packages/runtime` is
+      frozen platform (see `IMPLEMENTATION.md`'s Platform Freeze Gate) and
+      "No component may create a custom execution pipeline or bypass a
+      mandatory stage." Building a webhook route today would mean either
+      quietly modifying frozen code without an ADR, or hand-rolling a
+      parallel pipeline that only claims to satisfy the same obligations —
+      both rejected. This needs an accepted ADR deciding how a
+      system/webhook identity is represented in `RuntimeContext` (e.g. a
+      well-known system `userId`, or genuinely making the field optional
+      with every consumer of `context.userId` updated to handle its
+      absence) before route wiring can proceed.
 16. Implement durable Workflow Orchestrator and all applicable canonical
     definitions.
 17. Implement a general transactional domain-event outbox and consumers.

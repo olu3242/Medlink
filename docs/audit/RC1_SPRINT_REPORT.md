@@ -377,3 +377,58 @@ verifiable against a single backlog item.
 `npm run check` (175 tests, up from 150) and `npm run build` (all 8
 workspaces) both pass clean after this migration. No app yet depends on
 `@medlink/conversation`, so the build change is additive only.
+
+## Wave 3 continues — WhatsApp channel adapter transport slice, and a real architecture blocker found
+
+Continuing Batch 3.1 under the same "Begin Wave 3" authorization, toward
+RC1_BACKLOG item 15 (WhatsApp webhook, signature, media, identity,
+consent, delivery adapter).
+
+- **`packages/whatsapp`** (new package): `verifyWebhookSignature`
+  (HMAC-SHA256 over the raw body against the Cloud API's
+  `X-Hub-Signature-256` header, using `timingSafeEqual` and checking length
+  before comparing so an invalid signature never leaks length information
+  through a thrown-vs-returned distinction); `normalizeInboundPayload`
+  (parses the Cloud API's nested webhook JSON into a flat list of
+  discriminated `message`/`unsupported_message`/`status` events — an
+  unrecognized WhatsApp message type like `audio` or `location` is
+  surfaced as `unsupported_message` rather than dropped or forced into
+  `text`, so a future route can hand it to a human instead of losing it
+  silently); `GraphApiWhatsAppSender` (outbound send with an injected
+  `fetch`, so delivery is unit-tested against a mocked response rather
+  than skipped as "needs live network," the same dependency-injection
+  precedent `packages/api/src/index.test.ts` set for `requestDatabase`).
+  18 new tests.
+- **Migration `202607290013_conversation_channel_bindings.sql`**: maps a
+  provider channel identifier (a WhatsApp Business `phone_number_id`) to
+  the organization that owns it — the piece a future webhook route needs
+  to resolve tenant context from an inbound payload, before anything else
+  can happen. RLS mirrors `conversations_admin_manage`.
+- **Real architecture blocker found while attempting to wire an actual
+  webhook route** (documented, not routed around):
+  `docs/ENTERPRISE_RUNTIME_CONTRACT.md` specifies `RuntimeContext.userId`
+  as optional specifically so profiles without an authenticated end user
+  can populate a context, but `packages/runtime`'s actual
+  `runtimeContextSchema` requires it as a non-optional `z.string().uuid()`.
+  An inbound WhatsApp webhook has no Supabase-authenticated user by
+  definition, so it cannot construct a valid `RuntimeContext` and cannot
+  call `createRuntime()`'s `run()` — the Conversation Runtime profile
+  `docs/ENTERPRISE_RUNTIME_CONTRACT.md` itself specifies is, as written,
+  unreachable through the one pipeline every component is required to use.
+  `packages/runtime` is frozen platform (`IMPLEMENTATION.md`'s Platform
+  Freeze Gate); silently loosening the schema or hand-rolling a parallel
+  pipeline that only claims equivalent obligations are both exactly the
+  kind of shortcut this project's working rules exist to prevent. Recorded
+  as a new P1 item 15 sub-finding requiring an accepted ADR before route
+  wiring can proceed — not decided unilaterally here, since it changes
+  frozen platform contract, the same posture taken for every other
+  genuine architecture decision this pass (the `generics` table, "begin
+  Wave 3" itself) surfaced to the user rather than assumed.
+- Static certification tests: 2 new cases in
+  `packages/runtime/src/migration.test.ts`, 3 new cases in
+  `packages/runtime/src/wave3-rls.test.ts`.
+
+`npm run check` (196 tests, up from 175) and `npm run build` (all 8
+workspaces) both pass clean after this pass. Still no route depends on
+`@medlink/whatsapp` or `@medlink/conversation` — both remain additive,
+tested, unwired packages pending the ADR above.

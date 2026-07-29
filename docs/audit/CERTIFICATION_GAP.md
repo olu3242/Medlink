@@ -24,7 +24,7 @@ does not certify RC1 or any engine for production.
 | API integration contracts | Fail | No live-database/provider contract suite |
 | Workflow identity | Pass | All 15 stable IDs are executable contracts |
 | Workflow behavior | Fail | Canonical end-to-end workflow suites are absent |
-| CDA conformance | Fail | Conversation Engine domain/application boundaries and schema exist (`packages/conversation`, migration `202607290012`); no WhatsApp adapter, route wiring, or Workflow Orchestrator integration yet |
+| CDA conformance | Fail | Conversation Engine domain/application boundaries and schema exist (`packages/conversation`, migration `202607290012`); WhatsApp channel-adapter transport slice exists (`packages/whatsapp`, migration `202607290013`); route wiring is blocked on an ADR for webhook identity in `RuntimeContext` (see RC1_BACKLOG item 15), and Workflow Orchestrator integration is still missing |
 | Audit/event completeness | Conditional | General outbox exists (migration 006); Wave 2 catalog/prescription/equivalency/clinical-validation use cases (migrations 008-009) and reservation creation (migration 010) all commit business state, audit, and outbox atomically in one function; MAR pickup/fulfillment transitions and other unimplemented Wave 3 use cases remain out of scope until built |
 | Observability | Fail | No metrics/tracing/SLO evidence; health dependency checks are now real (no hardcoded results) but still unexercised outside unit tests |
 | Performance | Not evidenced | No load/latency evidence |
@@ -66,9 +66,20 @@ does not certify RC1 or any engine for production.
   (`packages/conversation`, migration `202607290012`) — dialogue/session
   state, intent detection, human handoff, and an append-only decision log,
   delegating business processes to a `WorkflowInvoker` port rather than
-  running rules itself. WhatsApp adapter, durable canonical workflows
-  (Batch 3.2), general event outbox, route wiring, and the full
-  conversational journey are still missing.
+  running rules itself.
+- The WhatsApp channel adapter's transport slice now exists
+  (`packages/whatsapp`: signature verification, payload normalization,
+  outbound sender) and `conversation_channel_bindings` (migration
+  `202607290013`) resolves which organization a channel identifier belongs
+  to. **Route wiring is blocked, not just undone**: `packages/runtime`'s
+  `runtimeContextSchema` requires a non-optional `userId`, which an
+  unauthenticated webhook never has, so no route can call `createRuntime()`
+  for it today without either modifying frozen platform code without an
+  ADR or hand-rolling a non-conformant pipeline. See
+  `docs/audit/RC1_BACKLOG.md` P1 item 15 for the full finding — this needs
+  an accepted ADR, not another wiring pass.
+- Durable canonical workflows (Batch 3.2), the general event outbox, and
+  the full conversational journey are still missing.
 - MAR/inventory/reservation artifacts are partial and not integrated through
   compliant APIs. `reserve_inventory` is now implemented (migration 010,
   atomic and idempotent), but the patient reservation UI cannot successfully

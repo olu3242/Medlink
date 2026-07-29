@@ -195,6 +195,22 @@ describe("conversation engine migration", () => {
   });
 });
 
+describe("conversation channel bindings migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202607290013_conversation_channel_bindings.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("defines the channel-identifier-to-organization binding table", () => {
+    expect(sql).toContain("create table public.conversation_channel_bindings");
+    expect(sql).toContain("alter table public.conversation_channel_bindings enable row level security");
+  });
+
+  it("makes a channel identifier globally unique per channel, not just per organization", () => {
+    expect(sql).toContain("unique (channel, channel_identifier)");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),

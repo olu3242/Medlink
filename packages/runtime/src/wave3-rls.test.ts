@@ -13,6 +13,11 @@ const sql = readFileSync(
   "utf8",
 ).toLowerCase();
 
+const bindingsSql = readFileSync(
+  join(process.cwd(), "supabase", "migrations", "202607290013_conversation_channel_bindings.sql"),
+  "utf8",
+).toLowerCase();
+
 describe("wave 3 conversation engine table RLS", () => {
   const tablesWithPolicies: Record<string, readonly string[]> = {
     conversations: ["conversations_read", "conversations_admin_manage"],
@@ -51,5 +56,13 @@ describe("wave 3 conversation engine table RLS", () => {
 
   it("deduplicates inbound provider messages per organization", () => {
     expect(sql).toContain("unique (organization_id, external_message_id)");
+  });
+
+  it("enables RLS on conversation_channel_bindings and defines its policies", () => {
+    expect(bindingsSql).toContain(
+      "alter table public.conversation_channel_bindings enable row level security",
+    );
+    expect(bindingsSql).toContain("create policy conversation_channel_bindings_read");
+    expect(bindingsSql).toContain("create policy conversation_channel_bindings_admin_manage");
   });
 });
