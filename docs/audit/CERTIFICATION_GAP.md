@@ -28,7 +28,7 @@ does not certify RC1 or any engine for production.
 | Audit/event completeness | Conditional | General outbox exists (migration 006); Wave 2 catalog/prescription/equivalency/clinical-validation use cases (migrations 008-009) and reservation creation (migration 010) all commit business state, audit, and outbox atomically in one function; MAR pickup/fulfillment transitions and other unimplemented Wave 3 use cases remain out of scope until built |
 | Observability | Fail | No metrics/tracing/SLO evidence; health dependency checks are now real (no hardcoded results) but still unexercised outside unit tests |
 | Performance | Not evidenced | No load/latency evidence |
-| Security | Conditional | Static controls exist; no threat/pen/secret evidence |
+| Security | Conditional | Static controls exist; no threat/pen evidence. `npm audit`: 15 high-severity findings, all requiring a major-version bump with no non-breaking fix available (`npm audit fix` alone resolves none of them) — see `docs/audit/DEPENDENCY_AUDIT.md` for the per-package risk assessment and why none were force-upgraded unilaterally |
 | Backup/restore/DR | Not evidenced | No exercise reports |
 | External conformance | Not evidenced | No provider/partner environments |
 | Documentation | Conditional | Governance aligned; legacy docs conflict |

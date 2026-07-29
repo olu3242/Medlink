@@ -58,7 +58,20 @@ not authorization to implement multiple batches at once.
      certification. CI now builds every app workspace (previously only
      `@medlink/web`) and `vitest.config.ts` enforces a coverage threshold over
      `packages/**/src`, uploaded as a CI artifact. Live integration, RLS,
-     workflow, performance, recovery, and security suites are still absent.
+     workflow, performance, and recovery suites are still absent.
+   - Dependency security: `npm audit` shows 15 high-severity findings, all
+     requiring a major-version bump with no safe automatic fix. Assessed and
+     documented per-package in `docs/audit/DEPENDENCY_AUDIT.md` rather than
+     force-upgraded — real exposure is low (unused `sharp`, build-time-only
+     `postcss`, dev-only `eslint`/`vitest` tooling; `next`'s "high" rating is
+     entirely inherited from those two, no direct Next.js CVE), and an
+     untested major bump risks breaking the build for a low-probability
+     finding. Recommended, lowest-risk-first upgrade order is in that
+     document.
+   - Two previously-untested packages closed: `packages/api` (the runtime
+     pipeline `apps/admin`/`apps/patient` route every request through) and
+     `standardRuntimeHooks` in `packages/observability` (added in the Sprint
+     4 dedup pass with no test of its own until now).
    - Mark old wave certification documents as historical/pre-CDA. Done:
      `docs/wave-3-certification.md`, `wave-4-certification.md`, and
      `wave-5-certification.md` used a pre-CDA wave grouping that actively
