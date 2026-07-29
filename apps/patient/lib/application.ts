@@ -157,21 +157,35 @@ export class AccessApplication {
       .eq("organization_id", organizationId).eq("id", id).single());
   }
 
+  // Atomic and idempotent-replay-safe since migration 202607290017:
+  // decide_clinical_review commits the decision and its runtime evidence
+  // in one transaction, and returns the existing row rather than erroring
+  // when the same actor replays the same decision on an already-decided
+  // review -- the raw `.eq("decision", "pending")` update this replaced
+  // had no matching row (and so threw via `.single()`) on any repeat call.
+  // clinical_reviews has no per-decision idempotency-key column to key a
+  // client-supplied key on (see the migration), so this derives a stable
+  // one from the review's own identity rather than changing the API
+  // contract to require the caller supply one.
   async decideReview(
-    organizationId: string,
-    userId: string,
+    context: RuntimeContext,
     id: string,
     input: {
       decision: "approved" | "rejected" | "needs_information";
       recommendation: string;
     },
   ) {
-    return result(this.database.from("clinical_reviews").update({
-      ...input,
-      reviewed_by: userId,
-      reviewed_at: new Date().toISOString(),
-    }).eq("organization_id", organizationId).eq("id", id)
-      .eq("decision", "pending").select().single());
+    return result(this.database.rpc("decide_clinical_review", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: `${id}:decide`,
+      target_channel: context.channel,
+      target_review_id: id,
+      target_decision: input.decision,
+      target_recommendation: input.recommendation,
+    }));
   }
 
   async reservations(organizationId: string) {

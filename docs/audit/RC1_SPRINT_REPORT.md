@@ -634,3 +634,53 @@ all, unlike every atomic RPC built earlier this session.
 
 `npm run check` (232 tests, up from 226) and `npm run build` (all 8
 workspaces) both pass clean after this round.
+
+## Clinical review decision made atomic; three more canonical workflows get real steps
+
+Five more increments, closing out most of the remaining low-risk Batch 3.2
+ground before route wiring (blocked on ADR 0004) becomes the limiting
+factor:
+
+- **Migration `202607290017_decide_clinical_review.sql`**: closes the
+  other S01.8 gap named alongside MAR creation. The old
+  `AccessApplication.decideReview()` was a raw update guarded by
+  `.eq("decision", "pending")`, which had its own latent bug beyond
+  non-atomicity: a repeated call with the same decision (a client retry
+  after a dropped response) matched zero rows once the review left
+  `pending` and errored via `.single()` instead of replaying safely. The
+  new RPC treats the decision itself as the idempotency signal -- same
+  actor, same decision, same recommendation on an already-decided review
+  returns the existing row; anything else (a different decision, a
+  different actor) still raises, since that's a real conflict, not a
+  replay. `clinical_reviews` has no per-decision idempotency-key column of
+  its own to key a client-supplied key on, so this doesn't add one.
+- **Three more canonical workflows get a real executable step**,
+  bringing the total to six of fifteen:
+  - **WF-004 Prescription Parsing** (`prescription-parsing.ts`) wraps
+    `packages/prescription`'s `PrescriptionParser` directly -- like
+    WF-005, it needed no new port, since the parser already depends on
+    its own repository/reader/audit ports the caller supplies. A
+    parser-level failure propagates rather than being swallowed as a
+    skipped step, since a failed extraction is a real failure to surface,
+    not a missing-input gap.
+  - **WF-007 Clinical Review** gets a second step, `pharmacist_review`
+    (alongside the existing `run_clinical_validation`), backed by the new
+    `decide_clinical_review` RPC via a `ClinicalReviewDecider` port. Never
+    auto-decides: the decision value must already be present in the
+    workflow context, made by a human pharmacist through whatever channel
+    captured it -- the step only records it atomically.
+  - **WF-009 Reservation** (`reservation.ts`) wraps the existing
+    `reserve_inventory` RPC (migration 010, already built in an earlier
+    pass) via a new `ReservationCreator` port -- the domain logic already
+    existed, it just wasn't callable from the Workflow Orchestrator yet.
+  - Each new port's concrete Supabase-backed implementation
+    (`apps/web/lib/mar-creator.ts`, `clinical-review-decider.ts`,
+    `reservation-creator.ts`) follows the same documented pattern: a
+    workflow-invoked call has no HTTP request of its own to derive
+    correlation/request identifiers from, so each generates a fresh
+    request id and uses a stable, deterministic value as the correlation/
+    idempotency key, tagged with a `"workflow"` channel.
+- 14 new tests across the five new/extended step files.
+
+`npm run check` (246 tests, up from 232) and `npm run build` (all 8
+workspaces) both pass clean after this round.

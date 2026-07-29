@@ -269,6 +269,35 @@ describe("create_mar migration", () => {
   });
 });
 
+describe("decide_clinical_review migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202607290017_decide_clinical_review.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("commits the decision and its runtime evidence in one function", () => {
+    expect(sql).toContain("function public.decide_clinical_review");
+    expect(sql).toContain("update public.clinical_reviews");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("replays idempotently on the same actor repeating the same decision, rather than erroring", () => {
+    expect(sql).toContain("if existing.decision <> 'pending' then");
+    expect(sql).toContain("existing.decision = target_decision");
+    expect(sql).toContain("existing.reviewed_by = target_actor_id");
+    expect(sql).toContain("return existing;");
+  });
+
+  it("still raises for a genuine conflict: a different decision or actor on an already-decided review", () => {
+    expect(sql).toContain("raise exception 'clinical review has already been decided'");
+  });
+
+  it("re-enforces the clinical_reviews_pharmacist_manage RLS policy inside the SECURITY DEFINER function", () => {
+    expect(sql).toContain("array['pharmacist']::public.member_role[]");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),

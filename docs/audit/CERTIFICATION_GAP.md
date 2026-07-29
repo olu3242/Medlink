@@ -89,11 +89,15 @@ does not certify RC1 or any engine for production.
   `medicine_search` for real, throws `UnsupportedWorkflowTypeError` (not a
   silent no-op) for any other classified intent. No route calls any of
   this yet, blocked on ADR 0004 the same as Batch 3.1. No recovery model.
-- MAR creation is now atomic (migration `202607290016`'s `create_mar`
-  commits the MAR row and its runtime evidence together in one
-  transaction), closing an S01.8 gap deferred since Track A. Clinical
-  review decision remains non-atomic, with a separate latent replay bug,
-  not fixed this pass.
+- MAR creation and clinical review decision are now both atomic (migration
+  `202607290016`'s `create_mar`, migration `202607290017`'s
+  `decide_clinical_review`), closing the S01.8 gap deferred since Track A.
+  The review-decision RPC also fixes a separate latent bug found auditing
+  it: the old raw update errored on any replay once a review left
+  `pending`, instead of returning the prior result.
+- Six of fifteen canonical workflows (WF-004, WF-005, WF-006, WF-007 x2,
+  WF-009) now have at least one real executable `WorkflowStep`, each
+  backed by the atomic RPC or domain service that already existed for it.
 - MAR/Reservation state vocabulary audited: Wave 2/3-owned code passes the
   real DB enums through honestly; one new Wave 4 finding (`apps/pharmacy`'s
   reservations page has never worked -- see RC1_BACKLOG item 18) recorded,

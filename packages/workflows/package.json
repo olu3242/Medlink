@@ -6,6 +6,7 @@
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
     "@medlink/clinical": "0.1.0",
+    "@medlink/prescription": "0.1.0",
     "@medlink/search": "0.1.0"
   }
 }

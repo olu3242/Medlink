@@ -44,3 +44,61 @@ export function createClinicalValidationStep(service: ClinicalValidationService)
     },
   };
 }
+
+export interface DecideClinicalReviewInput {
+  readonly organizationId: string;
+  readonly actorId: string;
+  readonly reviewId: string;
+  readonly decision: "approved" | "rejected" | "needs_information";
+  readonly recommendation: string;
+}
+
+export interface DecidedClinicalReview {
+  readonly id: string;
+  readonly decision: string;
+}
+
+// Like mar-creation.ts's MarCreator, a pharmacist's clinical review
+// decision has no portable domain package to wrap -- it's a licensed
+// human's judgment call recorded against the database (the
+// decide_clinical_review RPC, migration 202607290017), not a computable
+// domain rule. A concrete implementation belongs in the consuming app.
+export interface ClinicalReviewDecider {
+  decide(input: DecideClinicalReviewInput): Promise<DecidedClinicalReview>;
+}
+
+function isDecideClinicalReviewInput(value: unknown): value is DecideClinicalReviewInput {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.organizationId === "string" &&
+    typeof candidate.actorId === "string" &&
+    typeof candidate.reviewId === "string" &&
+    (candidate.decision === "approved" ||
+      candidate.decision === "rejected" ||
+      candidate.decision === "needs_information") &&
+    typeof candidate.recommendation === "string"
+  );
+}
+
+// WF-007's second real step, "pharmacist_review" -- the decision half of
+// Clinical Review, distinct from "run_clinical_validation" above (the
+// advisory findings a pharmacist reviews before deciding). Reads
+// `clinicalReviewDecisionInput` from the workflow context; a missing or
+// malformed input skips the decision and reports why, the same pattern
+// every other step in this package uses, rather than passing bad data to
+// the RPC. Never auto-decides on its own: the decision value itself must
+// already be present in the context, made by the human pharmacist through
+// whatever channel captured it -- this step only records it atomically.
+export function createPharmacistReviewStep(decider: ClinicalReviewDecider): WorkflowStep {
+  return {
+    name: "pharmacist_review",
+    async execute(instance: WorkflowInstance) {
+      const input = instance.context.clinicalReviewDecisionInput;
+      if (!isDecideClinicalReviewInput(input)) {
+        return { pharmacistReviewSkippedReason: "missing_or_invalid_input" };
+      }
+      return { pharmacistReviewResult: await decider.decide(input) };
+    },
+  };
+}

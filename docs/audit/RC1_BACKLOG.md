@@ -40,12 +40,17 @@ not authorization to implement multiple batches at once.
      010, `reserve_inventory`); done for MAR creation (migration 016,
      `create_mar`, now that Wave 3 has begun) — `AccessApplication.createMar()`
      was a raw single-table insert with no runtime evidence commit until now.
-     Clinical review decision (`AccessApplication.decideReview()`) remains a
-     non-atomic two-step call; not fixed this pass, since it also has a
-     distinct latent bug (an `.eq("decision", "pending")` guard with no
-     idempotent-replay path — a repeated decision call errors instead of
-     returning the prior result) worth fixing together rather than
-     separately.
+     Done for clinical review decision too (migration 017,
+     `decide_clinical_review`) — `AccessApplication.decideReview()` was a
+     raw two-step update guarded by `.eq("decision", "pending")`, which also
+     had a distinct latent bug: a repeated call with the same decision (a
+     client retry after a dropped response) matched zero rows once the
+     review was no longer pending and errored via `.single()` instead of
+     replaying safely. The new RPC treats the decision itself as the
+     idempotency signal (same actor, same decision, same recommendation on
+     an already-decided review returns the existing row; anything else
+     still raises) since `clinical_reviews` has no per-decision idempotency
+     key of its own.
    - Execute migration, rollback, RLS, tenant-isolation, idempotency, and retry
      tests against live PostgreSQL/Supabase.
 
@@ -221,11 +226,18 @@ not authorization to implement multiple batches at once.
     executable step (`medicine-search.ts`) wrapping
     `packages/search`'s `MedicineSearchService` -- the first canonical
     definition backed by an actual domain call rather than just a name.
-    WF-007 Clinical Review (`clinical-review.ts`, wrapping
-    `packages/clinical`) and WF-006 Medication Access Request
-    (`mar-creation.ts`, backed by the new atomic `create_mar` RPC via a
-    `MarCreator` port) have real executable steps too. Now also durable:
-    migration `202607290015` adds `workflow_instances`,
+    Six of fifteen canonical workflows now have at least one real
+    executable step: WF-004 Prescription Parsing (`prescription-parsing.ts`,
+    wrapping `packages/prescription`'s `PrescriptionParser` directly, the
+    same pattern as WF-005), WF-006 Medication Access Request
+    (`mar-creation.ts`, backed by the atomic `create_mar` RPC via a new
+    `MarCreator` port), WF-007 Clinical Review (`clinical-review.ts`, two
+    steps: `run_clinical_validation` wrapping `packages/clinical`, and
+    `pharmacist_review` backed by the new atomic `decide_clinical_review`
+    RPC via a `ClinicalReviewDecider` port), and WF-009 Reservation
+    (`reservation.ts`, backed by the existing atomic `reserve_inventory` RPC
+    via a `ReservationCreator` port). Now also durable: migration
+    `202607290015` adds `workflow_instances`,
     and `apps/web/lib/workflow-store.ts`'s `SupabaseWorkflowStore`
     implements the port for real. `apps/web/lib/workflow-invoker.ts`'s
     `WorkflowOrchestratorInvoker` wires `packages/conversation`'s

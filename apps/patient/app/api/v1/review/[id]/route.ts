@@ -26,11 +26,6 @@ export const PATCH = async (request: Request, route: Context) => {
     schema: z.object({ id: idSchema, decision: decisionSchema }),
     input: async (value) => ({ id, decision: await value.json() }),
     execute: async (input, context, database) =>
-      new AccessApplication(database).decideReview(
-        context.organizationId,
-        context.userId,
-        input.id,
-        input.decision,
-      ),
+      new AccessApplication(database).decideReview(context, input.id, input.decision),
   });
 };
