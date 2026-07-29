@@ -5,3 +5,5 @@ export * from "./clinical-review";
 export * from "./mar-creation";
 export * from "./reservation";
 export * from "./prescription-parsing";
+export * from "./inventory-discovery";
+export * from "./prescription-upload";

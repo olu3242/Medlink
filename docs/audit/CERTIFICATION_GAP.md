@@ -95,9 +95,11 @@ does not certify RC1 or any engine for production.
   The review-decision RPC also fixes a separate latent bug found auditing
   it: the old raw update errored on any replay once a review left
   `pending`, instead of returning the prior result.
-- Six of fifteen canonical workflows (WF-004, WF-005, WF-006, WF-007 x2,
-  WF-009) now have at least one real executable `WorkflowStep`, each
-  backed by the atomic RPC or domain service that already existed for it.
+- Seven of fifteen canonical workflows (WF-003, WF-004, WF-005, WF-006,
+  WF-007 x2, WF-008, WF-009) now have at least one real executable
+  `WorkflowStep` -- eight steps total -- each backed by the atomic RPC or
+  domain service that already existed for it, and each guarded by a
+  consistency test against drifting from its structural definition.
 - MAR/Reservation state vocabulary audited: Wave 2/3-owned code passes the
   real DB enums through honestly; one new Wave 4 finding (`apps/pharmacy`'s
   reservations page has never worked -- see RC1_BACKLOG item 18) recorded,

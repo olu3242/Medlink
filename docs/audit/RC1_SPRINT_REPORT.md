@@ -684,3 +684,39 @@ factor:
 
 `npm run check` (246 tests, up from 232) and `npm run build` (all 8
 workspaces) both pass clean after this round.
+
+## Two more canonical workflows get real steps; a drift-detection test
+
+Closing out the remaining low-risk Batch 3.2 ground unblocked by ADR 0004:
+
+- **WF-008 Inventory Discovery** (`inventory-discovery.ts`) gets a real
+  `search_inventory` step via a new `InventoryFinder` port. Unlike
+  WF-006/WF-007/WF-009 (backed by an atomic RPC), this is a read-only
+  query -- `apps/web/lib/inventory-finder.ts`'s `SupabaseInventoryFinder`
+  reimplements the same filtered `inventory_batches` query
+  `AccessApplication.inventory()` already runs, rather than sharing it,
+  since the duplication risk on a read path is lower than a mutation would
+  carry and consolidating it is a separate cleanup.
+- **WF-003 Prescription Upload** (`prescription-upload.ts`) gets a real
+  `store_prescription_record` step via a new `PrescriptionUploader` port,
+  backed by the atomic `create_prescription_record` RPC (migration 008) --
+  proven since Wave 2 from `apps/admin`'s `PrescriptionApplication.create()`,
+  but never callable from the Workflow Orchestrator or a patient-facing
+  upload flow before now.
+- **A drift-detection regression test** in `definitions.test.ts`:
+  constructs every one of the eight real `WorkflowStep`s built across this
+  and prior passes (with throwaway port dependencies -- only `.name` is
+  read) and asserts each one's name actually appears in its canonical
+  workflow's structural step list in `definitions.ts`. Catches the exact
+  class of bug a silent rename in either file would cause, which the
+  existing "does every workflow have steps" test couldn't.
+
+Seven of fifteen canonical workflows now have at least one real executable
+step (eight steps total): WF-003, WF-004, WF-005, WF-006, WF-007 (x2),
+WF-008, WF-009. The remaining eight (WF-001, WF-002, WF-010 through
+WF-015) have no existing atomic RPC or domain service to wrap -- building
+them means new business logic, not wiring, a different-shaped and larger
+task deliberately left for a dedicated pass rather than folded in here.
+
+`npm run check` (253 tests, up from 246) and `npm run build` (all 8
+workspaces) both pass clean after this round.

@@ -226,18 +226,27 @@ not authorization to implement multiple batches at once.
     executable step (`medicine-search.ts`) wrapping
     `packages/search`'s `MedicineSearchService` -- the first canonical
     definition backed by an actual domain call rather than just a name.
-    Six of fifteen canonical workflows now have at least one real
-    executable step: WF-004 Prescription Parsing (`prescription-parsing.ts`,
-    wrapping `packages/prescription`'s `PrescriptionParser` directly, the
-    same pattern as WF-005), WF-006 Medication Access Request
+    Seven of fifteen canonical workflows now have at least one real
+    executable step (eight steps total): WF-003 Prescription Upload
+    (`prescription-upload.ts`, backed by the atomic
+    `create_prescription_record` RPC, previously only called from
+    `apps/admin`, via a new `PrescriptionUploader` port), WF-004
+    Prescription Parsing (`prescription-parsing.ts`, wrapping
+    `packages/prescription`'s `PrescriptionParser` directly, the same
+    pattern as WF-005), WF-006 Medication Access Request
     (`mar-creation.ts`, backed by the atomic `create_mar` RPC via a new
     `MarCreator` port), WF-007 Clinical Review (`clinical-review.ts`, two
     steps: `run_clinical_validation` wrapping `packages/clinical`, and
-    `pharmacist_review` backed by the new atomic `decide_clinical_review`
-    RPC via a `ClinicalReviewDecider` port), and WF-009 Reservation
-    (`reservation.ts`, backed by the existing atomic `reserve_inventory` RPC
-    via a `ReservationCreator` port). Now also durable: migration
-    `202607290015` adds `workflow_instances`,
+    `pharmacist_review` backed by the atomic `decide_clinical_review` RPC
+    via a `ClinicalReviewDecider` port), WF-008 Inventory Discovery
+    (`inventory-discovery.ts`, backed by a new `InventoryFinder` port
+    reimplementing `AccessApplication.inventory()`'s read-only query), and
+    WF-009 Reservation (`reservation.ts`, backed by the existing atomic
+    `reserve_inventory` RPC via a `ReservationCreator` port). A new
+    `definitions.test.ts` case constructs every real step and asserts its
+    `.name` actually appears in its canonical workflow's structural
+    definition, guarding against the two silently drifting. Now also
+    durable: migration `202607290015` adds `workflow_instances`,
     and `apps/web/lib/workflow-store.ts`'s `SupabaseWorkflowStore`
     implements the port for real. `apps/web/lib/workflow-invoker.ts`'s
     `WorkflowOrchestratorInvoker` wires `packages/conversation`'s
