@@ -43,7 +43,7 @@ async function result<T>(
   return data;
 }
 
-interface MedicineRow {
+export interface MedicineRow {
   id: string;
   brand_name: string;
   generic_name: string;
@@ -62,7 +62,7 @@ interface MedicineRow {
 // straight through, so the catalog table rendered blank for every column
 // except id and status. Centralizing the mapping here keeps list/get/
 // create/update consistent in one place.
-function toMedicineSummary(row: MedicineRow) {
+export function toMedicineSummary(row: MedicineRow) {
   return {
     id: row.id,
     name: row.brand_name,
@@ -73,7 +73,7 @@ function toMedicineSummary(row: MedicineRow) {
   };
 }
 
-function toMedicineDetail(row: MedicineRow) {
+export function toMedicineDetail(row: MedicineRow) {
   return {
     ...toMedicineSummary(row),
     route: row.route,

@@ -19,7 +19,7 @@ async function result<T>(
   return data;
 }
 
-interface MarRow {
+export interface MarRow {
   id: string;
   state: string;
   created_at: string;
@@ -34,16 +34,16 @@ interface MarRow {
 // raw rows straight through, so the patient home page rendered a blank
 // status/name for every request, and the MAR detail page crashed outright
 // (`mar.status.toLowerCase()` called on undefined).
-function toMar(row: MarRow) {
+export function toMar(row: MarRow) {
   return {
     id: row.id,
     status: row.state,
     createdAt: row.created_at,
-    medicineName: row.medicine?.brand_name ?? row.medicine?.generic_name ?? "Requested medicine",
+    medicineName: row.medicine?.brand_name || row.medicine?.generic_name || "Requested medicine",
   };
 }
 
-interface InventoryRow {
+export interface InventoryRow {
   id: string;
   status: string;
   medicine?: { brand_name: string; generic_name: string } | null;
@@ -58,11 +58,11 @@ interface InventoryRow {
 // to the pharmacy's locality (real data already on the join) instead of
 // fabricating a distanceKm value the UI previously called .toFixed(1) on
 // unconditionally.
-function toMatch(row: InventoryRow) {
+export function toMatch(row: InventoryRow) {
   return {
     inventoryId: row.id,
-    medicineName: row.medicine?.brand_name ?? row.medicine?.generic_name ?? "Medicine",
-    pharmacyName: row.pharmacy?.name ?? "Pharmacy",
+    medicineName: row.medicine?.brand_name || row.medicine?.generic_name || "Medicine",
+    pharmacyName: row.pharmacy?.name || "Pharmacy",
     pharmacyLocality: row.pharmacy?.locality,
     stockStatus: row.status,
   };
