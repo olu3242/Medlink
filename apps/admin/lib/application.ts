@@ -7,6 +7,8 @@ import {
 import {
   ClinicalValidationService,
   DuplicateTherapyRule,
+  PatientAllergyRule,
+  PolypharmacyRiskRule,
   type ClinicalValidationInput,
 } from "@medlink/clinical";
 import { PrescriptionParser } from "@medlink/prescription";
@@ -301,7 +303,11 @@ export class PrescriptionApplication {
       activeIngredientIds: input.activeIngredientIds ?? [],
       currentMedicineIds: input.currentMedicineIds ?? [],
     };
-    const clinicalRules = [new DuplicateTherapyRule()];
+    const clinicalRules = [
+      new DuplicateTherapyRule(),
+      new PatientAllergyRule(),
+      new PolypharmacyRiskRule(),
+    ];
     const { findings, hasHardStop } = new ClinicalValidationService(clinicalRules)
       .validate(validationInput);
     const summary = input.summary ?? (

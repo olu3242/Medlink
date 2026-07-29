@@ -1,12 +1,9 @@
 import { z } from "zod";
 import { CatalogApplication } from "../../../../../../lib/application";
 import { runApi } from "../../../../../../lib/api-server";
+import { reviewSchema } from "./schema";
 
 const idSchema = z.string().uuid();
-const reviewSchema = z.object({
-  status: z.enum(["approved", "rejected", "needs_information"]),
-  rationale: z.string().trim().min(1).max(2000),
-});
 type Context = { params: Promise<{ id: string }> };
 
 export const PATCH = async (request: Request, route: Context) => {

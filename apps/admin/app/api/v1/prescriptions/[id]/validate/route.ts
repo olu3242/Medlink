@@ -1,15 +1,9 @@
 import { z } from "zod";
 import { PrescriptionApplication } from "../../../../../../lib/application";
 import { runApi } from "../../../../../../lib/api-server";
+import { validateSchema } from "./schema";
 
 const idSchema = z.string().uuid();
-const validateSchema = z.object({
-  medicineId: idSchema,
-  patientAllergies: z.array(z.string().trim().min(1)).default([]),
-  activeIngredientIds: z.array(idSchema).default([]),
-  currentMedicineIds: z.array(idSchema).default([]),
-  summary: z.string().trim().min(1).max(2000).optional(),
-});
 type Context = { params: Promise<{ id: string }> };
 
 export const POST = async (request: Request, route: Context) => {

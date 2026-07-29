@@ -1,17 +1,10 @@
-import { z } from "zod";
 import { IndexedMedicineSearchService } from "@medlink/search";
 import {
   SupabaseSearchMedicineReader,
   TrigramMedicineSearchIndex,
 } from "../../../../lib/medicine-search";
 import { runApi } from "../../../../lib/api-server";
-
-const schema = z.object({
-  term: z.string().trim().min(2).max(120),
-  types: z.array(z.enum(["brand", "generic"])).min(1).max(2).optional(),
-  limit: z.number().int().min(1).max(50).optional(),
-  cursor: z.string().min(1).max(500).optional(),
-});
+import { schema } from "./schema";
 
 export const GET = (request: Request) => runApi(request, {
   name: "catalog.search",
