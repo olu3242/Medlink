@@ -18,7 +18,10 @@ import {
   MemoryEvidenceStore,
   RetentionPolicyRegistry,
   runtimeLogContext,
+  type RuntimeAudit,
   type RuntimeContext,
+  type RuntimeEvents,
+  type RuntimeTelemetry,
 } from "@medlink/runtime";
 import { PinoLogAdapter } from "./logger.adapter";
 
@@ -141,6 +144,67 @@ export async function recordRuntimeDiagnostic(input: {
     evidence: ["runtime.telemetry"],
     timestamp: new Date().toISOString(),
   });
+}
+
+// Sprint 4 (RC1 convergence): the audit/events/telemetry wiring in
+// apps/web/lib/api-runtime.ts's runWebApi and packages/api/src/index.ts's
+// runApi was independently duplicated, byte-for-byte identical apart from
+// the "service" label and one drift (the web version's log entries were
+// missing the "event" attribute the api version already tags, which any
+// event-filtered log query would silently miss). authenticate() legitimately
+// stays separate in each caller - apps/web reads a cookie session, the
+// packages/api callers read a bearer Authorization header - but this part
+// never depended on that difference and had no reason to be copied twice.
+export function standardRuntimeHooks(service: string): {
+  audit: RuntimeAudit;
+  events: RuntimeEvents;
+  telemetry: RuntimeTelemetry;
+} {
+  const metrics = runtimeMetrics(service);
+  return {
+    audit: {
+      async append(entry) {
+        await runtimeLogger(entry.context, {
+          service,
+          component: "audit",
+          operation: entry.operation,
+        }).info("runtime audit recorded", {
+          durationMs: entry.durationMs,
+          errorCode: entry.errorCode,
+          attributes: { outcome: entry.outcome, event: "runtime.audit" },
+        });
+      },
+    },
+    events: {
+      async publish(entry) {
+        await runtimeLogger(entry.context, {
+          service,
+          component: "events",
+          operation: entry.operation,
+        }).info("runtime operation event published", {
+          attributes: { outcome: entry.outcome, event: "runtime.operation.completed" },
+        });
+      },
+    },
+    telemetry: {
+      start(entry) {
+        metrics.start(entry.context, entry.operation);
+        void runtimeLogger(entry.context, {
+          service,
+          component: "middleware",
+          operation: entry.operation,
+        }).info("runtime operation started", {
+          attributes: { event: "runtime.operation.started" },
+        });
+      },
+      finish(entry) {
+        metrics.finish(entry);
+        if (entry.outcome === "failed") {
+          void recordRuntimeDiagnostic({ ...entry, service });
+        }
+      },
+    },
+  };
 }
 
 export function runtimeDiagnostics(): Readonly<Record<string, number>> {

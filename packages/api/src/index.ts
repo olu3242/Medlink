@@ -1,11 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { authorize, permissions, type Permission, type Role } from "@medlink/platform";
-import {
-  recordRuntimeDiagnostic,
-  runtimeLogger,
-  runtimeMetrics,
-  runtimeTracing,
-} from "@medlink/observability";
+import { runtimeTracing, standardRuntimeHooks } from "@medlink/observability";
 import {
   createRuntime,
   RuntimeError,
@@ -50,7 +45,6 @@ export async function runApi<TInput, TOutput>(
   operation: ApiOperation<TInput, TOutput>,
 ): Promise<Response> {
   const database = requestDatabase(request);
-  const metrics = runtimeMetrics("medlink-api");
   const tracing = runtimeTracing("medlink-api");
   const runtime = createRuntime({
     tracing,
@@ -98,36 +92,7 @@ export async function runApi<TInput, TOutput>(
         );
       },
     },
-    audit: {
-      async append(entry) {
-        await runtimeLogger(entry.context, {
-          service: "medlink-api",
-          component: "audit",
-          operation: entry.operation,
-        }).info("runtime audit recorded", {
-          durationMs: entry.durationMs,
-          errorCode: entry.errorCode,
-          attributes: {
-            outcome: entry.outcome,
-            event: "runtime.audit",
-          },
-        });
-      },
-    },
-    events: {
-      async publish(entry) {
-        await runtimeLogger(entry.context, {
-          service: "medlink-api",
-          component: "events",
-          operation: entry.operation,
-        }).info("runtime operation event published", {
-          attributes: {
-            outcome: entry.outcome,
-            event: "runtime.operation.completed",
-          },
-        });
-      },
-    },
+    ...standardRuntimeHooks("medlink-api"),
     journal: {
       async commit(entry) {
         const idempotencyKey =
@@ -163,24 +128,6 @@ export async function runApi<TInput, TOutput>(
             "Retry with the same idempotency key.",
             { cause: error },
           );
-        }
-      },
-    },
-    telemetry: {
-      start(entry) {
-        metrics.start(entry.context, entry.operation);
-        void runtimeLogger(entry.context, {
-          service: "medlink-api",
-          component: "middleware",
-          operation: entry.operation,
-        }).info("runtime operation started", {
-          attributes: { event: "runtime.operation.started" },
-        });
-      },
-      finish(entry) {
-        metrics.finish(entry);
-        if (entry.outcome === "failed") {
-          void recordRuntimeDiagnostic({ ...entry, service: "medlink-api" });
         }
       },
     },
