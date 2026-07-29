@@ -1,16 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  brandMedicineSchema,
-  normalizeMedicineName,
-  type BrandMedicine,
-  type GenericMedicine,
-} from "@medlink/medicine";
+import type { BrandMedicine, GenericMedicine } from "@medlink/medicine";
 import {
   SearchUnavailableError,
   type MedicineSearchIndex,
   type SearchIndexHit,
   type SearchMedicineReader,
 } from "@medlink/search";
+import { toBrandMedicine } from "./medicine-repository";
 
 // The medicines table has no dedicated search index yet (P1 item 10 in
 // docs/audit/RC1_BACKLOG.md calls out "select/configure ... search
@@ -60,31 +56,8 @@ export class SupabaseSearchMedicineReader implements SearchMedicineReader {
     if (error) throw new SearchUnavailableError(error);
     const results: BrandMedicine[] = [];
     for (const row of data ?? []) {
-      const candidate = {
-        id: row.id,
-        brandName: row.brand_name,
-        normalizedName: normalizeMedicineName(row.brand_name),
-        manufacturer: row.manufacturer_name ?? "",
-        ingredients: (row.medicine_ingredients ?? []).map(
-          (ingredient: { active_ingredient_id: string; amount: string; unit: string }) => ({
-            genericId: ingredient.active_ingredient_id,
-            amount: Number(ingredient.amount),
-            unit: ingredient.unit,
-          }),
-        ),
-        dosageForm: row.dosage_form,
-        route: row.route,
-        status: row.status,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      };
-      // medicines stores dosage_form/route/manufacturer_name/ingredient unit
-      // as free text, not the closed vocabularies packages/medicine models
-      // (dosageForms/administrationRoutes/strengthUnits). A row outside
-      // those vocabularies fails domain validation; skip it rather than
-      // surface a broken search result or throw for the whole query.
-      const parsed = brandMedicineSchema.safeParse(candidate);
-      if (parsed.success) results.push(parsed.data);
+      const medicine = toBrandMedicine(row);
+      if (medicine) results.push(medicine);
     }
     return results;
   }
