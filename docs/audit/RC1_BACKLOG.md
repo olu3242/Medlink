@@ -318,39 +318,90 @@ not authorization to implement multiple batches at once.
     concurrency-safe) rather than new locking logic: reservation +
     inventory lock + MAR `matched`→`reserved` transition + evidence commit
     atomically, idempotent on `(organization_id, idempotency_key)`.
-    - **Critical, previously understated: the entire middle of the MAR
-      state machine has zero implementation.** `enforce_and_audit_mar_state()`
-      (migration 202607270003) defines the legal transition graph
-      `created → validated → reviewed → searching → matched → reserved →
-      paid/dispensed → completed`, but the *only* transitions any code
-      anywhere in the repository performs are `create_mar` (into
-      `created`) and `reserve_inventory` (`matched` → `reserved`).
-      `validated`, `reviewed`, `searching`, and `matched` have no RPC,
-      route, or trigger that ever sets them — confirmed by grep across
-      every migration and every `apps/*` TypeScript file. Since
-      `reserve_inventory` hard-requires `mar.state = 'matched'`
-      (`if mar.state <> 'matched' then raise exception`), **no MAR can
-      ever legally reach a reservable state through any code path that
-      exists today.** The reservation flow this session built and tested
-      (migration 010, `packages/workflows/src/reservation.ts`,
-      `ReservationCreator`) is real and correct, but unreachable in
-      production until this gap closes — a materially more serious
-      finding than the previously-recorded "the UI doesn't post the right
-      fields" framing, which undersold it: even a perfectly-formed
-      request would fail today, since no MAR can be in `matched` state.
-      Not fixed this pass: closing it means deciding who/what triggers
-      `validated` (automatic post-creation? gated on `run_clinical_validation`
-      running with no hard-stop?) and how `searching`/`matched` relate to
-      WF-008 Inventory Discovery's `search_inventory`/`match_inventory`
-      steps (does matching happen automatically once inventory is found,
-      or does it require the patient to pick a specific batch, collapsing
-      "matched" and "reserved" into one user action?) — genuine workflow
-      design decisions, not defaults an engineering pass should assume.
+    - **Critical finding (partially closed this pass): the middle of the
+      MAR state machine had zero implementation.**
+      `enforce_and_audit_mar_state()` (migration 202607270003) defines the
+      legal transition graph `created → validated → reviewed → searching
+      → matched → reserved → paid/dispensed → completed`. Before this
+      pass, the *only* transitions any code anywhere performed were
+      `create_mar` (into `created`) and `reserve_inventory` (`matched` →
+      `reserved`) — confirmed by grep across every migration and every
+      `apps/*` TypeScript file. Since `reserve_inventory` hard-requires
+      `mar.state = 'matched'`, no MAR could ever legally reach a
+      reservable state through any path that existed. **Now closed:**
+      migration `202607290018`'s `validate_mar` (`created` → `validated`,
+      mirrors `medication_access_requests_update`'s existing RLS policy —
+      pharmacist/pharmacy staff, no new authorization rule invented) and
+      migration `202607290019`'s extended `decide_clinical_review`
+      (`validated` → `reviewed` on approval — completing what the
+      trigger's own precondition for `reviewed` already required: an
+      approved `clinical_reviews` row. Not a new business rule, just the
+      transition `decide_clinical_review` always implicitly assumed would
+      happen). **Still open:** `searching` and `matched` have no
+      implementation. This is deliberately not closed the same way,
+      because it isn't the same kind of mechanical completion: WF-008's
+      `search_inventory` step (`packages/workflows/src/
+      inventory-discovery.ts`) is a generic, non-MAR-scoped catalog query
+      today (`FindAvailableInventoryInput` has no `marId`), and whether
+      "matched" means "the system found any available inventory" or "the
+      patient selected one specific batch" (which would collapse
+      "matched" and "reserved" into one user action, since
+      `apps/patient/app/reserve/[inventoryId]/page.tsx` already collects
+      exactly one `inventoryId`) is a genuine workflow-design decision
+      with real product consequences, not a default this pass should
+      assume. A MAR can now progress `created → validated → reviewed`
+      for real; `reviewed → searching → matched` remains the blocking gap
+      before `reserve_inventory` becomes reachable.
     - Also still open: `apps/patient/app/reserve/[inventoryId]/page.tsx`
       posts `{inventoryId}` only — missing `marId`/`pharmacyLocationId`/
       `quantity`/`expiresAt` — a second, independent blocker on top of the
       state-machine gap above. Pickup/fulfillment (WF-010/WF-011) remain
       entirely unimplemented.
+19a. Fixed 5 findings from an automated PR review of the `validate_mar` /
+    `decide_clinical_review` pass above, all verified against the code
+    before being acted on:
+    - **Concurrency race (P1):** both `validate_mar` (migration
+      `202607290018`) and the extended `decide_clinical_review` (migration
+      `202607290019`) guarded their state transition with a preceding
+      `SELECT` check only, not the `UPDATE`'s own `WHERE` clause — two
+      concurrent callers could both pass the `SELECT` before either
+      committed, and the second `UPDATE` would silently overwrite the
+      first. Fixed in place (both migrations unpushed at review time) by
+      adding `and state = 'created'` / `and decision = 'pending'` to the
+      `UPDATE` itself, with an `if not found then` fallback that re-selects
+      and either replays (if the now-committed row matches the caller's
+      own expected values) or raises a genuine conflict.
+    - **Missing `organization_id` on writes (P1):** `apps/web/lib/
+      conversation-store.ts`'s `SupabaseMessageStore.recordInbound`/
+      `recordOutbound` and `SupabaseConversationEventLog.append` inserted
+      into `conversation_messages`/`conversation_events` without
+      `organization_id`, a `NOT NULL` column with no default or deriving
+      trigger (migration `202607290012`) — every call would have failed
+      outright. Fixed with a new `resolveOrganizationId()` helper that
+      looks it up from the referenced conversation before each insert.
+    - **No replay-payload validation on `reserve_inventory` (P2):** the
+      idempotent-replay path returned the prior reservation for a reused
+      idempotency key without checking the replay request matched what was
+      originally reserved — a reused key with a different MAR, pharmacy,
+      batch, or quantity would silently return the unrelated earlier
+      reservation. Fixed via migration `202607290020`, restoring the
+      comparison logic that existed on the retired 7-parameter overload
+      (migration `202607280008`, dropped by `202607290014`) onto the
+      11-parameter version everything actually calls.
+    - **No dedup on `record_clinical_validation` retries (P2):**
+      `clinical_validations` had no idempotency-key column at all, so a
+      client retry after a dropped response would insert a duplicate
+      validation and duplicate findings for a pharmacist to wade through —
+      unlike every other atomic use case this backlog has closed. Fixed
+      via migration `202607290021`: adds `idempotency_key` plus a partial
+      unique index (`clinical_validations_idempotency_idx`, following the
+      `mar_audit_events_idempotency_idx` precedent) and a check-before-
+      insert replay path.
+    - **`TrigramMedicineSearchIndex.search()` over-returning results (P2):**
+      brand and generic queries each applied the caller's full `limit`
+      independently, so requesting both types could return up to 2x the
+      requested count. Fixed by slicing the combined hit list to
+      `input.limit` before returning.
 20. Add conversation, workflow, duplicate delivery, replay, outage, recovery,
     concurrency, and end-to-end tests.
 20a. Fixed `apps/pharmacist/components/decision-form.tsx`, which posted to

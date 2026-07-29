@@ -186,6 +186,25 @@ export class SupabaseConversationRepository implements ConversationRepository {
   }
 }
 
+// conversation_messages.organization_id and conversation_events.organization_id
+// are both NOT NULL (migration 202607290012), but neither table has a
+// trigger that derives it -- every write needs to supply it explicitly.
+// Both writer classes below resolve it from the referenced conversation
+// first, since the caller only ever has a conversationId (packages/
+// conversation's MessageStore/ConversationEventLog ports are conversation-
+// scoped, not tenant-scoped, by design).
+async function resolveOrganizationId(
+  database: SupabaseClient,
+  conversationId: string,
+): Promise<string> {
+  const { data, error } = await database.from("conversations")
+    .select("organization_id")
+    .eq("id", conversationId)
+    .single<{ organization_id: string }>();
+  if (error) throw infrastructureError(error);
+  return data.organization_id;
+}
+
 export class SupabaseMessageStore implements MessageStore {
   constructor(private readonly database: SupabaseClient) {}
 
@@ -193,8 +212,10 @@ export class SupabaseMessageStore implements MessageStore {
     conversationId: string,
     message: RecordInboundMessage,
   ): Promise<ConversationMessage> {
+    const organizationId = await resolveOrganizationId(this.database, conversationId);
     const { data, error } = await this.database.from("conversation_messages")
       .insert({
+        organization_id: organizationId,
         conversation_id: conversationId,
         direction: "inbound",
         external_message_id: message.externalMessageId,
@@ -212,8 +233,10 @@ export class SupabaseMessageStore implements MessageStore {
     conversationId: string,
     message: RecordOutboundMessage,
   ): Promise<ConversationMessage> {
+    const organizationId = await resolveOrganizationId(this.database, conversationId);
     const { data, error } = await this.database.from("conversation_messages")
       .insert({
+        organization_id: organizationId,
         conversation_id: conversationId,
         direction: "outbound",
         external_message_id: null,
@@ -236,8 +259,14 @@ export class SupabaseConversationEventLog implements ConversationEventLog {
     kind: ConversationEventKind,
     payload: Readonly<Record<string, unknown>>,
   ): Promise<ConversationEvent> {
+    const organizationId = await resolveOrganizationId(this.database, conversationId);
     const { data, error } = await this.database.from("conversation_events")
-      .insert({ conversation_id: conversationId, kind, payload })
+      .insert({
+        organization_id: organizationId,
+        conversation_id: conversationId,
+        kind,
+        payload,
+      })
       .select("*")
       .single<ConversationEventRow>();
     if (error) throw infrastructureError(error);

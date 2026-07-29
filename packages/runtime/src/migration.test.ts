@@ -298,6 +298,140 @@ describe("decide_clinical_review migration", () => {
   });
 });
 
+describe("validate_mar migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202607290018_validate_mar.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("transitions created to validated and commits runtime evidence in one function", () => {
+    expect(sql).toContain("function public.validate_mar");
+    expect(sql).toContain("set state = 'validated'");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("replays idempotently rather than erroring on a MAR that already progressed", () => {
+    expect(sql).toContain("if mar.state <> 'created' then");
+    expect(sql).toContain("if mar.transition_idempotency_key = target_idempotency_key then");
+    expect(sql).toContain("return mar;");
+  });
+
+  it("guards the UPDATE itself against a concurrent transition, not just the prior read", () => {
+    const updateStart = sql.indexOf("update public.medication_access_requests\n  set state = 'validated'");
+    const updateBody = sql.slice(updateStart, updateStart + 300);
+    expect(updateBody).toContain("and state = 'created'");
+  });
+
+  it("re-enforces the medication_access_requests_update RLS policy inside the SECURITY DEFINER function", () => {
+    expect(sql).toContain("array['pharmacist', 'pharmacy_staff']::public.member_role[]");
+  });
+});
+
+describe("mar reviewed-on-approval migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202607290019_mar_reviewed_on_approval.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("advances the MAR from validated to reviewed only when the review is approved", () => {
+    expect(sql).toContain("if updated.decision = 'approved' then");
+    expect(sql).toContain("if found and mar.state = 'validated' then");
+    expect(sql).toContain("set state = 'reviewed'");
+  });
+
+  it("does not re-raise when replaying an approval whose MAR already advanced", () => {
+    expect(sql).toContain("elsif found and mar.state <> 'reviewed' and mar.state <> 'cancelled' then");
+  });
+
+  it("still commits the review decision and its runtime evidence in the same function", () => {
+    expect(sql).toContain("function public.decide_clinical_review");
+    expect(sql).toContain("update public.clinical_reviews");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("guards the decision UPDATE against a concurrent decide call, not just the prior read", () => {
+    const updateStart = sql.indexOf("update public.clinical_reviews\n  set decision = target_decision");
+    const updateBody = sql.slice(updateStart, updateStart + 400);
+    expect(updateBody).toContain("and decision = 'pending'");
+  });
+
+  it("re-checks and replays or raises when the UPDATE loses the concurrency race", () => {
+    const guardedUpdateEnd = sql.indexOf("if not found then");
+    expect(guardedUpdateEnd).toBeGreaterThan(-1);
+    const afterGuard = sql.slice(guardedUpdateEnd, guardedUpdateEnd + 400);
+    expect(afterGuard).toContain("raise exception 'clinical review has already been decided'");
+  });
+});
+
+describe("reserve_inventory replay validation migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202607290020_reserve_inventory_replay_validation.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("compares the replay payload against the stored reservation and lock before trusting the key", () => {
+    expect(sql).toContain("if existing.mar_id <> target_mar_id");
+    expect(sql).toContain("or existing.pharmacy_location_id <> target_pharmacy_location_id");
+    expect(sql).toContain("or existing_lock.inventory_batch_id <> target_inventory_batch_id");
+    expect(sql).toContain("or existing_lock.quantity <> target_quantity");
+    expect(sql).toContain("raise exception 'idempotency key was already used for a different reservation'");
+  });
+
+  it("still commits the reservation, lock, MAR transition, and evidence atomically", () => {
+    expect(sql).toContain("function public.reserve_inventory");
+    expect(sql).toContain("insert into public.reservations");
+    expect(sql).toContain("insert into public.inventory_locks");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+});
+
+describe("clinical_validations idempotency migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202607290021_clinical_validations_idempotency.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("adds an idempotency key column and a partial unique index scoped to it", () => {
+    expect(sql).toContain("alter table public.clinical_validations");
+    expect(sql).toContain("add column idempotency_key text");
+    expect(sql).toContain("create unique index clinical_validations_idempotency_idx");
+    expect(sql).toContain("on public.clinical_validations(organization_id, idempotency_key)");
+    expect(sql).toContain("where idempotency_key is not null");
+  });
+
+  it("replays idempotently before inserting a duplicate validation or its findings", () => {
+    expect(sql).toContain("select * into existing from public.clinical_validations");
+    expect(sql).toContain("and idempotency_key = target_idempotency_key");
+    expect(sql).toContain("if found then\n    return existing;\n  end if;");
+  });
+
+  it("still inserts findings and commits runtime evidence in the same function", () => {
+    expect(sql).toContain("function public.record_clinical_validation");
+    expect(sql).toContain("insert into public.clinical_validations");
+    expect(sql).toContain("insert into public.clinical_findings");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),

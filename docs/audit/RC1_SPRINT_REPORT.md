@@ -795,3 +795,95 @@ Documented in `docs/audit/RC1_BACKLOG.md` item 19,
 behavior" gate row), and `docs/audit/ENGINE_STATUS_MATRIX.md` (Medication
 Access Request row downgraded to Fail on reachability specifically, not
 on any regression in what was already built).
+
+## Closing the mechanical two-thirds of the MAR lifecycle gap
+
+Of the four missing transitions found above, two are mechanical
+completions of preconditions the schema already defined; two require a
+genuine product decision. Closed the two that don't need one:
+
+- **Migration `202607290018_validate_mar.sql`**: `created → validated`.
+  Authorization re-enforces `medication_access_requests_update`'s
+  existing RLS policy (pharmacist/pharmacy staff) rather than inventing a
+  new rule — "validated" requires no clinical judgment (that's
+  `reviewed`'s job), so the existing blanket update policy is the right
+  fit, the same reasoning `reserve_inventory` used when it instead
+  widened to include the patient for a patient-initiated action.
+  Idempotent replay on `(mar, transition_idempotency_key)`, same pattern
+  as `create_mar`.
+- **Migration `202607290019_mar_reviewed_on_approval.sql`**: extends
+  `decide_clinical_review` (re-created with an identical signature, not
+  editing migration 017 in place) to advance the MAR from `validated` to
+  `reviewed` when the decision is `approved`. This is not a new business
+  rule — `enforce_and_audit_mar_state()` has required an approved
+  `clinical_reviews` row before allowing `reviewed` since migration
+  202607270003; nothing ever performed the transition itself. Guarded
+  three ways: only fires on approval, only from `validated` (the one
+  legal predecessor), and no-ops on `reviewed` already reached (replay of
+  an approval that already advanced the MAR must not re-raise).
+- **Deliberately not closed**: `searching`/`matched`. WF-008's
+  `search_inventory` step is a generic, non-MAR-scoped catalog query
+  today (`FindAvailableInventoryInput` has no `marId`) — extending it
+  requires deciding whether "matched" means "the system found available
+  inventory" or "the patient selected one specific batch"
+  (`apps/patient/app/reserve/[inventoryId]/page.tsx` already collects
+  exactly one `inventoryId`, which would collapse "matched" and
+  "reserved" into a single user action if that's the intended design).
+  Real product consequences either way; not assumed here.
+
+A MAR can now progress `created → validated → reviewed` for real, for
+the first time this session. `reviewed → searching → matched` remains
+the specific, narrower blocker before `reserve_inventory` becomes
+reachable in production.
+
+## Addressing an automated PR review of this pass
+
+An automated Codex review of PR #2 posted 5 findings against the work
+above, all independently verified against the code before being acted on
+(none taken on faith):
+
+1. **Concurrency race in `validate_mar` and `decide_clinical_review`
+   (P1).** Both transitions guarded their `UPDATE` with a preceding
+   `SELECT` check only — two concurrent callers could both pass the
+   `SELECT` before either committed, and the second `UPDATE` would
+   silently clobber the first. Fixed in place (both migrations were still
+   unpushed) by moving the guard into the `UPDATE`'s own `WHERE` clause
+   (`and state = 'created'` / `and decision = 'pending'`), with an
+   `if not found then` fallback that re-selects and either replays (if
+   the now-committed row matches what the caller itself expected) or
+   raises a real conflict. Applied to `validate_mar` proactively even
+   though only `decide_clinical_review` was flagged — same bug shape.
+2. **Missing `organization_id` on conversation writes (P1).**
+   `apps/web/lib/conversation-store.ts`'s message and event insert paths
+   omitted `organization_id`, a `NOT NULL` column with no default or
+   deriving trigger (migration `202607290012`) — every write would have
+   failed outright in production. Fixed with a `resolveOrganizationId()`
+   helper that looks it up from the referenced conversation before each
+   insert.
+3. **No replay-payload validation in `reserve_inventory` (P2).** The
+   idempotent-replay path returned the prior reservation for a reused
+   idempotency key without checking the replay request actually matched
+   what was originally reserved. Migration `202607290020` restores the
+   comparison logic that existed on the now-retired 7-parameter overload
+   (migration `202607280008`, dropped by `202607290014` as an unused
+   duplicate signature) onto the 11-parameter version everything actually
+   calls — restoring, not reinventing.
+4. **No dedup on `record_clinical_validation` retries (P2).**
+   `clinical_validations` had no idempotency-key column at all, unlike
+   every other atomic use case this session built — a client retry after
+   a dropped response would insert a duplicate validation and duplicate
+   findings. Migration `202607290021` adds the column plus a partial
+   unique index (`clinical_validations_idempotency_idx`, following the
+   `mar_audit_events_idempotency_idx` precedent) and a check-before-insert
+   replay path.
+5. **`TrigramMedicineSearchIndex.search()` over-returning results (P2).**
+   Brand and generic queries each applied the caller's full `limit`
+   independently, so requesting both types could return up to 2x the
+   intended count. Fixed by slicing the combined hit list to `input.limit`
+   before returning.
+
+Documented in `docs/audit/RC1_BACKLOG.md` item 19a and
+`docs/audit/CERTIFICATION_GAP.md`'s Wave 3 section.
+
+`npm run check` (267 tests, up from 259) and `npm run build` (all 8
+workspaces) both pass clean after this round.

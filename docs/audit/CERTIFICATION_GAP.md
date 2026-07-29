@@ -23,7 +23,7 @@ does not certify RC1 or any engine for production.
 | API architecture contracts | Pass | Protected v1 routes enforce canonical boundaries |
 | API integration contracts | Fail | No live-database/provider contract suite |
 | Workflow identity | Pass | All 15 stable IDs are executable contracts |
-| Workflow behavior | Fail | Canonical end-to-end workflow suites are absent, and could not pass today regardless: the MAR state machine's `validated`/`reviewed`/`searching`/`matched` transitions have no implementation, so no MAR can legally reach `reserve_inventory`'s precondition — see Wave 3 section below |
+| Workflow behavior | Fail | Canonical end-to-end workflow suites are absent, and could not pass today regardless: `searching`/`matched` transitions still have no implementation, so no MAR can legally reach `reserve_inventory`'s precondition even though `validated`/`reviewed` are now real — see Wave 3 section below |
 | CDA conformance | Fail | Conversation Engine domain/application boundaries and schema exist (`packages/conversation`, migration `202607290012`); WhatsApp channel-adapter transport slice exists (`packages/whatsapp`, migration `202607290013`); route wiring is blocked on an ADR for webhook identity in `RuntimeContext` (see RC1_BACKLOG item 15), and Workflow Orchestrator integration is still missing |
 | Audit/event completeness | Conditional | General outbox exists (migration 006); Wave 2 catalog/prescription/equivalency/clinical-validation use cases (migrations 008-009) and reservation creation (migration 010) all commit business state, audit, and outbox atomically in one function; MAR pickup/fulfillment transitions and other unimplemented Wave 3 use cases remain out of scope until built |
 | Observability | Fail | No metrics/tracing/SLO evidence; health dependency checks are now real (no hardcoded results) but still unexercised outside unit tests |
@@ -100,18 +100,35 @@ does not certify RC1 or any engine for production.
   `WorkflowStep` -- eight steps total -- each backed by the atomic RPC or
   domain service that already existed for it, and each guarded by a
   consistency test against drifting from its structural definition.
-- **Critical finding, blocking every one of the above from mattering in
-  production: the MAR state machine's middle is entirely unimplemented.**
+- **Critical finding, partially closed this pass: the MAR state
+  machine's middle had zero implementation.**
   `enforce_and_audit_mar_state()`'s legal graph requires
   `created → validated → reviewed → searching → matched` before
-  `reserve_inventory` will accept a reservation, but no RPC, route, or
-  trigger anywhere sets `validated`, `reviewed`, `searching`, or `matched`
-  -- confirmed by exhaustive grep. No MAR created today can ever legally
-  reach `reserve_inventory`'s precondition. This is a correctness gap in
-  the *reachability* of already-built, already-tested functionality, not
-  a missing feature -- see `docs/audit/RC1_BACKLOG.md` P1 item 19 for the
-  full finding and the specific workflow-design decisions needed to close
-  it.
+  `reserve_inventory` will accept a reservation. `created → validated`
+  (migration `202607290018`'s `validate_mar`) and `validated → reviewed`
+  (migration `202607290019`'s extended `decide_clinical_review`, advancing
+  the MAR on approval per the trigger's own precondition) are now real.
+  `searching`/`matched` remain unimplemented -- WF-008's inventory search
+  isn't MAR-scoped today, and whether "matched" means system-found
+  availability or a patient-selected specific batch is a genuine
+  workflow-design decision, not assumed here. `reserve_inventory` still
+  cannot be reached in production until that gap closes -- see
+  `docs/audit/RC1_BACKLOG.md` P1 item 19.
+- An automated PR review of the above pass found and this round fixed 5
+  issues, all verified against the code before acting: a concurrency race
+  in both `validate_mar` and the extended `decide_clinical_review` (the
+  UPDATE only checked a prior SELECT, not its own WHERE clause -- fixed in
+  place since both migrations were still unpushed); `conversation_messages`/
+  `conversation_events` inserts missing the NOT NULL `organization_id`
+  column (would have failed outright -- fixed with a
+  `resolveOrganizationId()` lookup); `reserve_inventory`'s idempotent
+  replay not validating the replay payload matched the original
+  reservation (migration `202607290020`); `record_clinical_validation`
+  having no idempotency column at all, so retries duplicated validations
+  and findings (migration `202607290021`); and
+  `TrigramMedicineSearchIndex.search()` applying `limit` independently per
+  medicine type, returning up to 2x the requested count. See
+  `docs/audit/RC1_BACKLOG.md` item 19a.
 - MAR/Reservation state vocabulary audited: Wave 2/3-owned code passes the
   real DB enums through honestly; one new Wave 4 finding (`apps/pharmacy`'s
   reservations page has never worked -- see RC1_BACKLOG item 18) recorded,

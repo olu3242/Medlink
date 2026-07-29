@@ -57,7 +57,11 @@ export class TrigramMedicineSearchIndex implements MedicineSearchIndex {
       })));
     }
 
-    return { hits };
+    // Each query above independently applies input.limit, so requesting
+    // both types can produce up to 2x the caller's requested limit --
+    // enforce the public contract's actual maximum on the combined set
+    // rather than per source.
+    return { hits: hits.slice(0, input.limit) };
   }
 }
 
