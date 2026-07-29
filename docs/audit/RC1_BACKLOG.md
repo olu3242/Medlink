@@ -72,14 +72,24 @@ not authorization to implement multiple batches at once.
 ## P1 — Wave 2 certification
 
 6. Execute migrations against local PostgreSQL/Supabase.
-7. Add migration and cross-tenant RLS tests.
+7. Add migration and cross-tenant RLS tests. Partial: static RLS assertions
+   (RLS enabled + every policy exists) now cover all six Wave 2 tables the
+   Sprint 1-3 routes write to (`packages/runtime/src/wave2-rls.test.ts`).
+   These fail loudly if a future migration edit drops RLS or a policy, but
+   they are not a live cross-tenant denial matrix — that still needs item 6.
 8. Complete Medicine Knowledge application services and repositories. Partial:
    write paths (`create`/`update`) are atomic via `create_medicine_record`/
-   `update_medicine_record` (migration 008); read paths (`brands`/`generics`/
-   catalog `list`/`get`) still query `medicines` directly rather than through
-   a `packages/medicine` repository, blocked on the generic-medicine-entity
-   gap below rather than a simple wiring gap — see
-   `docs/wave-2-certification.md` "known gaps."
+   `update_medicine_record` (migration 008); a real `SupabaseMedicineCatalogReader`
+   repository now exists (`apps/admin/lib/medicine-repository.ts`) and powers
+   `CatalogEquivalencyService.propose()` via
+   `GET /api/v1/medicines/{id}/equivalency-candidates` — but read paths
+   (`brands`/`generics`/catalog `list`/`get`) still query `medicines`
+   directly rather than through it, deliberately: routing them through
+   `brandMedicineSchema`'s closed-vocabulary validation would risk 404ing an
+   existing medicine outside that vocabulary, for no gain since those routes
+   already return the correct, tested shape. Blocked on the
+   generic-medicine-entity gap for full completion, not on the repository
+   not existing — see `docs/wave-2-certification.md` "known gaps."
 9. Integrate equivalency, prescription, clinical, and search APIs through the
    canonical pipeline. Done: `PATCH /api/v1/equivalents/{id}/review`,
    `POST /api/v1/prescriptions/{id}/extract`,
@@ -93,10 +103,22 @@ not authorization to implement multiple batches at once.
     Still open: the extraction route uses an explicitly-placeholder
     zero-confidence reader (`PendingOcrPrescriptionReader`) pending provider
     selection.
-11. Add API contract and clinical workflow tests.
-12. Expand clinical rules and document evidence sources and pharmacist controls.
-13. Certify Batches 2.1–2.5 independently. In progress — see the wiring and
-    "known gaps" sections added to `docs/wave-2-certification.md`. New
+11. Add API contract and clinical workflow tests. Partial: API contract
+    tests now lock the four Wave 2 write/search routes' Zod schemas to their
+    real DB enums (`route.contract.test.ts` next to each route) — added
+    after the review-decision endpoint was found to accept a value
+    (`changes_requested`) its DB enum has never had. Full clinical
+    *workflow* tests (multi-step, e.g. upload → extract → validate → review)
+    still need live infrastructure.
+12. Expand clinical rules and document evidence sources and pharmacist
+    controls. Done: `PatientAllergyRule` and `PolypharmacyRiskRule` added
+    alongside `DuplicateTherapyRule` (`packages/clinical/src/validation.ts`),
+    all advisory-only, all requiring pharmacist acknowledgement, none
+    auto-deciding.
+13. Certify Batches 2.1–2.5 independently. Evidence-based checklist in
+    `docs/wave-2-certification.md` reflects this pass's actual state per
+    item (migration/RLS static tests, contract tests, clinical rules,
+    `propose()` wiring) rather than a blanket status. New
     architecture-level gaps discovered while wiring (not previously tracked):
     no first-class generic-medicine entity in the schema, and vocabulary
     mismatches between packages/prescription and packages/clinical and their

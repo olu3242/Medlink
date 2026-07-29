@@ -225,3 +225,41 @@ pulls required).
   Orchestrator, MAR/Reservation state-vocabulary reconciliation, pickup and
   fulfillment (WF-010/WF-011, entirely unimplemented).
 - Wave 4/5 backends for the nine dead client references found in Sprint 3.
+
+## Continuation — closing the remaining Wave 2 P1 items
+
+A follow-up pass closed five more items from `docs/audit/RC1_BACKLOG.md`'s
+"P1 — Wave 2 certification" list that didn't require live infrastructure or
+an external design decision:
+
+- **Static RLS assertions** (`packages/runtime/src/wave2-rls.test.ts`) for
+  all six Wave 2 tables the Sprint 1-3 routes write to — not a live
+  cross-tenant matrix, but a real guard against a future migration edit
+  silently dropping RLS or a policy.
+- **`SupabaseMedicineCatalogReader`** (`apps/admin/lib/medicine-repository.ts`)
+  closed a gap the original wiring pass left open:
+  `CatalogEquivalencyService.assertReviewed()` had a real caller, but
+  `.propose()` — the algorithmic half of Batch 2.2 — didn't, until
+  `GET /api/v1/medicines/{id}/equivalency-candidates`. Deliberately not
+  used to reroute `CatalogApplication.get()`/`list()`: those already return
+  the correct, tested shape, and forcing them through
+  `brandMedicineSchema`'s closed-vocabulary validation would risk 404ing an
+  existing medicine for no functional gain.
+- **Two more clinical rules** (`PatientAllergyRule`, `PolypharmacyRiskRule`)
+  alongside `DuplicateTherapyRule`, same advisory-only, pharmacist-review-
+  required invariant.
+- **API contract tests** for the four Wave 2 write/search routes, locking
+  each Zod schema to its real DB enum. Moving each schema into a sibling
+  `schema.ts` module (rather than exporting it from `route.ts` directly)
+  wasn't a style choice — the first attempt broke `npm run build`, because
+  Next.js's route-file type validation only permits specific recognized
+  exports from `route.ts`. Caught by actually running the build, not
+  assumed from a passing typecheck.
+- **`docs/wave-2-certification.md`** rewritten with a per-item evidence
+  basis instead of a blanket checklist, and its stale "Docker Desktop or
+  Podman is not currently available" line corrected to match the Phase 1
+  finding above (Docker works; the registry-pull egress policy is the
+  actual blocker).
+
+`npm run check` (135 tests, up from 99) and `npm run build` (all 8
+workspaces) both pass clean after this continuation.

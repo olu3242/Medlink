@@ -37,18 +37,33 @@ change under the shared Supabase directory.
   equivalence review decision via `packages/medicine`'s
   `CatalogEquivalencyService.assertReviewed`, committed atomically (migration
   009)
+- `GET /api/v1/medicines/{id}/equivalency-candidates` — runs
+  `CatalogEquivalencyService.propose()` against
+  `SupabaseMedicineCatalogReader` (brand-only) to find ingredient-matching
+  candidates; added in the RC1 P0 convergence follow-up once `.propose()`
+  was found to still have no caller even after `.assertReviewed()` was wired
 - `GET /api/v1/search?term=...` — `packages/search`'s
   `IndexedMedicineSearchService` backed by the existing brand trigram index;
   brand hits only (see "known gaps" below)
 
 ## Domain package wiring
 
-As of this pass, `packages/medicine`, `packages/prescription`,
-`packages/clinical`, and `packages/search` are no longer dead code with only
-unit tests exercising them in isolation — each has at least one real
-application-layer consumer and route, listed above. Batch 2.1's read paths
-(`brands`/`generics`/catalog `list`/`get`) still query `medicines` directly
-rather than through a `packages/medicine` repository; see "known gaps."
+`packages/medicine`, `packages/prescription`, `packages/clinical`, and
+`packages/search` are no longer dead code with only unit tests exercising
+them in isolation — each has real application-layer consumers and routes,
+listed above, including both algorithmic domain methods on
+`CatalogEquivalencyService` (`.propose()` and `.assertReviewed()`, not just
+one of them). Batch 2.1's read paths (`brands`/`generics`/catalog `list`/
+`get`) still query `medicines` directly rather than through a
+`packages/medicine` repository — deliberately: they already return the
+correct, tested response shape for the admin UI (see
+`apps/admin/lib/application.test.ts`), and routing them through
+`brandMedicineSchema`'s closed-vocabulary validation would risk 404ing an
+existing medicine whose `dosage_form`/`route` falls outside that vocabulary,
+for no functional gain. `SupabaseMedicineCatalogReader`
+(`apps/admin/lib/medicine-repository.ts`) exists and is used for
+`.propose()`; wiring it into `list()`/`get()` too is still blocked on the
+generic-entity gap below, not on the repository not existing.
 
 ## Known gaps (discovered during wiring, not yet resolved)
 
@@ -83,14 +98,40 @@ than a mechanical fix:
   reader (`apps/admin/lib/medicine-search.ts`) uses `safeParse` and skips
   rows that fail domain validation rather than throwing or coercing.
 
+## Clinical rule set
+
+`ClinicalValidationService` runs three rules, all advisory-only — none ever
+auto-approve, auto-reject, or bypass the mandatory pharmacist review:
+
+- `DuplicateTherapyRule` — flags when the requested medicine is already
+  active for the patient.
+- `PatientAllergyRule` — flags when a candidate medicine's active
+  ingredients match a patient's declared allergies (`critical`, forces a
+  hard stop until acknowledged).
+- `PolypharmacyRiskRule` — flags five or more concurrent medications (a
+  standard clinical heuristic, not specific-interaction checking).
+
 ## Certification checklist
 
 - [x] Strict TypeScript domain packages
-- [x] Unit tests for parsing, validation, search, and equivalency
+- [x] Unit tests for parsing, validation, search, and equivalency (3
+      clinical rules, 135 total repository tests as of this pass)
 - [x] Versioned API boundaries with input validation
-- [x] Responsive admin catalog UI
+- [x] API contract tests locking each Wave 2 write/search route's Zod schema
+      to its real DB enum — added after a real drift was found and fixed by
+      hand (`docs/audit/RC1_SPRINT_REPORT.md` Sprint 3); see each route's
+      `route.contract.test.ts`
+- [x] Static RLS assertions (enabled + policy exists) for all six Wave 2
+      tables the routes above write to (`packages/runtime/src/
+      wave2-rls.test.ts`) — not a substitute for a live cross-tenant denial
+      matrix, but fails loudly if a future migration edit drops RLS or a
+      policy
+- [x] Responsive admin catalog UI, response-shape bugs found and fixed (the
+      table previously rendered blank for every column but id/status — see
+      `docs/audit/RC1_SPRINT_REPORT.md` Sprint 3)
 - [x] RLS and index migration reviewed statically
-- [x] Domain packages wired into at least one real route each (see above)
+- [x] Domain packages wired into real routes, including both algorithmic and
+      assertion-style methods where a domain service has both
 - [ ] Migration executed against local Supabase
 - [ ] API integration tests against local Supabase
 - [ ] OCR provider adapter selected and credentials configured
@@ -98,4 +139,9 @@ than a mechanical fix:
 
 The unchecked items require a local PostgreSQL/Supabase runtime, or a design
 decision this pass deliberately didn't make unilaterally (see "known gaps").
-Docker Desktop or Podman is not currently available on the build host.
+Docker Desktop and the Supabase CLI are both available on the build host;
+the blocker is narrower than "no local infrastructure" — this session's
+network egress policy doesn't allow the container-registry pulls
+`supabase start` needs (confirmed via a 403 on
+`production.cloudfront.docker.com`; see
+`docs/audit/RC1_SPRINT_REPORT.md` Phase 1). Not a missing tool.
