@@ -86,7 +86,7 @@ export class AccessApplication {
     userId: string,
     id: string,
     input: {
-      decision: "approved" | "rejected" | "changes_requested";
+      decision: "approved" | "rejected" | "needs_information";
       recommendation: string;
     },
   ) {
