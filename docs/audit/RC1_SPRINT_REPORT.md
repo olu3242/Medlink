@@ -432,3 +432,38 @@ consent, delivery adapter).
 workspaces) both pass clean after this pass. Still no route depends on
 `@medlink/whatsapp` or `@medlink/conversation` — both remain additive,
 tested, unwired packages pending the ADR above.
+
+## Wave 3 continues — Supabase-backed Conversation Engine adapters, and ADR 0004 drafted
+
+- **`apps/web/lib/conversation-store.ts`**: `SupabaseConversationRepository`,
+  `SupabaseMessageStore`, `SupabaseConversationEventLog` implementing
+  `packages/conversation`'s three persistence ports against migration
+  `202607290012`'s tables — the same "adapter lives in the consuming app,
+  not the domain package" pattern `apps/admin/lib/medicine-repository.ts`
+  established for Wave 2. Unlike that file's `toBrandMedicine` (which
+  `safeParse`s and returns `null` for a row outside a vocabulary the
+  package doesn't control), this schema was written to match
+  `packages/conversation`'s domain model exactly, so the mappers here
+  `.parse()` (throw) instead — a row that fails is a real bug, not an
+  honest external-data gap. 5 new tests for the pure mapper functions
+  (`toConversation`/`toConversationMessage`/`toConversationEvent`); the
+  class methods themselves need a live Supabase instance, same precedent
+  `SupabaseMedicineCatalogReader` set.
+- **`docs/adr/0004-conversation-runtime-webhook-identity.md`** (drafted,
+  status **Proposed**, not self-accepted): resolves the `RuntimeContext
+  .userId` finding from the prior pass. Three options considered — make
+  `userId` genuinely optional (most invasive, touches every existing route
+  and RPC), a well-known system identity (recommended: no existing Wave
+  1/2 code changes, `userId` stays required and always populated), or a
+  distinct non-`createRuntime()` lifecycle for Conversation Runtime (most
+  honest, but exactly what the runtime contract forbids without amending
+  the contract itself). Also flags that ADR 0001's "service-role access is
+  not used by request handlers" needs a narrow, explicit exception for
+  this one profile's already-scoped service-role-only writes — not
+  violated silently, named. Left unaccepted deliberately: this changes
+  frozen platform contract, the same posture taken for every other
+  architecture decision this session (the `generics` table, "begin Wave
+  3") — propose with a clear recommendation, don't self-approve.
+
+`npm run check` (201 tests, up from 196) and `npm run build` (all 8
+workspaces) both pass clean after this pass.

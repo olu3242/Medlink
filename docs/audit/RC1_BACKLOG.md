@@ -155,9 +155,13 @@ not authorization to implement multiple batches at once.
     engine resolves/creates a conversation by channel identity, classifies
     intent, and either hands off to a human (confidence below threshold, or
     an existing handoff in progress) or delegates to a `WorkflowInvoker`
-    port — it runs no business rules itself. Not yet wired to a route, the
-    real WhatsApp adapter, or a Supabase-backed port implementation — see
-    item 15 below, the natural next step.
+    port — it runs no business rules itself. Supabase-backed
+    implementations of `ConversationRepository`/`MessageStore`/
+    `ConversationEventLog` now exist too
+    (`apps/web/lib/conversation-store.ts`, following
+    `apps/admin/lib/medicine-repository.ts`'s adapter-lives-in-the-app
+    pattern). Not yet wired to a route or the real WhatsApp adapter — see
+    item 15 below, blocked on ADR 0004.
 15. Implement WhatsApp webhook, signature, media, identity, consent, and
     delivery adapter. Partial: `packages/whatsapp` implements the transport
     slice ADR 0003 scopes to channel adapters — `verifyWebhookSignature`
@@ -187,10 +191,17 @@ not authorization to implement multiple batches at once.
       quietly modifying frozen code without an ADR, or hand-rolling a
       parallel pipeline that only claims to satisfy the same obligations —
       both rejected. This needs an accepted ADR deciding how a
-      system/webhook identity is represented in `RuntimeContext` (e.g. a
-      well-known system `userId`, or genuinely making the field optional
-      with every consumer of `context.userId` updated to handle its
-      absence) before route wiring can proceed.
+      system/webhook identity is represented in `RuntimeContext` before
+      route wiring can proceed. Drafted, not accepted:
+      `docs/adr/0004-conversation-runtime-webhook-identity.md` — three
+      options considered, recommends a well-known system identity
+      (`context.userId` stays required and always populated; no existing
+      Wave 1/2 RLS policy, RPC signature, or audit consumer changes) over
+      making `userId` genuinely optional or giving Conversation Runtime a
+      distinct lifecycle outside `createRuntime()`. Also flags that ADR
+      0001's "service-role access is not used by request handlers" needs a
+      narrow, explicit exception for this one profile's already-scoped
+      service-role-only writes (migration 202607290012).
 16. Implement durable Workflow Orchestrator and all applicable canonical
     definitions.
 17. Implement a general transactional domain-event outbox and consumers.

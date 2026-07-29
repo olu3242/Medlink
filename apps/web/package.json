@@ -8,10 +8,12 @@
     "start": "next start"
   },
   "dependencies": {
+    "@medlink/conversation": "*",
     "@medlink/database": "*",
     "@medlink/observability": "*",
     "@medlink/platform": "*",
     "@medlink/runtime": "*",
-    "@medlink/ui": "*"
+    "@medlink/ui": "*",
+    "@supabase/supabase-js": "^2.52.0"
   }
 }
