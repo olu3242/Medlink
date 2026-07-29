@@ -145,6 +145,19 @@ not authorization to implement multiple batches at once.
 ## P1 — Wave 3
 
 14. Implement Conversation Engine domain/application boundaries and schema.
+    Done: `packages/conversation` (`Conversation`/`ConversationMessage`/
+    `ConversationEvent` models, `ConversationRepository`/`MessageStore`/
+    `ConversationEventLog`/`IntentClassifier`/`WorkflowInvoker` ports,
+    `ConversationEngine` application service, a default
+    `KeywordIntentClassifier`) and migration
+    `202607290012_conversation_engine.sql` (`conversations`,
+    `conversation_messages`, append-only `conversation_events`, RLS). The
+    engine resolves/creates a conversation by channel identity, classifies
+    intent, and either hands off to a human (confidence below threshold, or
+    an existing handoff in progress) or delegates to a `WorkflowInvoker`
+    port — it runs no business rules itself. Not yet wired to a route, the
+    real WhatsApp adapter, or a Supabase-backed port implementation — see
+    item 15 below, the natural next step.
 15. Implement WhatsApp webhook, signature, media, identity, consent, and
     delivery adapter.
 16. Implement durable Workflow Orchestrator and all applicable canonical

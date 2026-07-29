@@ -171,6 +171,30 @@ describe("generics migration", () => {
   });
 });
 
+describe("conversation engine migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202607290012_conversation_engine.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("defines the conversation aggregate and its message/event logs", () => {
+    for (const table of ["conversations", "conversation_messages", "conversation_events"]) {
+      expect(sql).toContain(`create table public.${table}`);
+      expect(sql).toContain(`alter table public.${table} enable row level security`);
+    }
+  });
+
+  it("binds one conversation per organization/channel/channel-identity", () => {
+    expect(sql).toContain("unique (organization_id, channel, channel_identity)");
+  });
+
+  it("makes the interaction/decision log append-only", () => {
+    expect(sql).toContain("create trigger conversation_events_append_only");
+    expect(sql).toContain("before update or delete on public.conversation_events");
+    expect(sql).toContain("public.prevent_enterprise_event_mutation()");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),

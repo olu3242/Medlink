@@ -320,3 +320,60 @@ wire; only `MedicineCatalogReader`'s read side had real callers.
 
 `npm run check` (150 tests, up from 142) and `npm run build` (all 8
 workspaces) both pass clean after this migration.
+
+## Wave 3 begins — Batch 3.1: Conversation Engine domain/application boundaries and schema
+
+User-authorized: "Begin Wave 3" (the other half of the same two-question
+decision that authorized the `generics` table above). Scoped to exactly
+RC1_BACKLOG P1 item 14 — domain/application boundaries and schema — not
+the WhatsApp adapter (item 15), not Workflow Orchestrator's own
+implementation (Batch 3.2), and not any route wiring, per Wave Isolation
+and "implement only the contracts ... necessary for future integration."
+
+- **`packages/conversation`** (new package, mirrors `packages/medicine`'s
+  layout): `Conversation`/`ConversationMessage`/`ConversationEvent` models;
+  `ConversationRepository`/`MessageStore`/`ConversationEventLog`/
+  `IntentClassifier`/`WorkflowInvoker` ports; a `ConversationEngine`
+  application service; a default `KeywordIntentClassifier`. Per
+  `docs/release-scope.md`'s CDA section, the engine owns dialogue only —
+  session resolution by channel identity, intent detection, human handoff,
+  and an append-only decision log — and runs no business rules itself: it
+  delegates every durable process to a `WorkflowInvoker` port rather than a
+  direct `@medlink/workflows` dependency, the same hexagonal-boundary
+  discipline `MedicineCatalogReader` and `ClinicalRule` already establish,
+  so Batch 3.2's eventual Workflow Orchestrator implementation can satisfy
+  the port without `packages/conversation` changing.
+- Intent below a confidence threshold (`KeywordIntentClassifier` returns 0
+  confidence for anything it doesn't recognize, rather than guessing)
+  triggers a handoff instead of invoking a workflow — the same
+  escalate-rather-than-decide posture `packages/clinical`'s advisory-only
+  rules already use, applied to routing instead of clinical findings.
+- **Migration `202607290012_conversation_engine.sql`**: `conversations`,
+  `conversation_messages`, and an append-only `conversation_events` (reuses
+  the existing `prevent_enterprise_event_mutation()` trigger from migration
+  007 rather than a new mechanism). `conversation_messages`/
+  `conversation_events` are worker-only through the service role — the
+  same pattern `notification_outbox`/`notification_delivery_attempts`
+  (migration 202607270004) already established — because an inbound
+  WhatsApp webhook has no authenticated end-user session to attach RLS to;
+  `conversations` itself gets an authenticated read/admin-manage policy so
+  a future support portal can use it directly. Deduplicates inbound
+  provider messages on `(organization_id, external_message_id)`.
+- Static certification tests: 3 new cases in
+  `packages/runtime/src/migration.test.ts`, and a new
+  `packages/runtime/src/wave3-rls.test.ts` (5 cases) following
+  `wave2-rls.test.ts`'s precedent exactly, including an explicit assertion
+  that no authenticated write policy exists on the worker-only tables.
+  25 new tests total in `packages/conversation` (`service.test.ts`,
+  `validation.test.ts`) using hand-rolled in-memory port fakes, the same
+  style `packages/medicine/src/equivalency.test.ts` uses.
+
+Not built in this pass, deliberately: no route calls `ConversationEngine`,
+no Supabase-backed implementation of its ports exists, and there is no
+WhatsApp adapter — those are RC1_BACKLOG item 15, the natural next step,
+not folded in here to keep this batch's diff reviewable and its scope
+verifiable against a single backlog item.
+
+`npm run check` (175 tests, up from 150) and `npm run build` (all 8
+workspaces) both pass clean after this migration. No app yet depends on
+`@medlink/conversation`, so the build change is additive only.

@@ -24,7 +24,7 @@ does not certify RC1 or any engine for production.
 | API integration contracts | Fail | No live-database/provider contract suite |
 | Workflow identity | Pass | All 15 stable IDs are executable contracts |
 | Workflow behavior | Fail | Canonical end-to-end workflow suites are absent |
-| CDA conformance | Fail | No Conversation Engine or WhatsApp adapter |
+| CDA conformance | Fail | Conversation Engine domain/application boundaries and schema exist (`packages/conversation`, migration `202607290012`); no WhatsApp adapter, route wiring, or Workflow Orchestrator integration yet |
 | Audit/event completeness | Conditional | General outbox exists (migration 006); Wave 2 catalog/prescription/equivalency/clinical-validation use cases (migrations 008-009) and reservation creation (migration 010) all commit business state, audit, and outbox atomically in one function; MAR pickup/fulfillment transitions and other unimplemented Wave 3 use cases remain out of scope until built |
 | Observability | Fail | No metrics/tracing/SLO evidence; health dependency checks are now real (no hardcoded results) but still unexercised outside unit tests |
 | Performance | Not evidenced | No load/latency evidence |
@@ -62,8 +62,13 @@ does not certify RC1 or any engine for production.
 
 ### Wave 3
 
-- Conversation Engine, WhatsApp adapter, durable canonical workflows, general
-  event outbox, and full conversational journey are missing.
+- Conversation Engine domain/application boundaries and schema now exist
+  (`packages/conversation`, migration `202607290012`) — dialogue/session
+  state, intent detection, human handoff, and an append-only decision log,
+  delegating business processes to a `WorkflowInvoker` port rather than
+  running rules itself. WhatsApp adapter, durable canonical workflows
+  (Batch 3.2), general event outbox, route wiring, and the full
+  conversational journey are still missing.
 - MAR/inventory/reservation artifacts are partial and not integrated through
   compliant APIs. `reserve_inventory` is now implemented (migration 010,
   atomic and idempotent), but the patient reservation UI cannot successfully
