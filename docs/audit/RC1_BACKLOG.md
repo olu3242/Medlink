@@ -21,20 +21,32 @@ not authorization to implement multiple batches at once.
    - Source transaction, retry, timeout, recovery, audit, outbox, idempotency,
      dead-letter, migration, and performance-smoke primitives pass.
    - Convert every mutating application use case to a database transaction that
-     commits business state, audit, and outbox together.
+     commits business state, audit, and outbox together. Done for Wave 2
+     medicine and prescription creation/update (migration 008,
+     `create_medicine_record`/`update_medicine_record`/
+     `create_prescription_record`). MAR, clinical review, and reservation
+     mutations remain non-atomic two-step calls and are Wave 3 scope, deferred
+     rather than pulled forward here.
    - Execute migration, rollback, RLS, tenant-isolation, idempotency, and retry
      tests against live PostgreSQL/Supabase.
 
-4. **S01.9 Enterprise Observability and Certification — pending**
+4. **S01.9 Enterprise Observability and Certification — partial**
    - Add durable metrics, distributed traces, dependency-aware health, runtime
-     diagnostics, machine-readable certification, and evidence retention.
+     diagnostics, machine-readable certification, and evidence retention. The
+     `apps/web` audit/outbox health checks were hardcoded `true`; they now run
+     real dependency checks against `governance_audit_events`/
+     `runtime_outbox_events`. Metrics/tracing are still exercised only by unit
+     tests, not real traffic.
    - Certify API, Background, AI, Administrative, and placeholder Conversation
      runtime profiles without implementing Wave 2–5 features.
 
-5. **S01.10 Enterprise Test Harness — pending**
+5. **S01.10 Enterprise Test Harness — partial**
    - Add CI quality gates, coverage thresholds, live integration/RLS suites,
      contract compatibility, workflow, performance, recovery, and security
-     certification.
+     certification. CI now builds every app workspace (previously only
+     `@medlink/web`) and `vitest.config.ts` enforces a coverage threshold over
+     `packages/**/src`, uploaded as a CI artifact. Live integration, RLS,
+     workflow, performance, recovery, and security suites are still absent.
    - Mark old wave certification documents as historical/pre-CDA and align app
      READMEs after executable evidence is authoritative.
 

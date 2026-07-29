@@ -4,13 +4,13 @@ Status reflects executable source and evidence, not directory names.
 
 | Engine | Wave | Status | Certification | Blocking issues | Next action |
 | --- | --- | --- | --- | --- | --- |
-| Identity and Tenant Context | 1 | Partial | Conditional | Canonical context used only by `apps/web` | Unify all APIs, then freeze |
-| RBAC | 1 | Partial | Conditional | Role map exists but most routes do not invoke it | Enforce in API pipeline |
+| Identity and Tenant Context | 1 | Partial | Conditional | Canonical context now used by `apps/admin`, `apps/patient`, and `apps/web`; no live-RLS evidence | Execute and test migrations, then freeze |
+| RBAC | 1 | Partial | Conditional | Role map enforced in every route's API pipeline call; no live authorization-denial evidence | Add live RLS/RBAC denial matrix |
 | Database Platform | 1 | Partial | Conditional | Strong static migration; no runtime/RLS evidence | Execute and test migrations |
-| Observability | 1 | Scaffolded | Fail | Logger and correlation primitive only | Add propagation, metrics, traces, health |
-| Medicine Knowledge | 2 | Partial | Conditional | Domain/catalog schema exists; APIs bypass domain services | Wave 2.1 remediation and certification |
+| Observability | 1 | Scaffolded | Conditional | Logger, correlation, and real (non-hardcoded) dependency-aware health checks exist; no metrics/tracing dashboards or SLOs | Add propagation, metrics, traces, alerting |
+| Medicine Knowledge | 2 | Partial | Conditional | Domain/catalog schema exists; create/update now commit business state and evidence atomically (migration 008); read paths still bypass domain services | Wave 2.1 remediation and certification |
 | Medication Equivalency | 2 | Partial | Conditional | Safety unit tests pass; no integration/RLS tests | Wave 2.2 |
-| Prescription Intelligence | 2 | Partial | Conditional | Parser and schema exist; OCR adapter unselected | Wave 2.3 |
+| Prescription Intelligence | 2 | Partial | Conditional | Parser and schema exist; creation now atomic with evidence (migration 008); OCR adapter unselected | Wave 2.3 |
 | Clinical Intelligence | 2 | Partial | Conditional | Validation rules exist; limited rule/test coverage | Wave 2.4 |
 | Search | 2 | Partial | Conditional | Service exists; no production index adapter evidence | Wave 2.5 |
 | Conversation Engine | 3 | Not started | Fail | No package, schema, API, or tests | Wave 3 |

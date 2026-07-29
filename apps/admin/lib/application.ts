@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { RuntimeError } from "@medlink/runtime";
+import { RuntimeError, type RuntimeContext } from "@medlink/runtime";
 
 async function result<T>(
   query: PromiseLike<{ data: T; error: { message: string } | null }>,
@@ -72,28 +72,42 @@ export class CatalogApplication {
       .is("deleted_at", null).single());
   }
 
-  async create(input: {
-    brandName: string;
-    genericName: string;
-    dosageForm: string;
-    route: string;
-    strength: string;
-    manufacturer?: string | undefined;
-    controlled?: boolean | undefined;
-  }) {
-    return result(this.database.from("medicines").insert({
-      brand_name: input.brandName,
-      generic_name: input.genericName,
-      dosage_form: input.dosageForm,
-      route: input.route,
-      strength_display: input.strength,
-      manufacturer_name: input.manufacturer,
-      controlled_substance: input.controlled ?? false,
-      status: "draft",
-    }).select().single());
+  async create(
+    context: RuntimeContext,
+    idempotencyKey: string,
+    input: {
+      brandName: string;
+      genericName: string;
+      dosageForm: string;
+      route: string;
+      strength: string;
+      manufacturer?: string | undefined;
+      controlled?: boolean | undefined;
+    },
+  ) {
+    return result(this.database.rpc("create_medicine_record", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: idempotencyKey,
+      target_channel: context.channel,
+      target_brand_name: input.brandName,
+      target_generic_name: input.genericName,
+      target_dosage_form: input.dosageForm,
+      target_route: input.route,
+      target_strength_display: input.strength,
+      target_manufacturer_name: input.manufacturer ?? null,
+      target_controlled_substance: input.controlled ?? false,
+    }));
   }
 
-  async update(id: string, input: Record<string, unknown>) {
+  async update(
+    context: RuntimeContext,
+    idempotencyKey: string,
+    id: string,
+    input: Record<string, unknown>,
+  ) {
     const mapping: Readonly<Record<string, string>> = {
       brandName: "brand_name",
       genericName: "generic_name",
@@ -104,13 +118,21 @@ export class CatalogApplication {
       controlled: "controlled_substance",
       status: "status",
     };
-    const updates = Object.fromEntries(
+    const changes = Object.fromEntries(
       Object.entries(input)
         .filter(([, value]) => value !== undefined)
         .map(([key, value]) => [mapping[key] ?? key, value]),
     );
-    return result(this.database.from("medicines").update(updates).eq("id", id)
-      .select().single());
+    return result(this.database.rpc("update_medicine_record", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: idempotencyKey,
+      target_channel: context.channel,
+      target_medicine_id: id,
+      target_changes: changes,
+    }));
   }
 }
 
@@ -124,8 +146,8 @@ export class PrescriptionApplication {
   }
 
   async create(
-    organizationId: string,
-    userId: string,
+    context: RuntimeContext,
+    idempotencyKey: string,
     input: {
       patientId: string;
       source: "upload" | "electronic";
@@ -134,15 +156,18 @@ export class PrescriptionApplication {
       externalReference?: string | undefined;
     },
   ) {
-    return result(this.database.from("prescriptions").insert({
-      organization_id: organizationId,
-      patient_id: input.patientId,
-      source: input.source,
-      storage_bucket: input.storageBucket,
-      storage_object_path: input.storageObjectPath,
-      external_reference: input.externalReference,
-      uploaded_by: userId,
-      status: "received",
-    }).select().single());
+    return result(this.database.rpc("create_prescription_record", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: idempotencyKey,
+      target_channel: context.channel,
+      target_patient_id: input.patientId,
+      target_source: input.source,
+      target_storage_bucket: input.storageBucket ?? null,
+      target_storage_object_path: input.storageObjectPath ?? null,
+      target_external_reference: input.externalReference ?? null,
+    }));
   }
 }

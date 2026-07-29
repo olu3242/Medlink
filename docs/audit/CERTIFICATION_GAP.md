@@ -11,13 +11,13 @@ does not certify RC1 or any engine for production.
 
 | Gate | Result | Evidence/gap |
 | --- | --- | --- |
-| Lint | Pass | `npm.cmd run lint` |
-| Unit/runtime/architecture tests | Pass | 26 files, 40 tests |
+| Lint | Pass | `npm run lint` |
+| Unit/runtime/architecture tests | Pass | 35 files, 83 tests |
 | Live database runtime tests | Blocked | One suite skipped; Docker/Podman unavailable |
 | Root typecheck | Pass | Covers all apps and packages |
-| Migrated app builds | Pass | Admin, patient, and web production builds |
-| Coverage | Fail | No configured threshold/report |
-| Migration apply | Not evidenced | Migration 006 statically certifies; no PostgreSQL/Supabase runtime |
+| Migrated app builds | Pass | All 8 app workspaces (`npm run build --workspaces --if-present`) |
+| Coverage | Conditional | `vitest.config.ts` enforces a 70/70/65/70 statements/branches/functions/lines gate over `packages/**/src`, uploaded as a CI artifact; apps/** UI and route handlers remain uncovered by design pending the integration/e2e suite in the backlog |
+| Migration apply | Not evidenced | Migrations 001-008 statically certify; no PostgreSQL/Supabase runtime |
 | RLS runtime | Fail | No cross-tenant test suite |
 | API integration | Fail | No integration suite |
 | API architecture contracts | Pass | Protected v1 routes enforce canonical boundaries |
@@ -25,28 +25,35 @@ does not certify RC1 or any engine for production.
 | Workflow identity | Pass | All 15 stable IDs are executable contracts |
 | Workflow behavior | Fail | Canonical end-to-end workflow suites are absent |
 | CDA conformance | Fail | No Conversation Engine or WhatsApp adapter |
-| Audit/event completeness | Fail | No general outbox; routes bypass services |
-| Observability | Fail | No metrics/tracing/SLO evidence |
+| Audit/event completeness | Conditional | General outbox exists (migration 006); Wave 2 catalog/prescription use cases commit business state, audit, and outbox atomically in one function (migration 008); MAR, reservation, and other Wave 3 use cases remain non-atomic |
+| Observability | Fail | No metrics/tracing/SLO evidence; health dependency checks are now real (no hardcoded results) but still unexercised outside unit tests |
 | Performance | Not evidenced | No load/latency evidence |
 | Security | Conditional | Static controls exist; no threat/pen/secret evidence |
 | Backup/restore/DR | Not evidenced | No exercise reports |
 | External conformance | Not evidenced | No provider/partner environments |
 | Documentation | Conditional | Governance aligned; legacy docs conflict |
-| Enterprise runtime lifecycle | Conditional | Audit/outbox journal is atomic; business-state transaction integration and live evidence remain |
+| Enterprise runtime lifecycle | Conditional | Audit/outbox journal is atomic; Wave 2 catalog/prescription use cases integrate it into a single business-state transaction, MAR/reservation use cases do not yet, and live evidence remains blocked by the absence of a runtime PostgreSQL/Supabase environment |
 
 ## Certification gaps by wave
 
 ### Wave 1
 
-- Canonical API pipeline is not used repository-wide.
-- Workspace-wide build/typecheck and coverage gates are absent.
+- Canonical API pipeline is now used by every route in `apps/admin`, `apps/patient`,
+  and `apps/web` (the one stale non-conformant route, `apps/web/app/api/v1/health`,
+  was dead code duplicating the real `apps/web/app/health/*` surface and was
+  removed rather than remediated in place).
+- Workspace build now covers all 8 app workspaces and a coverage threshold is
+  enforced over `packages/**/src`; apps/** still lack integration/e2e coverage.
 - Runtime RLS, observability, secrets, backup, and recovery evidence is absent.
 
 ### Wave 2
 
 - Domain unit tests are positive but narrow.
-- OCR provider, application repositories, API integration, RLS, search adapter,
-  clinical rule evidence, and batch certification are incomplete.
+- Medicine and prescription creation/update now commit business state and
+  runtime evidence atomically (migration 008); other application repositories
+  remain thin pass-throughs.
+- OCR provider, API integration, RLS, search adapter, clinical rule evidence,
+  and batch certification are incomplete.
 
 ### Wave 3
 

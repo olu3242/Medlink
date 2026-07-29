@@ -29,6 +29,38 @@ describe("transactional runtime migration", () => {
   });
 });
 
+describe("use case transactional commit migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202607290008_use_case_transactional_commits.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("commits business state and runtime evidence in one function per use case", () => {
+    for (const [fn, table] of [
+      ["create_medicine_record", "insert into public.medicines"],
+      ["update_medicine_record", "update public.medicines"],
+      ["create_prescription_record", "insert into public.prescriptions"],
+    ] as const) {
+      expect(sql).toContain(`function public.${fn}`);
+      expect(sql).toContain(table);
+    }
+    const occurrences = sql.split("public.record_runtime_evidence(").length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(3);
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("re-enforces the equivalent RLS authorization inside each SECURITY DEFINER function", () => {
+    expect(sql).toContain("public.is_platform_admin()");
+    expect(sql).toContain("public.is_organization_member(target_organization_id)");
+    expect(sql).toContain("public.has_organization_role(");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),
