@@ -78,12 +78,20 @@ does not certify RC1 or any engine for production.
   ADR or hand-rolling a non-conformant pipeline. See
   `docs/audit/RC1_BACKLOG.md` P1 item 15 for the full finding — this needs
   an accepted ADR, not another wiring pass.
-- Batch 3.2 groundwork started: `packages/workflows` now carries context
-  between steps, all 15 canonical workflows have a structural step-name
-  definition, and WF-005 Medicine Search has one real executable step. No
-  persisted `WorkflowStore` yet (in-memory test fake only), no recovery
-  model, and no wiring from `packages/conversation`'s `WorkflowInvoker`
-  port to this package. The general event outbox and the full
+- Batch 3.2 groundwork: `packages/workflows` now carries context between
+  steps, all 15 canonical workflows have a structural step-name
+  definition, and WF-005 (Medicine Search) and WF-007 (Clinical Review)
+  each have one real executable step. `workflow_instances` (migration
+  `202607290015`) gives it a persisted `SupabaseWorkflowStore`, and
+  `apps/web/lib/workflow-invoker.ts`'s `WorkflowOrchestratorInvoker` wires
+  `packages/conversation`'s `WorkflowInvoker` port to it -- runs
+  `medicine_search` for real, throws `UnsupportedWorkflowTypeError` (not a
+  silent no-op) for any other classified intent. No route calls any of
+  this yet, blocked on ADR 0004 the same as Batch 3.1. No recovery model.
+  MAR/Reservation state vocabulary audited: Wave 2/3-owned code passes the
+  real DB enums through honestly; one new Wave 4 finding (`apps/pharmacy`'s
+  reservations page has never worked -- see RC1_BACKLOG item 18) recorded,
+  not fixed, per Wave Isolation. The general event outbox and the full
   conversational journey are still missing.
 - MAR/inventory/reservation artifacts are partial and not integrated through
   compliant APIs. `reserve_inventory` is now implemented (migration 010,

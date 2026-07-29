@@ -228,6 +228,22 @@ describe("retire legacy reserve_inventory overload migration", () => {
   });
 });
 
+describe("workflow instances migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202607290015_workflow_instances.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("defines durable workflow run state with RLS", () => {
+    expect(sql).toContain("create table public.workflow_instances");
+    expect(sql).toContain("alter table public.workflow_instances enable row level security");
+  });
+
+  it("is idempotent per organization on the workflow's idempotency key", () => {
+    expect(sql).toContain("unique (organization_id, idempotency_key)");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),

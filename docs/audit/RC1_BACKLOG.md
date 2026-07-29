@@ -214,14 +214,46 @@ not authorization to implement multiple batches at once.
     executable step (`medicine-search.ts`) wrapping
     `packages/search`'s `MedicineSearchService` -- the first canonical
     definition backed by an actual domain call rather than just a name.
-    Still open: `durable` in the sense of a persisted `WorkflowStore` --
-    only an in-memory fake exists (test-only, see `service.test.ts`); no
-    Supabase-backed store, no route or `WorkflowInvoker` port
-    implementation wiring `packages/conversation` to this package yet; the
-    other 14 workflows' steps remain structural, not executable.
+    Now also durable: migration `202607290015` adds `workflow_instances`,
+    and `apps/web/lib/workflow-store.ts`'s `SupabaseWorkflowStore`
+    implements the port for real. `apps/web/lib/workflow-invoker.ts`'s
+    `WorkflowOrchestratorInvoker` wires `packages/conversation`'s
+    `WorkflowInvoker` port to this package -- it runs `medicine_search` for
+    real and throws `UnsupportedWorkflowTypeError` (not a silent no-op) for
+    any other classified intent, since only WF-005 has an executable step
+    so far. Still open: no route calls any of this yet (blocked on ADR
+    0004, same as Batch 3.1), and the other 14 workflows' steps remain
+    structural, not executable.
 17. Implement a general transactional domain-event outbox and consumers.
 18. Reconcile MAR and Reservation state vocabularies across contract, package,
-    database, API, and UI.
+    database, API, and UI. Audited this pass: `mar_status` (11 values:
+    created/validated/reviewed/searching/matched/reserved/paid/dispensed/
+    completed/cancelled/expired) and `reservation_status` (6 values:
+    pending/confirmed/ready/collected/cancelled/expired) are the only two
+    DB enums involved. Every Wave 2/3-owned consumer passes these through
+    honestly rather than inventing a competing vocabulary: `toMar`
+    (`apps/patient/lib/application.ts`) maps `state` straight to the
+    client's `status` field with no relabeling, and
+    `PATCH /api/v1/review/{id}`'s `decisionSchema` is contract-tested
+    against `clinical_review_decision` (a third, already-reconciled enum).
+    No further Wave 2/3 fix needed.
+    **New Wave 4 finding, not fixed here (Wave Isolation):**
+    `apps/pharmacy/app/reservations/page.tsx` — a Pharmacy Portal (Batch
+    4.1) page — PATCHes a reservation with `{status: "declined"}`.
+    `"declined"` is not a `reservation_status` value; the write would fail
+    with an enum-violation error if it ever reached the database. It
+    can't, independently: the page calls `fetch("/api/v1/reservations...")`
+    directly with a same-origin relative path instead of using its own
+    `apps/pharmacy/lib/api.ts` cross-origin client (the same
+    inconsistent-client-usage bug class Sprint 2 fixed in
+    `apps/pharmacist/components/decision-form.tsx`), and no
+    `GET`/`PATCH /api/v1/reservations[/{id}]` route exists anywhere in the
+    repository for it to reach regardless. Three compounding problems, one
+    finding: this page has never worked. Left for whoever builds Batch 4.1
+    for real, since building the missing endpoint and choosing the correct
+    enum-mapped semantics (closest existing value is likely `cancelled`,
+    not a new enum member) is real backend design work, not a mechanical
+    fix.
 19. Integrate inventory locking, reservation compensation, pickup, human
     handoff, notification, timeout, retry, ordering, and recovery.
     `reserve_inventory` is now implemented (migration `202607290010`,

@@ -525,3 +525,54 @@ diff reviewable against a single backlog item.
 
 `npm run check` (213 tests, up from 204) and `npm run build` (all 8
 workspaces) both pass clean after this pass.
+
+## Batch 3.2 continues: durable store, WorkflowInvoker wiring, a second executable workflow, and a MAR/Reservation vocabulary audit
+
+Four more increments toward Batch 3.2, still unblocked by ADR 0004:
+
+- **Fixed a real multi-tenant correctness gap found while building the
+  persisted store**: `WorkflowStore.findByKey(key)` took only the
+  idempotency key, not the tenant -- fine for the single-run in-memory
+  test fake, but a real persisted store needs both, or two different
+  organizations reusing the same key string (plausible if a key derives
+  from an external message id) could resolve to each other's workflow
+  instance. Changed the port to `findByKey(tenantId, key)` and
+  `WorkflowService.run()` to pass both, before any persisted
+  implementation existed to paper over it.
+- **Migration `202607290015_workflow_instances.sql`** and
+  **`apps/web/lib/workflow-store.ts`**'s `SupabaseWorkflowStore`: real
+  persistence for `packages/workflows`, closing the "durable" half of
+  RC1_BACKLOG item 16. RLS mirrors `conversations` (admin-scoped read/
+  manage) since the caller identity driving a workflow run has the same
+  open question ADR 0004 raises for conversations.
+- **`apps/web/lib/workflow-invoker.ts`**'s `WorkflowOrchestratorInvoker`:
+  adapts `WorkflowService` to `packages/conversation`'s `WorkflowInvoker`
+  port -- the actual wire ADR 0003's diagram draws between the
+  Conversation Engine and Workflow Orchestrator. Runs `medicine_search`
+  for real; throws `UnsupportedWorkflowTypeError` for any other classified
+  intent rather than succeeding silently with no work done, since only one
+  canonical workflow has executable steps so far.
+- **`packages/workflows/src/clinical-review.ts`**: WF-007 Clinical
+  Review's real executable step, the second (after WF-005). Wraps
+  `packages/clinical`'s `ClinicalValidationService.validate()`. Since
+  `ClinicalValidationInput` has no zod schema of its own (a plain TS
+  interface, unlike `packages/medicine`'s models), added a runtime type
+  guard rather than casting an untyped `jsonb` context value directly --
+  a malformed or missing input skips validation and reports why, instead
+  of passing bad data to the domain service or throwing.
+- **MAR/Reservation state vocabulary audit** (RC1_BACKLOG item 18): every
+  Wave 2/3-owned consumer (`toMar`, the review-decision contract test)
+  passes the real DB enums (`mar_status`, `reservation_status`) through
+  honestly -- no further fix needed there. Found and documented, not
+  fixed (Wave 4, Wave Isolation): `apps/pharmacy/app/reservations/page.tsx`
+  has never worked -- it bypasses its own cross-origin API client for a
+  same-origin fetch that 404s locally, PATCHes a `"declined"` status the
+  `reservation_status` enum has never had, and no
+  `GET`/`PATCH /api/v1/reservations[/{id}]` route exists anywhere in the
+  repo regardless. Also confirmed `packages/reservations`'s own
+  (`active`/`expired`/`cancelled`/`fulfilled`) vocabulary mismatch against
+  the DB enum is dead-code drift, not a live bug -- the package has zero
+  real callers anywhere in the repository.
+
+`npm run check` (226 tests, up from 213) and `npm run build` (all 8
+workspaces) both pass clean after this round.

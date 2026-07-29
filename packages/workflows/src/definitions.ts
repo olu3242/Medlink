@@ -8,9 +8,10 @@ export interface WorkflowDefinition {
   // WorkflowStep[] yet. Grounded in the DB state machines already built
   // this session (mar_status, prescription_status, extraction_status) and
   // docs/release-scope.md's Wave 3 scope list, not invented. Most of these
-  // step names describe intent for Batch 3.2 to implement; medicine-search.ts
-  // is the first (and, as of this pass, only) one with a real executable
-  // WorkflowStep behind it -- see workflowStepImplementations below.
+  // step names describe intent for Batch 3.2 to implement; WF-005's
+  // "search_catalog" (medicine-search.ts) and WF-007's
+  // "run_clinical_validation" (clinical-review.ts) are the only two with a
+  // real executable WorkflowStep behind them so far.
   readonly steps: readonly string[];
 }
 

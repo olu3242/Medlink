@@ -18,6 +18,11 @@ const bindingsSql = readFileSync(
   "utf8",
 ).toLowerCase();
 
+const workflowInstancesSql = readFileSync(
+  join(process.cwd(), "supabase", "migrations", "202607290015_workflow_instances.sql"),
+  "utf8",
+).toLowerCase();
+
 describe("wave 3 conversation engine table RLS", () => {
   const tablesWithPolicies: Record<string, readonly string[]> = {
     conversations: ["conversations_read", "conversations_admin_manage"],
@@ -64,5 +69,13 @@ describe("wave 3 conversation engine table RLS", () => {
     );
     expect(bindingsSql).toContain("create policy conversation_channel_bindings_read");
     expect(bindingsSql).toContain("create policy conversation_channel_bindings_admin_manage");
+  });
+
+  it("enables RLS on workflow_instances and defines its policies", () => {
+    expect(workflowInstancesSql).toContain(
+      "alter table public.workflow_instances enable row level security",
+    );
+    expect(workflowInstancesSql).toContain("create policy workflow_instances_read");
+    expect(workflowInstancesSql).toContain("create policy workflow_instances_admin_manage");
   });
 });

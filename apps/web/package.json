@@ -13,7 +13,9 @@
     "@medlink/observability": "*",
     "@medlink/platform": "*",
     "@medlink/runtime": "*",
+    "@medlink/search": "*",
     "@medlink/ui": "*",
+    "@medlink/workflows": "*",
     "@supabase/supabase-js": "^2.52.0"
   }
 }

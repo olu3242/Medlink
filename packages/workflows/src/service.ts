@@ -8,8 +8,19 @@ export interface WorkflowInstance {
 }
 
 export interface WorkflowStore {
-  findByKey(key: string): Promise<WorkflowInstance | null>;
-  create(input: { tenantId: string; type: string; idempotencyKey: string }): Promise<WorkflowInstance>;
+  // Scoped by tenantId, not just the idempotency key: two different
+  // tenants using the same key string (plausible if a key is derived from
+  // an external message id, for instance) must never resolve to each
+  // other's workflow instance. A persisted, genuinely multi-tenant store
+  // needs both; an in-memory single-run test fake can ignore the first
+  // argument, but the port itself must not make that assumption for it.
+  findByKey(tenantId: string, key: string): Promise<WorkflowInstance | null>;
+  create(input: {
+    tenantId: string;
+    type: string;
+    idempotencyKey: string;
+    context?: Readonly<Record<string, unknown>>;
+  }): Promise<WorkflowInstance>;
   // contextPatch is merged into the instance's context alongside marking the
   // step complete, in one call, so a step's output (e.g. WF-005's search
   // results) is durably recorded atomically with the step advancing -- not
@@ -38,8 +49,11 @@ export class WorkflowService {
     type: string;
     idempotencyKey: string;
     steps: readonly WorkflowStep[];
+    context?: Readonly<Record<string, unknown>>;
   }): Promise<WorkflowInstance> {
-    let instance = (await this.store.findByKey(input.idempotencyKey)) ?? (await this.store.create(input));
+    let instance =
+      (await this.store.findByKey(input.tenantId, input.idempotencyKey)) ??
+      (await this.store.create(input));
     if (instance.status === "completed") return instance;
     for (const step of input.steps) {
       if (instance.completedSteps.includes(step.name)) continue;
