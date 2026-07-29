@@ -11,6 +11,18 @@ not authorization to implement multiple batches at once.
    - Propagate correlation IDs and structured logs.
    - Map typed errors without returning raw internal messages.
    - Implement the API profile from the Enterprise Runtime Contract.
+   - Follow-up (not a gate blocker): `apps/web/lib/api-runtime.ts`'s
+     `runWebApi` and `packages/api/src/index.ts`'s `runApi` independently
+     re-implement the same runtime lifecycle rather than sharing one
+     implementation, and `runApi` additionally wires a transactional journal
+     `runWebApi` lacks. Both are individually conformant; consolidating them
+     touches the frozen platform and needs an ADR, not a quiet merge.
+   - Also discovered: `apps/dashboard`, `apps/developer`, and `apps/provider`
+     collectively reference 9 API paths (`dashboard`, `notifications`,
+     `payments`, `adherence`, `developer/clients`, `developer/webhooks`,
+     `developer/webhook-deliveries`, `integrations`, `provider/activity`)
+     with no backing route anywhere — expected for Wave 4/5 UI scaffolds
+     built ahead of their APIs, confirmed rather than assumed.
 
 2. **S01.7 Route/domain separation — source gate complete**
    - Replace direct Supabase calls in route handlers with application use cases.
@@ -95,9 +107,20 @@ not authorization to implement multiple batches at once.
 18. Reconcile MAR and Reservation state vocabularies across contract, package,
     database, API, and UI.
 19. Integrate inventory locking, reservation compensation, pickup, human
-    handoff, notification, timeout, retry, ordering, and recovery.
+    handoff, notification, timeout, retry, ordering, and recovery. Discovered
+    during a repository-wide contract-drift sweep: `reserve_inventory`, the
+    RPC `apps/patient/lib/application.ts`'s `AccessApplication.reserve()`
+    calls, is not defined in any migration — the reservation-creation path is
+    not merely untested, it 500s unconditionally. Define this function first,
+    before any reservation-path work or testing.
 20. Add conversation, workflow, duplicate delivery, replay, outage, recovery,
     concurrency, and end-to-end tests.
+20a. Fix `apps/pharmacist/components/decision-form.tsx`, which posts to
+    `/api/v1/review/{id}/decision` (nonexistent — the real endpoint is
+    `PATCH /api/v1/review/{id}`) with decision values and a field name that
+    don't match that endpoint's contract, and doesn't route through the
+    cross-origin API client its own read calls use. Already tracked at the
+    engine level in `ENGINE_STATUS_MATRIX.md`; this is the precise diff.
 
 ## P2 — Waves 4 and 5
 
