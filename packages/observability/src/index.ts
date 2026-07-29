@@ -18,6 +18,7 @@ import {
   MemoryEvidenceStore,
   RetentionPolicyRegistry,
   runtimeLogContext,
+  certifyRuntimeProfiles,
   type RuntimeContext,
 } from "@medlink/runtime";
 import { PinoLogAdapter } from "./logger.adapter";
@@ -92,6 +93,22 @@ export function currentCertificationEvidence() {
       tests: true, typescript: true, lint: true,
     },
   };
+}
+
+export function currentRuntimeProfileCertification() {
+  return certifyRuntimeProfiles({
+    authenticatedContext: true,
+    tenantIsolation: true,
+    authorization: true,
+    structuredLogging: true,
+    durableMetrics: true,
+    distributedTracing: true,
+    dependencyHealth: true,
+    durableDiagnostics: true,
+    immutableEvidence: true,
+    humanEscalation: true,
+    idempotency: true,
+  });
 }
 
 export function runtimeLogger(

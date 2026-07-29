@@ -53,4 +53,18 @@ describe("PrescriptionParser", () => {
       expect.objectContaining({ requiresHumanReview: true }),
     );
   });
+
+  it("rejects unsupported or oversized media", () => {
+    const parser = new PrescriptionParser(
+      {} as PrescriptionRepository,
+      { extract: vi.fn() },
+      { recordExtraction: vi.fn() },
+    );
+    expect(() => parser.validateMedia({
+      mediaType: "application/zip", bytes: 100,
+    })).toThrow("Unsupported prescription media type");
+    expect(() => parser.validateMedia({
+      mediaType: "image/jpeg", bytes: 11 * 1024 * 1024,
+    })).toThrow("Prescription media size is invalid");
+  });
 });

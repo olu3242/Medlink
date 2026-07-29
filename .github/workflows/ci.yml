@@ -16,4 +16,35 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm run build
+      - run: npm run test:coverage
+      - run: npm run build --workspaces --if-present
+      - run: npm run typecheck --workspaces --if-present
+
+  migration-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx supabase start
+      - run: npx supabase db reset
+      - if: always()
+        run: npx supabase stop
+
+  live-database:
+    if: github.event_name == 'pull_request' && vars.RUN_LIVE_DATABASE_TESTS == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:live
+        env:
+          MEDLINK_LIVE_SUPABASE_URL: ${{ secrets.MEDLINK_LIVE_SUPABASE_URL }}
+          MEDLINK_LIVE_SUPABASE_ANON_KEY: ${{ secrets.MEDLINK_LIVE_SUPABASE_ANON_KEY }}

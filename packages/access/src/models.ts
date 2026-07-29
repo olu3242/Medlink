@@ -1,6 +1,6 @@
 export const marStates = [
   "created", "validated", "reviewed", "searching", "matched", "reserved",
-  "paid", "dispensed", "completed", "cancelled",
+  "paid", "dispensed", "completed", "cancelled", "expired",
 ] as const;
 export type MarState = (typeof marStates)[number];
 

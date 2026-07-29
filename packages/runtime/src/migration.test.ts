@@ -65,3 +65,97 @@ describe("atomic reservation migration", () => {
     expect(reservationSql).toContain("existing_lock.quantity");
   });
 });
+
+describe("durable observability migration", () => {
+  const observabilitySql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202607290009_durable_observability.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("persists each required operational evidence class under RLS", () => {
+    for (const table of [
+      "runtime_metric_points",
+      "runtime_trace_spans",
+      "runtime_diagnostic_events",
+      "runtime_certification_reports",
+    ]) {
+      expect(observabilitySql).toContain(`create table public.${table}`);
+      expect(observabilitySql).toContain(
+        `alter table public.${table} enable row level security`,
+      );
+    }
+  });
+
+  it("keeps metrics, completed spans, and reports immutable", () => {
+    expect(observabilitySql).toContain("runtime_metric_points_append_only");
+    expect(observabilitySql).toContain("runtime_trace_spans_append_only");
+    expect(observabilitySql).toContain("runtime_certification_reports_append_only");
+  });
+});
+
+describe("conversation platform migration", () => {
+  const conversationSql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202607290011_conversation_platform.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("defines tenant-scoped conversation and handoff persistence", () => {
+    for (const table of [
+      "conversation_sessions",
+      "conversation_messages",
+      "conversation_handoffs",
+    ]) {
+      expect(conversationSql).toContain(`create table public.${table}`);
+      expect(conversationSql).toContain(
+        `alter table public.${table} enable row level security`,
+      );
+    }
+  });
+
+  it("deduplicates provider messages and keeps message evidence immutable", () => {
+    expect(conversationSql).toContain("unique(organization_id,provider_message_id)");
+    expect(conversationSql).toContain("conversation_messages_append_only");
+  });
+});
+
+describe("professional operations migrations", () => {
+  const roleSql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202607290012_professional_operations.sql"),
+    "utf8",
+  ).toLowerCase();
+  const fulfillmentSql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202607290013_fulfillment_transitions.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("adds the provider role in its own committed migration", () => {
+    expect(roleSql).toContain("add value if not exists 'provider'");
+    expect(roleSql).not.toContain("create policy");
+  });
+
+  it("persists immutable tenant-scoped fulfillment transitions", () => {
+    expect(fulfillmentSql).toContain("create table public.fulfillment_transitions");
+    expect(fulfillmentSql).toContain(
+      "alter table public.fulfillment_transitions enable row level security",
+    );
+    expect(fulfillmentSql).toContain("fulfillment_transitions_append_only");
+    expect(fulfillmentSql).toContain("unique (organization_id, idempotency_key)");
+  });
+});
+
+describe("certification approval migration", () => {
+  const approvalSql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202607290014_certification_approvals.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("stores immutable signed approvals under tenant RLS", () => {
+    expect(approvalSql).toContain("create table public.certification_approvals");
+    expect(approvalSql).toContain("evidence_sha256");
+    expect(approvalSql).toContain("algorithm = 'ed25519'");
+    expect(approvalSql).toContain(
+      "alter table public.certification_approvals enable row level security",
+    );
+    expect(approvalSql).toContain("certification_approvals_append_only");
+  });
+});

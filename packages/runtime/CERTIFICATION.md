@@ -31,6 +31,10 @@ and evaluator errors fail closed.
 - `GET /runtime/certification/report?format=markdown` returns Markdown; without the
   parameter it returns JSON.
 - `GET /runtime/certification/policies?category=runtime` returns the policy catalog.
+- `GET /runtime/certification/profiles` returns machine-readable source-gate
+  results for API, Background, AI, Administrative, and placeholder Conversation
+  runtime profiles.
 
 All endpoints require platform or tenant administrator authorization and disable
-caching. Report persistence and immutable evidence are owned by S01.9 Batch 7.
+caching. Durable report, metric, trace, diagnostic, and evidence schemas are
+provided by S01.9; live-database certification remains a separate evidence gate.

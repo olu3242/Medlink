@@ -36,6 +36,25 @@ export interface EquivalencyService {
   assertReviewed(decision: PharmacistEquivalencyDecision | null): void;
 }
 
+export interface EquivalencyDecisionPort {
+  record(input: PharmacistEquivalencyDecision): Promise<void>;
+}
+
+export class PharmacistEquivalencyService {
+  constructor(
+    private readonly equivalency: EquivalencyService,
+    private readonly decisions: EquivalencyDecisionPort,
+  ) {}
+
+  async decide(decision: PharmacistEquivalencyDecision): Promise<void> {
+    this.equivalency.assertReviewed(decision);
+    if (decision.reviewedAt.getTime() > Date.now()) {
+      throw new EquivalencyReviewRequiredError();
+    }
+    await this.decisions.record(decision);
+  }
+}
+
 function ingredientKey(ingredient: IngredientStrength): string {
   return `${ingredient.genericId}:${ingredient.amount}:${ingredient.unit}`;
 }

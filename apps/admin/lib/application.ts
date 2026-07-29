@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RuntimeError } from "@medlink/runtime";
+import { SupabaseMedicineSearchIndex } from "@medlink/search";
 
 async function result<T>(
   query: PromiseLike<{ data: T; error: { message: string } | null }>,
@@ -65,6 +66,32 @@ export class CatalogApplication {
       );
     }
     return { items: data ?? [], total: count ?? 0 };
+  }
+
+  async search(input: {
+    term: string;
+    limit?: number | undefined;
+    cursor?: string | undefined;
+  }) {
+    const index = new SupabaseMedicineSearchIndex(this.database);
+    const page = await index.search({
+      normalizedTerm: input.term.trim().toLocaleLowerCase("en"),
+      types: ["brand", "generic"],
+      limit: input.limit ?? 20,
+      ...(input.cursor ? { cursor: input.cursor } : {}),
+    });
+    const ids = [...new Set(page.hits.map((hit) => hit.id))];
+    const rows = ids.length === 0
+      ? []
+      : await result(this.database.from("medicines").select("*").in("id", ids));
+    const byId = new Map((rows ?? []).map((row) => [row.id, row]));
+    return {
+      matches: page.hits.flatMap((hit) => {
+        const medicine = byId.get(hit.id);
+        return medicine ? [{ ...hit, medicine }] : [];
+      }),
+      nextCursor: page.nextCursor,
+    };
   }
 
   async get(id: string) {
