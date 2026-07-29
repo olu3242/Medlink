@@ -1,4 +1,5 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createServerClient, parseCookieHeader } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { authorize, permissions, type Permission, type Role } from "@medlink/platform";
 import { runtimeTracing, standardRuntimeHooks } from "@medlink/observability";
 import {
@@ -15,14 +16,23 @@ const environmentSchema = z.object({
 
 export function requestDatabase(request: Request): SupabaseClient {
   const environment = environmentSchema.parse(process.env);
-  return createClient(
+  return createServerClient(
     environment.NEXT_PUBLIC_SUPABASE_URL,
     environment.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       global: {
         headers: { Authorization: request.headers.get("authorization") ?? "" },
       },
-      auth: { persistSession: false, autoRefreshToken: false },
+      cookies: {
+        getAll: () =>
+          parseCookieHeader(request.headers.get("cookie") ?? "")
+            .filter((cookie): cookie is { name: string; value: string } =>
+              cookie.value !== undefined,
+            ),
+        setAll: () => {
+          // Session refresh is handled by each application's middleware.
+        },
+      },
     },
   );
 }

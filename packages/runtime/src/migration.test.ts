@@ -211,6 +211,23 @@ describe("conversation channel bindings migration", () => {
   });
 });
 
+describe("retire legacy reserve_inventory overload migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202607290014_retire_legacy_reserve_inventory_overload.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("drops the 7-parameter overload nothing calls, keeping only the evidence-committing 11-parameter version", () => {
+    expect(sql).toContain("drop function if exists public.reserve_inventory(");
+    expect(sql).toContain("uuid, uuid, uuid, uuid, integer, text, timestamptz");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),
@@ -223,5 +240,27 @@ describe("runtime evidence repository migration", () => {
     expect(evidenceSql).toContain("enable row level security");
     expect(evidenceSql).toContain("integrity_hash");
     expect(evidenceSql).toContain("parent_version_id");
+  });
+});
+
+describe("atomic reservation migration", () => {
+  const reservationSql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202607280008_atomic_reservation.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("atomically locks inventory and advances only a matched MAR", () => {
+    expect(reservationSql).toContain("function public.reserve_inventory");
+    expect(reservationSql).toContain("for update");
+    expect(reservationSql).toContain("pg_advisory_xact_lock");
+    expect(reservationSql).toContain("insert into public.inventory_locks");
+    expect(reservationSql).toContain("target_mar.state <> 'matched'");
+    expect(reservationSql).toContain("set state = 'reserved'");
+  });
+
+  it("binds retries to the original reservation inputs", () => {
+    expect(reservationSql).toContain("idempotency key was already used");
+    expect(reservationSql).toContain("existing_lock.inventory_batch_id");
+    expect(reservationSql).toContain("existing_lock.quantity");
   });
 });

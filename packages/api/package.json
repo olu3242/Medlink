@@ -8,6 +8,7 @@
     "@medlink/observability": "*",
     "@medlink/platform": "*",
     "@medlink/runtime": "*",
+    "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.52.0",
     "zod": "^3.25.0"
   }
