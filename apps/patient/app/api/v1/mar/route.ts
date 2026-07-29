@@ -24,10 +24,10 @@ export const POST = (request: Request) => runApi(request, {
   schema: createSchema,
   input: (value) => value.json(),
   execute: async (input, context, database) =>
-    new AccessApplication(database).createMar(
-      context.organizationId,
-      context.userId,
-      input,
-    ),
+    new AccessApplication(database).createMar(context, input.idempotencyKey, {
+      prescriptionId: input.prescriptionId,
+      medicineId: input.medicineId,
+      notes: input.notes,
+    }),
   success: (data) => Response.json({ data }, { status: 201 }),
 });

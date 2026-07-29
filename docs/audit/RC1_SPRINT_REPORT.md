@@ -576,3 +576,61 @@ Four more increments toward Batch 3.2, still unblocked by ADR 0004:
 
 `npm run check` (226 tests, up from 213) and `npm run build` (all 8
 workspaces) both pass clean after this round.
+
+## MAR creation made atomic, event outbox investigated, WF-006 added
+
+Investigating `createMar()` while looking for a third canonical workflow to
+back with a real step (after WF-005 and WF-007) found it was still exactly
+the gap `docs/audit/RC1_BACKLOG.md`'s item 3 (S01.8) named and deliberately
+deferred: a raw single-table insert with no runtime evidence commit at
+all, unlike every atomic RPC built earlier this session.
+
+- **Migration `202607290016_create_mar.sql`**: `create_mar` commits the
+  MAR row and its platform runtime evidence in one transaction, following
+  the established pattern exactly. The MAR *domain* audit trail was
+  already atomic -- `enforce_and_audit_mar_state()` (migration
+  202607270003) inserts a `MAR.Created` `mar_audit_events` row via a
+  trigger on the same insert -- so this RPC's job was narrower than
+  `create_medicine_record`'s: business insert plus the platform evidence
+  commit that trigger doesn't make. Idempotent replay uses
+  `mar_audit_events_idempotency_idx`'s existing unique
+  `(organization_id, idempotency_key)` constraint on the `MAR.Created`
+  event, since `medication_access_requests.transition_idempotency_key`
+  gets overwritten on every later state transition and can't serve as a
+  creation-time dedup key.
+- **`apps/patient/lib/application.ts`**'s `createMar()` now takes the full
+  `RuntimeContext` (matching `reserve()`'s established shape) and calls
+  the RPC instead of a raw insert; the route passes it through.
+- **`packages/workflows/src/mar-creation.ts`**: WF-006's real executable
+  step, the third canonical workflow backed by an actual call. Unlike
+  WF-005/WF-007 (which wrap real domain packages), MAR creation has no
+  portable domain package to wrap, so this defines a `MarCreator` port
+  instead; `apps/web/lib/mar-creator.ts`'s `SupabaseMarCreator` is the
+  concrete implementation, calling `create_mar` directly. Noted honestly
+  rather than solved: a workflow-invoked creation has no HTTP request of
+  its own to derive correlation/request identifiers from, and
+  `packages/conversation`'s `InboundMessageInput` doesn't propagate one
+  yet either -- `SupabaseMarCreator` generates a fresh request id and uses
+  the idempotency key as the correlation id, tagged with a `"workflow"`
+  channel so this origin stays distinguishable in
+  `governance_audit_events`.
+- **RC1_BACKLOG item 17 (general event outbox and consumers) investigated
+  and documented, not built**: `runtime_outbox_events` (migration
+  202607270006) already is the general transactional domain-event
+  outbox and is in real, transactional use by every atomic RPC this
+  session has built. Its schema is clearly designed for a claim-based
+  Background Runtime worker (`status`/`locked_at`/`locked_by`/
+  `published_at`/`retry_count`/`last_error_code`), but zero consumers
+  exist anywhere in the repository -- the only other reference to the
+  table is a read-only health check. Not built this pass: a claim/
+  publish/fail RPC set would need to be `service_role`-only (unlike every
+  other RPC this session has built for authenticated end users) to avoid
+  a real cross-tenant security bug -- an `authenticated`-callable claim
+  function could lock or read another tenant's outbox rows -- and even a
+  correctly scoped claim mechanism has no real consumer to dispatch to
+  yet, since "what does `mar.created` actually trigger downstream"
+  requires selecting real integrations, the same class of undecided
+  product question as the still-unselected OCR provider.
+
+`npm run check` (232 tests, up from 226) and `npm run build` (all 8
+workspaces) both pass clean after this round.

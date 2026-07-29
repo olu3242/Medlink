@@ -244,6 +244,31 @@ describe("workflow instances migration", () => {
   });
 });
 
+describe("create_mar migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202607290016_create_mar.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("creates the MAR and commits its runtime evidence in one function", () => {
+    expect(sql).toContain("function public.create_mar");
+    expect(sql).toContain("insert into public.medication_access_requests");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("replays idempotently via the mar_audit_events MAR.Created uniqueness, not a new constraint", () => {
+    expect(sql).toContain("from public.mar_audit_events");
+    expect(sql).toContain("and event_type = 'mar.created'");
+    expect(sql).toContain("if found then");
+  });
+
+  it("re-enforces the medication_access_requests_create RLS policy inside the SECURITY DEFINER function", () => {
+    expect(sql).toContain("public.is_organization_member(target_organization_id)");
+    expect(sql).toContain("array['pharmacist', 'pharmacy_staff']");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),

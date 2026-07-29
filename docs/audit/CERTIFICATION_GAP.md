@@ -80,19 +80,30 @@ does not certify RC1 or any engine for production.
   an accepted ADR, not another wiring pass.
 - Batch 3.2 groundwork: `packages/workflows` now carries context between
   steps, all 15 canonical workflows have a structural step-name
-  definition, and WF-005 (Medicine Search) and WF-007 (Clinical Review)
-  each have one real executable step. `workflow_instances` (migration
-  `202607290015`) gives it a persisted `SupabaseWorkflowStore`, and
+  definition, and WF-005 (Medicine Search), WF-006 (Medication Access
+  Request), and WF-007 (Clinical Review) each have one real executable
+  step. `workflow_instances` (migration `202607290015`) gives it a
+  persisted `SupabaseWorkflowStore`, and
   `apps/web/lib/workflow-invoker.ts`'s `WorkflowOrchestratorInvoker` wires
   `packages/conversation`'s `WorkflowInvoker` port to it -- runs
   `medicine_search` for real, throws `UnsupportedWorkflowTypeError` (not a
   silent no-op) for any other classified intent. No route calls any of
   this yet, blocked on ADR 0004 the same as Batch 3.1. No recovery model.
-  MAR/Reservation state vocabulary audited: Wave 2/3-owned code passes the
+- MAR creation is now atomic (migration `202607290016`'s `create_mar`
+  commits the MAR row and its runtime evidence together in one
+  transaction), closing an S01.8 gap deferred since Track A. Clinical
+  review decision remains non-atomic, with a separate latent replay bug,
+  not fixed this pass.
+- MAR/Reservation state vocabulary audited: Wave 2/3-owned code passes the
   real DB enums through honestly; one new Wave 4 finding (`apps/pharmacy`'s
   reservations page has never worked -- see RC1_BACKLOG item 18) recorded,
-  not fixed, per Wave Isolation. The general event outbox and the full
-  conversational journey are still missing.
+  not fixed, per Wave Isolation.
+- General event outbox investigated: `runtime_outbox_events` already is
+  the general transactional domain-event outbox and is in real use by
+  every atomic RPC; zero consumers exist. Not built this pass -- a claim
+  RPC needs careful `service_role`-only scoping to avoid a cross-tenant
+  security bug, and has no real consumer to dispatch to yet (see
+  RC1_BACKLOG item 17). The full conversational journey is still missing.
 - MAR/inventory/reservation artifacts are partial and not integrated through
   compliant APIs. `reserve_inventory` is now implemented (migration 010,
   atomic and idempotent), but the patient reservation UI cannot successfully

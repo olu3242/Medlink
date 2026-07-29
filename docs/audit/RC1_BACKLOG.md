@@ -36,9 +36,16 @@ not authorization to implement multiple batches at once.
      commits business state, audit, and outbox together. Done for Wave 2
      medicine and prescription creation/update (migration 008,
      `create_medicine_record`/`update_medicine_record`/
-     `create_prescription_record`). MAR, clinical review, and reservation
-     mutations remain non-atomic two-step calls and are Wave 3 scope, deferred
-     rather than pulled forward here.
+     `create_prescription_record`); done for reservation creation (migration
+     010, `reserve_inventory`); done for MAR creation (migration 016,
+     `create_mar`, now that Wave 3 has begun) — `AccessApplication.createMar()`
+     was a raw single-table insert with no runtime evidence commit until now.
+     Clinical review decision (`AccessApplication.decideReview()`) remains a
+     non-atomic two-step call; not fixed this pass, since it also has a
+     distinct latent bug (an `.eq("decision", "pending")` guard with no
+     idempotent-replay path — a repeated decision call errors instead of
+     returning the prior result) worth fixing together rather than
+     separately.
    - Execute migration, rollback, RLS, tenant-isolation, idempotency, and retry
      tests against live PostgreSQL/Supabase.
 
@@ -214,7 +221,11 @@ not authorization to implement multiple batches at once.
     executable step (`medicine-search.ts`) wrapping
     `packages/search`'s `MedicineSearchService` -- the first canonical
     definition backed by an actual domain call rather than just a name.
-    Now also durable: migration `202607290015` adds `workflow_instances`,
+    WF-007 Clinical Review (`clinical-review.ts`, wrapping
+    `packages/clinical`) and WF-006 Medication Access Request
+    (`mar-creation.ts`, backed by the new atomic `create_mar` RPC via a
+    `MarCreator` port) have real executable steps too. Now also durable:
+    migration `202607290015` adds `workflow_instances`,
     and `apps/web/lib/workflow-store.ts`'s `SupabaseWorkflowStore`
     implements the port for real. `apps/web/lib/workflow-invoker.ts`'s
     `WorkflowOrchestratorInvoker` wires `packages/conversation`'s
@@ -225,6 +236,30 @@ not authorization to implement multiple batches at once.
     0004, same as Batch 3.1), and the other 14 workflows' steps remain
     structural, not executable.
 17. Implement a general transactional domain-event outbox and consumers.
+    Investigated this pass: the outbox half already exists and is in real
+    use -- `runtime_outbox_events` (migration 202607270006) is exactly a
+    general transactional domain-event outbox, and every atomic RPC this
+    session has built (`create_medicine_record`, `reserve_inventory`,
+    `create_mar`, ...) commits to it via `record_runtime_evidence()` in
+    the same transaction as its business state. Its schema
+    (`status`/`locked_at`/`locked_by`/`published_at`/`retry_count`/
+    `last_error_code`) is clearly designed for a claim-based Background
+    Runtime worker per `docs/ENTERPRISE_RUNTIME_CONTRACT.md`'s Background
+    Runtime obligations ("claim work atomically with bounded leases...
+    bounded retries... dead-letter handling"), but **zero consumers exist**
+    -- the only other reference to the table anywhere in the repository is
+    a read-only health check (`apps/web/lib/health.ts`). Not built this
+    pass, deliberately: a claim/publish/fail RPC set is real, scoped,
+    buildable infrastructure, but granting it carelessly is a genuine
+    cross-tenant security risk (a claim function callable by any
+    `authenticated` user could lock or read another tenant's outbox rows;
+    it would need to be `service_role`-only, unlike every other RPC this
+    session has built for authenticated end users) -- and even a correctly
+    scoped claim mechanism has no real consumer to justify it yet, since
+    "what does dispatching `mar.created` actually do" requires selecting
+    real downstream integrations (notification provider, webhook
+    subscribers), the same class of not-yet-made product decision as the
+    still-unselected OCR provider (item 10).
 18. Reconcile MAR and Reservation state vocabularies across contract, package,
     database, API, and UI. Audited this pass: `mar_status` (11 values:
     created/validated/reviewed/searching/matched/reserved/paid/dispensed/

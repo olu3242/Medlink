@@ -116,25 +116,34 @@ export class AccessApplication {
     return toMar(row as MarRow);
   }
 
+  // Atomic since migration 202607290016: create_mar commits the MAR row
+  // and its runtime evidence in one transaction (the MAR.Created domain
+  // audit event was already atomic via enforce_and_audit_mar_state()
+  // (migration 202607270003), but the platform evidence commit was not --
+  // this was a raw insert with no record_runtime_evidence call at all
+  // until now, exactly the gap docs/audit/RC1_BACKLOG.md's item 3 named
+  // and deferred to Wave 3).
   async createMar(
-    organizationId: string,
-    userId: string,
+    context: RuntimeContext,
+    idempotencyKey: string,
     input: {
       prescriptionId?: string | undefined;
       medicineId: string;
       notes?: string | undefined;
-      idempotencyKey: string;
     },
   ) {
-    return result(this.database.from("medication_access_requests").insert({
-      organization_id: organizationId,
-      patient_id: userId,
-      prescription_id: input.prescriptionId,
-      requested_medicine_id: input.medicineId,
-      patient_notes: input.notes,
-      transition_idempotency_key: input.idempotencyKey,
-      created_by: userId,
-    }).select().single());
+    return result(this.database.rpc("create_mar", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: idempotencyKey,
+      target_channel: context.channel,
+      target_patient_id: context.userId,
+      target_prescription_id: input.prescriptionId ?? null,
+      target_requested_medicine_id: input.medicineId,
+      target_patient_notes: input.notes ?? null,
+    }));
   }
 
   async reviews(organizationId: string) {
