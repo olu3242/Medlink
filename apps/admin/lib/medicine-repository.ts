@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   brandMedicineSchema,
+  genericMedicineSchema,
   normalizeMedicineName,
   type BrandMedicine,
+  type GenericMedicine,
   type MedicineCatalogReader,
 } from "@medlink/medicine";
 import { RuntimeError } from "@medlink/runtime";
@@ -23,6 +25,16 @@ interface MedicineWithIngredientsRow {
   created_at: string;
   updated_at: string;
   medicine_ingredients?: MedicineIngredientRow[] | null;
+}
+
+interface GenericRow {
+  id: string;
+  canonical_name: string;
+  controlled_substance: boolean;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  therapeutic_classes: { name: string } | { name: string }[] | null;
 }
 
 // Shared with apps/admin/lib/medicine-search.ts's SupabaseSearchMedicineReader
@@ -53,17 +65,43 @@ export function toBrandMedicine(row: MedicineWithIngredientsRow): BrandMedicine 
   return parsed.success ? parsed.data : null;
 }
 
+// Shared with apps/admin/lib/medicine-search.ts's SupabaseSearchMedicineReader,
+// same reasoning as toBrandMedicine above. generics.therapeutic_class_id is
+// nullable (a generic can exist before it's classified), but
+// genericMedicineSchema requires a non-empty therapeuticClass name -- a
+// generic with no class assigned yet fails domain validation and this
+// returns null for it, the same honest-gap precedent toBrandMedicine set
+// for out-of-vocabulary dosage forms/routes.
+export function toGenericMedicine(row: GenericRow): GenericMedicine | null {
+  const relation = Array.isArray(row.therapeutic_classes)
+    ? row.therapeutic_classes[0]
+    : row.therapeutic_classes;
+  const candidate = {
+    id: row.id,
+    canonicalName: row.canonical_name,
+    normalizedName: normalizeMedicineName(row.canonical_name),
+    therapeuticClass: relation?.name ?? "",
+    controlled: row.controlled_substance,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+  const parsed = genericMedicineSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : null;
+}
+
 const MEDICINE_WITH_INGREDIENTS_SELECT =
   "*, medicine_ingredients(active_ingredient_id, amount, unit)";
 
+const GENERIC_SELECT = "*, therapeutic_classes(name)";
+
 // Backs packages/medicine's MedicineCatalogReader port, the read side
 // CatalogEquivalencyService.propose() needs to find ingredient-matching
-// brand medicines. Only the brand path is implemented: there is no
-// first-class generic-medicine entity in the schema (medicines stores
-// brand_name/generic_name as two text columns on one row, not related
-// brand/generic entities) - see docs/wave-2-certification.md "known gaps."
-// findGenericById returns null (an honest "not found"), matching the
-// findGenericsByIds precedent already established in medicine-search.ts.
+// brand medicines. findGenericById reads the first-class public.generics
+// table added in migration 202607290011 (see docs/wave-2-certification.md
+// "known gaps" for the resolution history) -- it is a different entity from
+// active_ingredients, which remains the ingredient-composition source
+// findBrandsByIngredientIds below uses for equivalency.
 export class SupabaseMedicineCatalogReader implements MedicineCatalogReader {
   constructor(private readonly database: SupabaseClient) {}
 
@@ -86,8 +124,23 @@ export class SupabaseMedicineCatalogReader implements MedicineCatalogReader {
     return data ? toBrandMedicine(data) : null;
   }
 
-  async findGenericById() {
-    return null;
+  async findGenericById(id: string): Promise<GenericMedicine | null> {
+    const { data, error } = await this.database.from("generics")
+      .select(GENERIC_SELECT)
+      .eq("id", id).is("deleted_at", null)
+      .maybeSingle<GenericRow>();
+    if (error) {
+      throw new RuntimeError(
+        "infrastructure",
+        "database_operation_failed",
+        "The data operation could not be completed",
+        503,
+        true,
+        "Retry later.",
+        { cause: error },
+      );
+    }
+    return data ? toGenericMedicine(data) : null;
   }
 
   async findBrandsByIngredientIds(

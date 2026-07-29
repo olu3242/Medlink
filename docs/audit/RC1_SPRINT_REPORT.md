@@ -263,3 +263,60 @@ an external design decision:
 
 `npm run check` (135 tests, up from 99) and `npm run build` (all 8
 workspaces) both pass clean after this continuation.
+
+## Generic-medicine entity gap — resolved
+
+User-authorized design decision (asked directly rather than assumed, since
+this was a genuine architecture choice, not an engineering judgment call):
+add a first-class `generics` table. Migration `202607290011_generics.sql`:
+
+- `public.generics` (`canonical_name`, `normalized_name`,
+  `therapeutic_class_id`, `controlled_substance`, `status`, timestamps) —
+  the schema-level counterpart to `packages/medicine`'s `GenericMedicine`.
+  Deliberately distinct from `public.active_ingredients`, which remains the
+  ingredient-composition source `CatalogEquivalencyService.propose()` uses
+  for equivalency matching — a different axis (marketed generic-name
+  catalog entity vs. pharmacological substance), not merged into one table.
+- Backfilled from every distinct existing `medicines.generic_name`
+  (`group by lower(trim(generic_name))`, aggregating
+  `controlled_substance` with `bool_or` across brands sharing a name).
+  `medicines.generic_id` links each brand row to its generic;
+  `medicines.generic_name` (text) is kept, not dropped, since existing read
+  paths depend on it directly.
+- A `sync_medicine_generic()` trigger (`before insert or update of
+  generic_name on medicines`) finds-or-creates the matching `generics` row
+  and sets `generic_id` on every future write — the same "orchestrate via
+  trigger" pattern `sync_inventory_lock_quantity` already established,
+  rather than duplicating find-or-create logic inside
+  `create_medicine_record`/`update_medicine_record` (migration 008) or
+  every future write path.
+- RLS mirrors `active_ingredients`: read to any authenticated user where
+  not deleted, write restricted to `is_platform_admin()`.
+- `SupabaseMedicineCatalogReader.findGenericById` and
+  `SupabaseSearchMedicineReader.findGenericsByIds`
+  (`apps/admin/lib/medicine-repository.ts`, `medicine-search.ts`) now query
+  it for real, through a new `toGenericMedicine` mapper following the same
+  "safeParse, return null rather than throw or coerce" precedent
+  `toBrandMedicine` set — a generic with no `therapeutic_class_id` assigned
+  yet fails `genericMedicineSchema`'s required `therapeuticClass` and maps
+  to `null`, an honest gap rather than a fabricated value.
+- `TrigramMedicineSearchIndex.search()` now returns real `generic`-type
+  hits against `generics.canonical_name`'s trigram index, alongside the
+  existing brand hits, instead of unconditionally returning `{ hits: [] }`
+  for any request that included `"generic"`.
+- Static certification tests: 4 new cases in
+  `packages/runtime/src/migration.test.ts` (table/RLS shape, backfill,
+  sync trigger) and 1 in `wave2-rls.test.ts`; 3 new `toGenericMedicine`
+  cases in `apps/admin/lib/medicine-repository.test.ts`.
+
+Not touched, deliberately: `CatalogApplication.brands()`/`generics()`/
+catalog `list()`/`get()` (`apps/admin/lib/application.ts`) still query
+`medicines` directly rather than through the repository — that was never
+blocked on the missing `generics` table, it's the same closed-vocabulary
+404 risk `toBrandMedicine`'s precedent already documented, unrelated to
+this gap. `MedicineRepository.createGeneric`/`listGenerics` (the write
+side) remain unimplemented — no route calls them, so there was nothing to
+wire; only `MedicineCatalogReader`'s read side had real callers.
+
+`npm run check` (150 tests, up from 142) and `npm run build` (all 8
+workspaces) both pass clean after this migration.

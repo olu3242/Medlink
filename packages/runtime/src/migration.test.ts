@@ -139,6 +139,38 @@ describe("reserve_inventory migration", () => {
   });
 });
 
+describe("generics migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202607290011_generics.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("defines a first-class generics table distinct from active_ingredients", () => {
+    expect(sql).toContain("create table public.generics");
+    expect(sql).toContain("canonical_name text not null unique");
+    expect(sql).toContain("therapeutic_class_id uuid references public.therapeutic_classes(id)");
+    expect(sql).toContain("alter table public.generics enable row level security");
+  });
+
+  it("links medicines to generics without dropping generic_name", () => {
+    expect(sql).toContain("add column generic_id uuid references public.generics(id)");
+    expect(sql).not.toContain("drop column generic_name");
+  });
+
+  it("backfills generics from existing medicines.generic_name and links medicines.generic_id", () => {
+    expect(sql).toContain("insert into public.generics");
+    expect(sql).toContain("group by lower(trim(medicine.generic_name))");
+    expect(sql).toContain("update public.medicines medicine");
+    expect(sql).toContain("set generic_id = generic.id");
+  });
+
+  it("keeps generic_id in sync going forward via a trigger, not a duplicated RPC", () => {
+    expect(sql).toContain("function public.sync_medicine_generic");
+    expect(sql).toContain("create trigger medicines_sync_generic");
+    expect(sql).toContain("before insert or update of generic_name on public.medicines");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),

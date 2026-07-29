@@ -15,6 +15,11 @@ const sql = readFileSync(
   "utf8",
 ).toLowerCase();
 
+const genericsSql = readFileSync(
+  join(process.cwd(), "supabase", "migrations", "202607290011_generics.sql"),
+  "utf8",
+).toLowerCase();
+
 describe("wave 2 table RLS", () => {
   const tablesWithPolicies: Record<string, readonly string[]> = {
     medicine_equivalences: ["medicine_equivalences_read", "medicine_equivalences_admin"],
@@ -60,5 +65,11 @@ describe("wave 2 table RLS", () => {
     const policyBody = sql.slice(policyStart, policyStart + 400);
     expect(policyBody).toContain("platform_admin");
     expect(policyBody).toContain("pharmacist");
+  });
+
+  it("enables RLS on generics and defines its policies", () => {
+    expect(genericsSql).toContain("alter table public.generics enable row level security");
+    expect(genericsSql).toContain("create policy generics_read");
+    expect(genericsSql).toContain("create policy generics_admin");
   });
 });

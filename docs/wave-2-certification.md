@@ -43,8 +43,8 @@ change under the shared Supabase directory.
   candidates; added in the RC1 P0 convergence follow-up once `.propose()`
   was found to still have no caller even after `.assertReviewed()` was wired
 - `GET /api/v1/search?term=...` — `packages/search`'s
-  `IndexedMedicineSearchService` backed by the existing brand trigram index;
-  brand hits only (see "known gaps" below)
+  `IndexedMedicineSearchService` backed by the brand and generic trigram
+  indexes (migrations 202607270002, 202607290011)
 
 ## Domain package wiring
 
@@ -61,9 +61,38 @@ correct, tested response shape for the admin UI (see
 `brandMedicineSchema`'s closed-vocabulary validation would risk 404ing an
 existing medicine whose `dosage_form`/`route` falls outside that vocabulary,
 for no functional gain. `SupabaseMedicineCatalogReader`
-(`apps/admin/lib/medicine-repository.ts`) exists and is used for
-`.propose()`; wiring it into `list()`/`get()` too is still blocked on the
-generic-entity gap below, not on the repository not existing.
+(`apps/admin/lib/medicine-repository.ts`) exists and is used for both
+`.propose()` (brand side) and `findGenericById` (generic side, now backed by
+the `generics` table added in migration 202607290011 — see "known gaps"
+below for the resolution). Wiring it into `brands()`/`generics()`/catalog
+`list()`/`get()` too remains a closed-vocabulary risk, not a missing
+capability.
+
+## Resolved gaps
+
+- **First-class generic-medicine entity.** Resolved in migration
+  `202607290011_generics.sql`: a `public.generics` table now backs
+  `packages/medicine`'s `GenericMedicine` (`canonicalName`,
+  `normalizedName`, `therapeuticClass`, `controlled`, `status`), distinct
+  from `active_ingredients` (which remains the ingredient-composition
+  source `CatalogEquivalencyService.propose()` uses — a different axis, not
+  merged). Backfilled from every distinct existing `medicines.generic_name`;
+  `medicines.generic_id` links each brand row to it, kept in sync going
+  forward by a `sync_medicine_generic()` trigger rather than duplicated
+  find-or-create logic in `create_medicine_record`/`update_medicine_record`.
+  `medicines.generic_name` (text) is kept, not dropped — existing read paths
+  depend on it directly. `SupabaseMedicineCatalogReader.findGenericById` and
+  `SupabaseSearchMedicineReader.findGenericsByIds`
+  (`apps/admin/lib/medicine-repository.ts`, `medicine-search.ts`) now query
+  it for real instead of returning `null`/`[]` unconditionally, and
+  `TrigramMedicineSearchIndex.search()` now returns real `generic`-type
+  hits. `createGeneric`/`listGenerics` on `MedicineRepository` (the write
+  side, as opposed to `MedicineCatalogReader`'s read side) remain
+  unimplemented — no route calls them yet, so there was nothing to wire.
+  Still an honest gap, same as `toBrandMedicine`'s existing precedent: a
+  generic with no `therapeutic_class_id` assigned yet fails
+  `genericMedicineSchema`'s required `therapeuticClass` and
+  `toGenericMedicine` returns `null` for it rather than coercing.
 
 ## Known gaps (discovered during wiring, not yet resolved)
 
@@ -71,14 +100,6 @@ These are genuine domain-model/schema mismatches, not just missing wiring,
 and need a design decision (schema change vs. package model change) rather
 than a mechanical fix:
 
-- **No first-class generic-medicine entity.** `packages/medicine`'s
-  `GenericMedicine` and `packages/search`'s generic search type model a
-  generic medicine as a distinct entity with its own id. The `medicines`
-  table stores `brand_name`/`generic_name` as two text columns on one row;
-  there is no `generics` table. `findGenericById`/`listGenerics`/
-  `createGeneric` and generic-type search results are consequently
-  unimplemented (return empty/throw) rather than faked against the wrong
-  table.
 - **Prescription status vocabulary mismatch.** `packages/prescription`'s
   `PrescriptionRecord.status` uses `uploaded`/`processing`; the
   `prescriptions.status` DB enum uses `received`/`extracting`. Bridged with
@@ -132,10 +153,11 @@ auto-approve, auto-reject, or bypass the mandatory pharmacist review:
 - [x] RLS and index migration reviewed statically
 - [x] Domain packages wired into real routes, including both algorithmic and
       assertion-style methods where a domain service has both
+- [x] Generic-medicine entity gap resolved (`generics` table, migration
+      202607290011 — see "Resolved gaps")
 - [ ] Migration executed against local Supabase
 - [ ] API integration tests against local Supabase
 - [ ] OCR provider adapter selected and credentials configured
-- [ ] Generic-medicine entity gap resolved (schema or package model change)
 
 The unchecked items require a local PostgreSQL/Supabase runtime, or a design
 decision this pass deliberately didn't make unilaterally (see "known gaps").

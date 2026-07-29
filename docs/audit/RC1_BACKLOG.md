@@ -95,14 +95,16 @@ not authorization to implement multiple batches at once.
    `update_medicine_record` (migration 008); a real `SupabaseMedicineCatalogReader`
    repository now exists (`apps/admin/lib/medicine-repository.ts`) and powers
    `CatalogEquivalencyService.propose()` via
-   `GET /api/v1/medicines/{id}/equivalency-candidates` — but read paths
-   (`brands`/`generics`/catalog `list`/`get`) still query `medicines`
-   directly rather than through it, deliberately: routing them through
-   `brandMedicineSchema`'s closed-vocabulary validation would risk 404ing an
-   existing medicine outside that vocabulary, for no gain since those routes
-   already return the correct, tested shape. Blocked on the
-   generic-medicine-entity gap for full completion, not on the repository
-   not existing — see `docs/wave-2-certification.md` "known gaps."
+   `GET /api/v1/medicines/{id}/equivalency-candidates`, and (after migration
+   202607290011 added a first-class `generics` table) `findGenericById` too
+   — but the admin catalog's `brands()`/`generics()`/`list()`/`get()` still
+   query `medicines` directly rather than through the repository,
+   deliberately: routing them through `brandMedicineSchema`'s
+   closed-vocabulary validation would risk 404ing an existing medicine
+   outside that vocabulary, for no gain since those routes already return
+   the correct, tested shape. `createGeneric`/`listGenerics` (the
+   `MedicineRepository` write side) remain unimplemented — no route calls
+   them yet. See `docs/wave-2-certification.md` "Resolved gaps."
 9. Integrate equivalency, prescription, clinical, and search APIs through the
    canonical pipeline. Done: `PATCH /api/v1/equivalents/{id}/review`,
    `POST /api/v1/prescriptions/{id}/extract`,
@@ -131,12 +133,14 @@ not authorization to implement multiple batches at once.
 13. Certify Batches 2.1–2.5 independently. Evidence-based checklist in
     `docs/wave-2-certification.md` reflects this pass's actual state per
     item (migration/RLS static tests, contract tests, clinical rules,
-    `propose()` wiring) rather than a blanket status. New
-    architecture-level gaps discovered while wiring (not previously tracked):
-    no first-class generic-medicine entity in the schema, and vocabulary
+    `propose()` wiring) rather than a blanket status. Architecture-level
+    gaps discovered while wiring (not previously tracked): no first-class
+    generic-medicine entity in the schema — resolved via a `generics` table
+    (migration 202607290011, user-authorized design decision, see
+    `docs/wave-2-certification.md` "Resolved gaps") — and vocabulary
     mismatches between packages/prescription and packages/clinical and their
-    corresponding DB enums, bridged with explicit translation layers rather
-    than resolved. These need a design decision, not a mechanical fix.
+    corresponding DB enums, still bridged with explicit translation layers
+    rather than resolved, still needing a design decision.
 
 ## P1 — Wave 3
 

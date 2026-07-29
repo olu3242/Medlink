@@ -52,6 +52,11 @@ does not certify RC1 or any engine for production.
 - Medicine and prescription creation/update now commit business state and
   runtime evidence atomically (migration 008); other application repositories
   remain thin pass-throughs.
+- The generic-medicine-entity gap is resolved: migration 202607290011 adds a
+  first-class `generics` table, backfilled from existing data and kept in
+  sync by trigger; `findGenericById`/`findGenericsByIds`/generic-type search
+  now query it for real instead of returning `null`/`[]`/no-hits
+  unconditionally.
 - OCR provider, API integration, RLS, search adapter, clinical rule evidence,
   and batch certification are incomplete.
 
