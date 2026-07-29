@@ -203,7 +203,22 @@ not authorization to implement multiple batches at once.
       narrow, explicit exception for this one profile's already-scoped
       service-role-only writes (migration 202607290012).
 16. Implement durable Workflow Orchestrator and all applicable canonical
-    definitions.
+    definitions. Partial: `packages/workflows/src/definitions.ts` gives all
+    15 canonical workflows a structural step sequence (grounded in the
+    existing DB state machines -- `mar_status`, `prescription_status`,
+    `extraction_status` -- and `docs/release-scope.md`'s Wave 3 scope list,
+    not invented). `WorkflowStep`/`WorkflowInstance` (`service.ts`) now
+    carry a `context` a step's output can populate for later steps or the
+    caller to read, durably merged in the same store call that marks the
+    step complete. One workflow, WF-005 Medicine Search, has a real
+    executable step (`medicine-search.ts`) wrapping
+    `packages/search`'s `MedicineSearchService` -- the first canonical
+    definition backed by an actual domain call rather than just a name.
+    Still open: `durable` in the sense of a persisted `WorkflowStore` --
+    only an in-memory fake exists (test-only, see `service.test.ts`); no
+    Supabase-backed store, no route or `WorkflowInvoker` port
+    implementation wiring `packages/conversation` to this package yet; the
+    other 14 workflows' steps remain structural, not executable.
 17. Implement a general transactional domain-event outbox and consumers.
 18. Reconcile MAR and Reservation state vocabularies across contract, package,
     database, API, and UI.

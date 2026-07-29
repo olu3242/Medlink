@@ -467,3 +467,61 @@ tested, unwired packages pending the ADR above.
 
 `npm run check` (201 tests, up from 196) and `npm run build` (all 8
 workspaces) both pass clean after this pass.
+
+## Merge conflict resolved, then Wave 3 continues into Batch 3.2 groundwork
+
+A push landed on the base branch (`agent/track-a-platform-foundation`,
+"harden reservation and review contracts") after this PR opened, putting
+it in a conflicted state. Resolved by merging the base branch in: two
+textual conflicts kept this branch's already-tested versions (an inlined
+Zod schema that breaks the Next.js build vs. this branch's sibling
+`schema.ts`; an untested raw fetch vs. this branch's tested `decide()`
+client). One semantic conflict the file-level merge didn't catch: the
+incoming migration defined a second, 7-parameter `reserve_inventory`
+overload nothing calls and that skips the runtime-evidence commit this
+branch's 11-parameter version makes — added
+`202607290014_retire_legacy_reserve_inventory_overload.sql` to drop it
+rather than leave two implementations of the same operation to diverge.
+204 tests, all 8 workspaces building, after the merge.
+
+With CI green and no review comments on the merged state, continued into
+Batch 3.2 (Workflow Orchestrator) — unblocked by the ADR 0004 question,
+since it needs no route or `RuntimeContext`:
+
+- **`packages/workflows/src/service.ts`**: `WorkflowInstance` now carries
+  a `context`; a `WorkflowStep.execute` may return a context patch the
+  store merges in atomically with marking the step complete (the same
+  call, not two, so a crash between them can't leave the two
+  inconsistent). Backward compatible — a step returning `void` (the only
+  kind that existed before this pass) still works.
+- **`packages/workflows/src/definitions.ts`**: a structural step-name
+  sequence for all 15 canonical workflows, grounded in the DB state
+  machines already built this session (`mar_status`, `prescription_status`,
+  `extraction_status`) and `docs/release-scope.md`'s Wave 3 scope list —
+  not invented. This is "canonical definitions" at the structural level
+  RC1_BACKLOG item 16 asks for; most steps don't have an executable
+  implementation yet.
+- **`packages/workflows/src/medicine-search.ts`**: the first (and only,
+  this pass) canonical workflow step with a real implementation —
+  WF-005's `search_catalog` step wraps `packages/search`'s
+  `MedicineSearchService`, reading `term`/`types`/`limit` from the
+  workflow's context and returning the result page as its own context
+  patch. Depends on `@medlink/search` directly rather than a further HTTP
+  hop through a "versioned Experience API" (ADR 0003's diagram) — an
+  acknowledged interim shortcut for this RC1 monorepo, mirroring
+  `apps/admin`'s own `GET /api/v1/search` route, which already calls
+  `packages/search` directly with no extra hop.
+- 6 new tests (`service.test.ts` expanded from 1 to 4 properly-formatted
+  cases; `definitions.test.ts`; `medicine-search.test.ts`).
+
+Not built this pass, deliberately: a persisted `WorkflowStore` (only an
+in-memory test fake exists), a `WorkflowInvoker` adapter wiring
+`packages/conversation`'s port to this package, and executable steps for
+the other 14 workflows. Each needs either a schema decision (workflow
+instance persistence) or domain wiring this session hasn't done yet
+(clinical review, inventory discovery, reservation, pickup, delivery) —
+right-sized as separate follow-up work, not folded in to keep this pass's
+diff reviewable against a single backlog item.
+
+`npm run check` (213 tests, up from 204) and `npm run build` (all 8
+workspaces) both pass clean after this pass.

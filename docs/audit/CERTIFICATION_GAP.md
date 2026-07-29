@@ -78,8 +78,13 @@ does not certify RC1 or any engine for production.
   ADR or hand-rolling a non-conformant pipeline. See
   `docs/audit/RC1_BACKLOG.md` P1 item 15 for the full finding — this needs
   an accepted ADR, not another wiring pass.
-- Durable canonical workflows (Batch 3.2), the general event outbox, and
-  the full conversational journey are still missing.
+- Batch 3.2 groundwork started: `packages/workflows` now carries context
+  between steps, all 15 canonical workflows have a structural step-name
+  definition, and WF-005 Medicine Search has one real executable step. No
+  persisted `WorkflowStore` yet (in-memory test fake only), no recovery
+  model, and no wiring from `packages/conversation`'s `WorkflowInvoker`
+  port to this package. The general event outbox and the full
+  conversational journey are still missing.
 - MAR/inventory/reservation artifacts are partial and not integrated through
   compliant APIs. `reserve_inventory` is now implemented (migration 010,
   atomic and idempotent), but the patient reservation UI cannot successfully
