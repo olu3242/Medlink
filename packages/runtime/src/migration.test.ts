@@ -106,6 +106,39 @@ describe("wave 2 batch commit migration", () => {
   });
 });
 
+describe("reserve_inventory migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202607290010_reserve_inventory.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("creates the reservation and its inventory lock in one function, relying on the existing lock trigger for atomicity", () => {
+    expect(sql).toContain("function public.reserve_inventory");
+    expect(sql).toContain("insert into public.reservations");
+    expect(sql).toContain("insert into public.inventory_locks");
+    expect(sql).toContain("update public.medication_access_requests");
+    expect(sql).toContain("set state = 'reserved'");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("replays idempotently instead of re-executing on a repeated idempotency key", () => {
+    expect(sql).toContain("where organization_id = target_organization_id");
+    expect(sql).toContain("and idempotency_key = target_idempotency_key");
+    expect(sql).toContain("if found then");
+    expect(sql).toContain("return existing;");
+  });
+
+  it("requires the medication access request to be matched before reserving, matching the MAR state machine", () => {
+    expect(sql).toContain("if mar.state <> 'matched' then");
+  });
+
+  it("re-enforces the reservations_create RLS policy inside the SECURITY DEFINER function", () => {
+    expect(sql).toContain("public.is_organization_member(target_organization_id)");
+    expect(sql).toContain("array['pharmacist', 'pharmacy_staff']");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),

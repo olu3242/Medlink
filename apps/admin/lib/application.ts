@@ -43,6 +43,46 @@ async function result<T>(
   return data;
 }
 
+interface MedicineRow {
+  id: string;
+  brand_name: string;
+  generic_name: string;
+  dosage_form: string;
+  route: string;
+  strength_display: string;
+  manufacturer_name: string | null;
+  controlled_substance: boolean;
+  status: string;
+  updated_at?: string;
+}
+
+// apps/admin/lib/api.ts's MedicineSummary/MedicineDetail (consumed by
+// medicine-table.tsx and medicine-form.tsx) are camelCase; the medicines
+// table columns are snake_case. Routes previously returned raw rows
+// straight through, so the catalog table rendered blank for every column
+// except id and status. Centralizing the mapping here keeps list/get/
+// create/update consistent in one place.
+function toMedicineSummary(row: MedicineRow) {
+  return {
+    id: row.id,
+    name: row.brand_name,
+    genericName: row.generic_name,
+    strength: row.strength_display,
+    dosageForm: row.dosage_form,
+    status: row.status,
+  };
+}
+
+function toMedicineDetail(row: MedicineRow) {
+  return {
+    ...toMedicineSummary(row),
+    route: row.route,
+    controlled: row.controlled_substance,
+    ...(row.manufacturer_name ? { manufacturer: row.manufacturer_name } : {}),
+    ...(row.updated_at ? { updatedAt: row.updated_at } : {}),
+  };
+}
+
 export class CatalogApplication {
   constructor(private readonly database: SupabaseClient) {}
 
@@ -117,12 +157,13 @@ export class CatalogApplication {
         true,
       );
     }
-    return { items: data ?? [], total: count ?? 0 };
+    return { items: (data ?? []).map(toMedicineSummary), total: count ?? 0 };
   }
 
   async get(id: string) {
-    return result(this.database.from("medicines").select("*").eq("id", id)
+    const row = await result(this.database.from("medicines").select("*").eq("id", id)
       .is("deleted_at", null).single());
+    return toMedicineDetail(row as MedicineRow);
   }
 
   async create(
@@ -138,7 +179,7 @@ export class CatalogApplication {
       controlled?: boolean | undefined;
     },
   ) {
-    return result(this.database.rpc("create_medicine_record", {
+    const row = await result(this.database.rpc("create_medicine_record", {
       target_organization_id: context.organizationId,
       target_actor_id: context.userId,
       target_correlation_id: context.correlationId,
@@ -153,6 +194,7 @@ export class CatalogApplication {
       target_manufacturer_name: input.manufacturer ?? null,
       target_controlled_substance: input.controlled ?? false,
     }));
+    return toMedicineDetail(row as MedicineRow);
   }
 
   async update(
@@ -176,7 +218,7 @@ export class CatalogApplication {
         .filter(([, value]) => value !== undefined)
         .map(([key, value]) => [mapping[key] ?? key, value]),
     );
-    return result(this.database.rpc("update_medicine_record", {
+    const row = await result(this.database.rpc("update_medicine_record", {
       target_organization_id: context.organizationId,
       target_actor_id: context.userId,
       target_correlation_id: context.correlationId,
@@ -186,6 +228,7 @@ export class CatalogApplication {
       target_medicine_id: id,
       target_changes: changes,
     }));
+    return toMedicineDetail(row as MedicineRow);
   }
 }
 

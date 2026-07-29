@@ -1,2 +1,46 @@
-"use client";import{useState}from"react";
-export function DecisionForm({reviewId}:{reviewId:string}){const[message,setMessage]=useState("");const[busy,setBusy]=useState(false);async function submit(form:FormData){setBusy(true);setMessage("");try{const r=await fetch(`/api/v1/review/${reviewId}/decision`,{method:"POST",headers:{"Content-Type":"application/json","Idempotency-Key":crypto.randomUUID()},body:JSON.stringify(Object.fromEntries(form))});if(!r.ok)throw new Error();setMessage("Decision recorded and audit event created.")}catch{setMessage("Decision was not recorded. Review the information and try again.")}finally{setBusy(false)}}return <form className="decision" action={submit}><div className="field"><label htmlFor="decision">Decision</label><select id="decision" name="decision" required><option value="">Select…</option><option value="approve">Approve requested medicine</option><option value="approve_equivalent">Approve equivalent</option><option value="reject">Reject</option><option value="needs_information">Request information</option></select></div><div className="field"><label htmlFor="rationale">Clinical rationale</label><textarea id="rationale" name="rationale" required/></div><button className="button" disabled={busy} type="submit">{busy?"Recording…":"Record decision"}</button><p aria-live="polite">{message}</p></form>}
+"use client";
+
+import { useState } from "react";
+import { decide, type ReviewDecision } from "../lib/api";
+
+export function DecisionForm({ reviewId }: { reviewId: string }) {
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(form: FormData) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const decision = form.get("decision") as ReviewDecision;
+      const recommendation = String(form.get("recommendation") ?? "");
+      await decide(reviewId, { decision, recommendation });
+      setMessage("Decision recorded and audit event created.");
+    } catch {
+      setMessage("Decision was not recorded. Review the information and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="decision" action={submit}>
+      <div className="field">
+        <label htmlFor="decision">Decision</label>
+        <select id="decision" name="decision" required>
+          <option value="">Select…</option>
+          <option value="approved">Approve requested medicine</option>
+          <option value="rejected">Reject</option>
+          <option value="needs_information">Request information</option>
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="recommendation">Clinical rationale</label>
+        <textarea id="recommendation" name="recommendation" minLength={3} required />
+      </div>
+      <button className="button" disabled={busy} type="submit">
+        {busy ? "Recording…" : "Record decision"}
+      </button>
+      <p aria-live="polite">{message}</p>
+    </form>
+  );
+}
