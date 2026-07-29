@@ -59,8 +59,15 @@ not authorization to implement multiple batches at once.
      `@medlink/web`) and `vitest.config.ts` enforces a coverage threshold over
      `packages/**/src`, uploaded as a CI artifact. Live integration, RLS,
      workflow, performance, recovery, and security suites are still absent.
-   - Mark old wave certification documents as historical/pre-CDA and align app
-     READMEs after executable evidence is authoritative.
+   - Mark old wave certification documents as historical/pre-CDA. Done:
+     `docs/wave-3-certification.md`, `wave-4-certification.md`, and
+     `wave-5-certification.md` used a pre-CDA wave grouping that actively
+     conflicts with the current Wave 1-5 plan in `docs/release-scope.md`
+     (their "Wave 3" is MAR/reservation, now Wave 2's tail and Wave 3's
+     integration target; their "Wave 4" is notification/payment/dashboard,
+     now split across current Wave 4 and 5) — banners now point to the
+     authoritative source rather than silently conflicting with it. App
+     README alignment is still open.
 
 ## P1 — Wave 2 certification
 
@@ -107,20 +114,41 @@ not authorization to implement multiple batches at once.
 18. Reconcile MAR and Reservation state vocabularies across contract, package,
     database, API, and UI.
 19. Integrate inventory locking, reservation compensation, pickup, human
-    handoff, notification, timeout, retry, ordering, and recovery. Discovered
-    during a repository-wide contract-drift sweep: `reserve_inventory`, the
-    RPC `apps/patient/lib/application.ts`'s `AccessApplication.reserve()`
-    calls, is not defined in any migration — the reservation-creation path is
-    not merely untested, it 500s unconditionally. Define this function first,
-    before any reservation-path work or testing.
+    handoff, notification, timeout, retry, ordering, and recovery.
+    `reserve_inventory` is now implemented (migration `202607290010`,
+    `docs/audit/RC1_SPRINT_REPORT.md`) — it orchestrates the existing
+    `sync_inventory_lock_quantity` trigger (already atomic and
+    concurrency-safe) rather than new locking logic: reservation +
+    inventory lock + MAR `matched`→`reserved` transition + evidence commit
+    atomically, idempotent on `(organization_id, idempotency_key)`. Still
+    open: `apps/patient/app/reserve/[inventoryId]/page.tsx` posts
+    `{inventoryId}` only — missing `marId`/`pharmacyLocationId`/`quantity`/
+    `expiresAt` — and no code path transitions a MAR to `matched`, so the
+    reservation UI cannot successfully call this function yet. That's
+    genuine workflow-UX design work (where does `marId` come from, what
+    quantity, what expiry policy), not a field-rename fix — left for Wave 3's
+    Workflow Orchestrator rather than forced now. Pickup/fulfillment
+    (WF-010/WF-011) remain entirely unimplemented.
 20. Add conversation, workflow, duplicate delivery, replay, outage, recovery,
     concurrency, and end-to-end tests.
-20a. Fix `apps/pharmacist/components/decision-form.tsx`, which posts to
+20a. Fixed `apps/pharmacist/components/decision-form.tsx`, which posted to
     `/api/v1/review/{id}/decision` (nonexistent — the real endpoint is
     `PATCH /api/v1/review/{id}`) with decision values and a field name that
-    don't match that endpoint's contract, and doesn't route through the
-    cross-origin API client its own read calls use. Already tracked at the
-    engine level in `ENGINE_STATUS_MATRIX.md`; this is the precise diff.
+    didn't match that endpoint's contract, and didn't route through the
+    cross-origin API client its own read calls use. Fixed and tested
+    (`apps/pharmacist/lib/api.test.ts`). Still open: this app has no session
+    of its own to authenticate the cross-origin call with — Wave 4 portal
+    authentication.
+20b. Fixed a class of bug distinct from dead API references: several
+    already-shipped read paths (`apps/admin` catalog, `apps/patient` MAR
+    home/detail, `apps/patient` inventory search) returned raw snake_case
+    Supabase rows to clients whose TypeScript types and JSX expect camelCase
+    fields that don't exist on those rows — the admin catalog table
+    rendered blank for every column but id/status, and the patient MAR
+    detail page and search page both crashed outright on properties that
+    were always undefined. See `docs/audit/RC1_SPRINT_REPORT.md` for the
+    full list and `apps/admin/lib/application.test.ts` /
+    `apps/patient/lib/application.test.ts` for regression coverage.
 
 ## P2 — Waves 4 and 5
 

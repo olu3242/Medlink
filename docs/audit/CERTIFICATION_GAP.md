@@ -12,12 +12,12 @@ does not certify RC1 or any engine for production.
 | Gate | Result | Evidence/gap |
 | --- | --- | --- |
 | Lint | Pass | `npm run lint` |
-| Unit/runtime/architecture tests | Pass | 35 files, 83 tests |
+| Unit/runtime/architecture tests | Pass | 38 files, 99 tests |
 | Live database runtime tests | Blocked | One suite skipped; Docker/Podman unavailable |
 | Root typecheck | Pass | Covers all apps and packages |
 | Migrated app builds | Pass | All 8 app workspaces (`npm run build --workspaces --if-present`) |
 | Coverage | Conditional | `vitest.config.ts` enforces a 70/70/65/70 statements/branches/functions/lines gate over `packages/**/src`, uploaded as a CI artifact; apps/** UI and route handlers remain uncovered by design pending the integration/e2e suite in the backlog |
-| Migration apply | Not evidenced | Migrations 001-008 statically certify; no PostgreSQL/Supabase runtime |
+| Migration apply | Not evidenced | Migrations 001-010 statically certify; no PostgreSQL/Supabase runtime (network egress policy blocks the container-registry pulls `supabase start` needs — see `docs/audit/RC1_SPRINT_REPORT.md` Phase 1) |
 | RLS runtime | Fail | No cross-tenant test suite |
 | API integration | Fail | No integration suite |
 | API architecture contracts | Pass | Protected v1 routes enforce canonical boundaries |
@@ -25,7 +25,7 @@ does not certify RC1 or any engine for production.
 | Workflow identity | Pass | All 15 stable IDs are executable contracts |
 | Workflow behavior | Fail | Canonical end-to-end workflow suites are absent |
 | CDA conformance | Fail | No Conversation Engine or WhatsApp adapter |
-| Audit/event completeness | Conditional | General outbox exists (migration 006); Wave 2 catalog/prescription use cases commit business state, audit, and outbox atomically in one function (migration 008); MAR, reservation, and other Wave 3 use cases remain non-atomic |
+| Audit/event completeness | Conditional | General outbox exists (migration 006); Wave 2 catalog/prescription/equivalency/clinical-validation use cases (migrations 008-009) and reservation creation (migration 010) all commit business state, audit, and outbox atomically in one function; MAR pickup/fulfillment transitions and other unimplemented Wave 3 use cases remain out of scope until built |
 | Observability | Fail | No metrics/tracing/SLO evidence; health dependency checks are now real (no hardcoded results) but still unexercised outside unit tests |
 | Performance | Not evidenced | No load/latency evidence |
 | Security | Conditional | Static controls exist; no threat/pen/secret evidence |
@@ -60,7 +60,13 @@ does not certify RC1 or any engine for production.
 - Conversation Engine, WhatsApp adapter, durable canonical workflows, general
   event outbox, and full conversational journey are missing.
 - MAR/inventory/reservation artifacts are partial and not integrated through
-  compliant APIs.
+  compliant APIs. `reserve_inventory` is now implemented (migration 010,
+  atomic and idempotent), but the patient reservation UI cannot successfully
+  call it yet — it doesn't collect `marId`/`quantity`/`expiresAt`, and
+  nothing transitions a MAR to `matched`. Several already-shipped read paths
+  (MAR home/detail, inventory search) had response-shape bugs serious enough
+  to crash pages outright, now fixed and regression-tested — see
+  `docs/audit/RC1_SPRINT_REPORT.md`.
 
 ### Wave 4
 
