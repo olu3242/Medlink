@@ -317,15 +317,40 @@ not authorization to implement multiple batches at once.
     `sync_inventory_lock_quantity` trigger (already atomic and
     concurrency-safe) rather than new locking logic: reservation +
     inventory lock + MAR `matched`→`reserved` transition + evidence commit
-    atomically, idempotent on `(organization_id, idempotency_key)`. Still
-    open: `apps/patient/app/reserve/[inventoryId]/page.tsx` posts
-    `{inventoryId}` only — missing `marId`/`pharmacyLocationId`/`quantity`/
-    `expiresAt` — and no code path transitions a MAR to `matched`, so the
-    reservation UI cannot successfully call this function yet. That's
-    genuine workflow-UX design work (where does `marId` come from, what
-    quantity, what expiry policy), not a field-rename fix — left for Wave 3's
-    Workflow Orchestrator rather than forced now. Pickup/fulfillment
-    (WF-010/WF-011) remain entirely unimplemented.
+    atomically, idempotent on `(organization_id, idempotency_key)`.
+    - **Critical, previously understated: the entire middle of the MAR
+      state machine has zero implementation.** `enforce_and_audit_mar_state()`
+      (migration 202607270003) defines the legal transition graph
+      `created → validated → reviewed → searching → matched → reserved →
+      paid/dispensed → completed`, but the *only* transitions any code
+      anywhere in the repository performs are `create_mar` (into
+      `created`) and `reserve_inventory` (`matched` → `reserved`).
+      `validated`, `reviewed`, `searching`, and `matched` have no RPC,
+      route, or trigger that ever sets them — confirmed by grep across
+      every migration and every `apps/*` TypeScript file. Since
+      `reserve_inventory` hard-requires `mar.state = 'matched'`
+      (`if mar.state <> 'matched' then raise exception`), **no MAR can
+      ever legally reach a reservable state through any code path that
+      exists today.** The reservation flow this session built and tested
+      (migration 010, `packages/workflows/src/reservation.ts`,
+      `ReservationCreator`) is real and correct, but unreachable in
+      production until this gap closes — a materially more serious
+      finding than the previously-recorded "the UI doesn't post the right
+      fields" framing, which undersold it: even a perfectly-formed
+      request would fail today, since no MAR can be in `matched` state.
+      Not fixed this pass: closing it means deciding who/what triggers
+      `validated` (automatic post-creation? gated on `run_clinical_validation`
+      running with no hard-stop?) and how `searching`/`matched` relate to
+      WF-008 Inventory Discovery's `search_inventory`/`match_inventory`
+      steps (does matching happen automatically once inventory is found,
+      or does it require the patient to pick a specific batch, collapsing
+      "matched" and "reserved" into one user action?) — genuine workflow
+      design decisions, not defaults an engineering pass should assume.
+    - Also still open: `apps/patient/app/reserve/[inventoryId]/page.tsx`
+      posts `{inventoryId}` only — missing `marId`/`pharmacyLocationId`/
+      `quantity`/`expiresAt` — a second, independent blocker on top of the
+      state-machine gap above. Pickup/fulfillment (WF-010/WF-011) remain
+      entirely unimplemented.
 20. Add conversation, workflow, duplicate delivery, replay, outage, recovery,
     concurrency, and end-to-end tests.
 20a. Fixed `apps/pharmacist/components/decision-form.tsx`, which posted to

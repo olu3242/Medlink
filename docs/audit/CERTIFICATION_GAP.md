@@ -23,7 +23,7 @@ does not certify RC1 or any engine for production.
 | API architecture contracts | Pass | Protected v1 routes enforce canonical boundaries |
 | API integration contracts | Fail | No live-database/provider contract suite |
 | Workflow identity | Pass | All 15 stable IDs are executable contracts |
-| Workflow behavior | Fail | Canonical end-to-end workflow suites are absent |
+| Workflow behavior | Fail | Canonical end-to-end workflow suites are absent, and could not pass today regardless: the MAR state machine's `validated`/`reviewed`/`searching`/`matched` transitions have no implementation, so no MAR can legally reach `reserve_inventory`'s precondition — see Wave 3 section below |
 | CDA conformance | Fail | Conversation Engine domain/application boundaries and schema exist (`packages/conversation`, migration `202607290012`); WhatsApp channel-adapter transport slice exists (`packages/whatsapp`, migration `202607290013`); route wiring is blocked on an ADR for webhook identity in `RuntimeContext` (see RC1_BACKLOG item 15), and Workflow Orchestrator integration is still missing |
 | Audit/event completeness | Conditional | General outbox exists (migration 006); Wave 2 catalog/prescription/equivalency/clinical-validation use cases (migrations 008-009) and reservation creation (migration 010) all commit business state, audit, and outbox atomically in one function; MAR pickup/fulfillment transitions and other unimplemented Wave 3 use cases remain out of scope until built |
 | Observability | Fail | No metrics/tracing/SLO evidence; health dependency checks are now real (no hardcoded results) but still unexercised outside unit tests |
@@ -100,6 +100,18 @@ does not certify RC1 or any engine for production.
   `WorkflowStep` -- eight steps total -- each backed by the atomic RPC or
   domain service that already existed for it, and each guarded by a
   consistency test against drifting from its structural definition.
+- **Critical finding, blocking every one of the above from mattering in
+  production: the MAR state machine's middle is entirely unimplemented.**
+  `enforce_and_audit_mar_state()`'s legal graph requires
+  `created → validated → reviewed → searching → matched` before
+  `reserve_inventory` will accept a reservation, but no RPC, route, or
+  trigger anywhere sets `validated`, `reviewed`, `searching`, or `matched`
+  -- confirmed by exhaustive grep. No MAR created today can ever legally
+  reach `reserve_inventory`'s precondition. This is a correctness gap in
+  the *reachability* of already-built, already-tested functionality, not
+  a missing feature -- see `docs/audit/RC1_BACKLOG.md` P1 item 19 for the
+  full finding and the specific workflow-design decisions needed to close
+  it.
 - MAR/Reservation state vocabulary audited: Wave 2/3-owned code passes the
   real DB enums through honestly; one new Wave 4 finding (`apps/pharmacy`'s
   reservations page has never worked -- see RC1_BACKLOG item 18) recorded,

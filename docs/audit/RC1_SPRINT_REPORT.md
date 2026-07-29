@@ -720,3 +720,78 @@ task deliberately left for a dedicated pass rather than folded in here.
 
 `npm run check` (253 tests, up from 246) and `npm run build` (all 8
 workspaces) both pass clean after this round.
+
+## Critical finding: the MAR state machine's middle has no implementation
+
+While looking for the next canonical workflow step to wire (a candidate
+for closing the `matched`→`reserved` gap `reserve_inventory` needs),
+re-read `enforce_and_audit_mar_state()` (migration 202607270003) closely
+and confirmed by exhaustive grep across every migration and every
+`apps/*` TypeScript file:
+
+```
+grep -n "set state = " supabase/migrations/*.sql
+  → only 'reserved' (202607280008, 202607290010)
+grep -rn "state = 'validated'\|'searching'\|'matched'" apps --include=*.ts
+  → no matches at all
+```
+
+The trigger's legal transition graph is
+`created → validated → reviewed → searching → matched → reserved →
+paid/dispensed → completed`. The *only* transitions any code anywhere in
+this repository performs are `create_mar` (into `created`, migration 016)
+and `reserve_inventory` (`matched` → `reserved`, migration 010).
+`validated`, `reviewed`, `searching`, and `matched` have no RPC, route,
+or trigger that ever sets them.
+
+`reserve_inventory` hard-requires `mar.state <> 'matched'` to raise —
+meaning **no MAR created today, through any path, can ever legally reach
+a reservable state.** This is not the previously-recorded framing ("the
+reservation UI doesn't post the right fields," `docs/audit/
+RC1_BACKLOG.md`'s old item 19 language) — that undersold it. Even a
+perfectly-correct request from a fully-built UI would fail today, because
+no MAR can be in `matched` state regardless of what the UI sends. The
+entire reservation flow this session built and thoroughly tested
+(migration 010's `reserve_inventory`, `packages/workflows/src/
+reservation.ts`'s `ReservationCreator`/`createReservationStep`,
+`apps/web/lib/reservation-creator.ts`'s `SupabaseReservationCreator`) is
+individually correct — every unit test passes, every static migration
+assertion passes — but unreachable in production.
+
+**Why not fixed unilaterally this pass:** closing the gap requires
+deciding, not assuming:
+
+- **What makes a MAR `validated`?** Automatic immediately after creation
+  (a formality, since `create_mar`'s own FK constraints already ensure
+  the medicine/patient/prescription exist)? Or gated on
+  `run_clinical_validation` (WF-007's first step, already real) actually
+  running, regardless of its advisory findings (which per this session's
+  consistent invariant never block)?
+- **What is `searching` distinct from `matched`?** Is `searching` an
+  observable, possibly long-running state (a background process looking
+  for inventory) with its own timeout/retry semantics, or does a MAR pass
+  through it instantaneously the moment `search_inventory` (WF-008's real
+  step) is called?
+- **Does `matched` require a specific inventory batch, or just that
+  *some* inventory exists?** `apps/patient/app/reserve/[inventoryId]/
+  page.tsx` already collects one specific `inventoryId` from the patient
+  — if `matched` means "the patient selected this exact batch," the
+  natural place to set it is the same step that currently only creates
+  the reservation, collapsing "matched" and "reserved" from the user's
+  perspective into one action. If `matched` means something the system
+  decides before the patient chooses, that's a different, automated
+  design.
+
+These are workflow-design decisions with real product consequences (what
+a pharmacist queue sees mid-search, what a patient sees before choosing a
+pharmacy, whether "searching" needs its own timeout/escalation model per
+`docs/ENTERPRISE_RUNTIME_CONTRACT.md`'s Conversation Runtime obligations)
+— not defaults an engineering pass should assume and build around, the
+same posture taken for the generic-entity table and Wave 3 authorization
+earlier this session: surfaced to the user rather than guessed.
+
+Documented in `docs/audit/RC1_BACKLOG.md` item 19,
+`docs/audit/CERTIFICATION_GAP.md` (Wave 3 section and the "Workflow
+behavior" gate row), and `docs/audit/ENGINE_STATUS_MATRIX.md` (Medication
+Access Request row downgraded to Fail on reachability specifically, not
+on any regression in what was already built).
