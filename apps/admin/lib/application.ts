@@ -1,5 +1,29 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RuntimeError, type RuntimeContext } from "@medlink/runtime";
+import {
+  CatalogEquivalencyService,
+  type MedicineCatalogReader,
+} from "@medlink/medicine";
+import {
+  ClinicalValidationService,
+  DuplicateTherapyRule,
+  type ClinicalValidationInput,
+} from "@medlink/clinical";
+import { PrescriptionParser } from "@medlink/prescription";
+import {
+  LoggingPrescriptionAuditPort,
+  PendingOcrPrescriptionReader,
+  SupabasePrescriptionRepository,
+} from "./prescription-extraction";
+
+// assertReviewed() is a pure guard over its argument; it never calls the
+// catalog reader, so an empty reader is sufficient here (the same pattern
+// packages/medicine/src/equivalency.test.ts uses for the same reason).
+const unusedCatalogReader: MedicineCatalogReader = {
+  findBrandById: async () => null,
+  findGenericById: async () => null,
+  findBrandsByIngredientIds: async () => [],
+};
 
 async function result<T>(
   query: PromiseLike<{ data: T; error: { message: string } | null }>,
@@ -41,6 +65,35 @@ export class CatalogApplication {
       .select("*, equivalent:medicines!equivalent_medicine_id(*)")
       .eq("source_medicine_id", medicineId).eq("status", "active")
       .eq("requires_pharmacist_review", true).is("deleted_at", null))) ?? [];
+  }
+
+  async reviewEquivalence(
+    context: RuntimeContext,
+    idempotencyKey: string,
+    equivalenceId: string,
+    input: {
+      status: "approved" | "rejected" | "needs_information";
+      rationale: string;
+    },
+  ) {
+    new CatalogEquivalencyService(unusedCatalogReader).assertReviewed({
+      candidateBrandId: equivalenceId,
+      approved: input.status === "approved",
+      pharmacistId: context.userId,
+      reviewedAt: new Date(),
+      rationale: input.rationale,
+    });
+    return result(this.database.rpc("review_medicine_equivalence", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: idempotencyKey,
+      target_channel: context.channel,
+      target_equivalence_id: equivalenceId,
+      target_status: input.status,
+      target_review_notes: input.rationale,
+    }));
   }
 
   async list(input: { query?: string | undefined; status?: string | undefined }) {
@@ -168,6 +221,61 @@ export class PrescriptionApplication {
       target_storage_bucket: input.storageBucket ?? null,
       target_storage_object_path: input.storageObjectPath ?? null,
       target_external_reference: input.externalReference ?? null,
+    }));
+  }
+
+  async extract(
+    context: RuntimeContext,
+    idempotencyKey: string,
+    prescriptionId: string,
+  ) {
+    const parser = new PrescriptionParser(
+      new SupabasePrescriptionRepository(this.database, context, idempotencyKey),
+      new PendingOcrPrescriptionReader(),
+      new LoggingPrescriptionAuditPort(context),
+    );
+    return parser.parse({
+      tenantId: context.organizationId,
+      prescriptionId,
+    });
+  }
+
+  async runClinicalValidation(
+    context: RuntimeContext,
+    idempotencyKey: string,
+    prescriptionId: string,
+    input: {
+      medicineId: string;
+      patientAllergies?: readonly string[] | undefined;
+      activeIngredientIds?: readonly string[] | undefined;
+      currentMedicineIds?: readonly string[] | undefined;
+      summary?: string | undefined;
+    },
+  ) {
+    const validationInput: ClinicalValidationInput = {
+      medicineId: input.medicineId,
+      patientAllergies: input.patientAllergies ?? [],
+      activeIngredientIds: input.activeIngredientIds ?? [],
+      currentMedicineIds: input.currentMedicineIds ?? [],
+    };
+    const clinicalRules = [new DuplicateTherapyRule()];
+    const { findings, hasHardStop } = new ClinicalValidationService(clinicalRules)
+      .validate(validationInput);
+    const summary = input.summary ?? (
+      findings.length === 0
+        ? "No automated clinical findings; pharmacist review still required."
+        : `${findings.length} automated finding(s)${hasHardStop ? " including a hard stop" : ""}; pharmacist review required.`
+    );
+    return result(this.database.rpc("record_clinical_validation", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: idempotencyKey,
+      target_channel: context.channel,
+      target_prescription_id: prescriptionId,
+      target_summary: summary,
+      target_findings: findings,
     }));
   }
 }

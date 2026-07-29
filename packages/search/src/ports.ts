@@ -1,7 +1,7 @@
 import type {
   BrandMedicine,
   GenericMedicine,
-} from "../../medicine/src/index";
+} from "@medlink/medicine";
 import type {
   SearchEntityType,
   SearchIndexHit,

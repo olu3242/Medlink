@@ -54,13 +54,35 @@ not authorization to implement multiple batches at once.
 
 6. Execute migrations against local PostgreSQL/Supabase.
 7. Add migration and cross-tenant RLS tests.
-8. Complete Medicine Knowledge application services and repositories.
+8. Complete Medicine Knowledge application services and repositories. Partial:
+   write paths (`create`/`update`) are atomic via `create_medicine_record`/
+   `update_medicine_record` (migration 008); read paths (`brands`/`generics`/
+   catalog `list`/`get`) still query `medicines` directly rather than through
+   a `packages/medicine` repository, blocked on the generic-medicine-entity
+   gap below rather than a simple wiring gap — see
+   `docs/wave-2-certification.md` "known gaps."
 9. Integrate equivalency, prescription, clinical, and search APIs through the
-   canonical pipeline.
+   canonical pipeline. Done: `PATCH /api/v1/equivalents/{id}/review`,
+   `POST /api/v1/prescriptions/{id}/extract`,
+   `POST /api/v1/prescriptions/{id}/validate`, `GET /api/v1/search` (migration
+   009, `apps/admin/lib/application.ts`, `apps/admin/lib/
+   prescription-extraction.ts`, `apps/admin/lib/medicine-search.ts`). All four
+   domain packages (medicine, prescription, clinical, search) now have at
+   least one real route consumer instead of being exercised only by their own
+   unit tests.
 10. Select/configure OCR adapter and test low-confidence and malformed media.
+    Still open: the extraction route uses an explicitly-placeholder
+    zero-confidence reader (`PendingOcrPrescriptionReader`) pending provider
+    selection.
 11. Add API contract and clinical workflow tests.
 12. Expand clinical rules and document evidence sources and pharmacist controls.
-13. Certify Batches 2.1–2.5 independently.
+13. Certify Batches 2.1–2.5 independently. In progress — see the wiring and
+    "known gaps" sections added to `docs/wave-2-certification.md`. New
+    architecture-level gaps discovered while wiring (not previously tracked):
+    no first-class generic-medicine entity in the schema, and vocabulary
+    mismatches between packages/prescription and packages/clinical and their
+    corresponding DB enums, bridged with explicit translation layers rather
+    than resolved. These need a design decision, not a mechanical fix.
 
 ## P1 — Wave 3
 

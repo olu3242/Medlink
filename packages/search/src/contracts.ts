@@ -1,7 +1,7 @@
 import type {
   BrandMedicine,
   GenericMedicine,
-} from "../../medicine/src/index";
+} from "@medlink/medicine";
 
 export type SearchEntityType = "brand" | "generic";
 

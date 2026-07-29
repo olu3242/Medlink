@@ -61,6 +61,51 @@ describe("use case transactional commit migration", () => {
   });
 });
 
+describe("wave 2 batch commit migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202607290009_wave2_batch_commits.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("commits business state, child rows, and runtime evidence in one function per use case", () => {
+    for (const [fn, tables] of [
+      ["review_medicine_equivalence", ["insert into public.tenant_equivalence_reviews"]],
+      [
+        "record_clinical_validation",
+        [
+          "insert into public.clinical_validations",
+          "insert into public.clinical_findings",
+        ],
+      ],
+      [
+        "record_prescription_extraction",
+        [
+          "insert into public.prescription_extractions",
+          "insert into public.prescription_extracted_fields",
+          "update public.prescriptions set status = 'needs_review'",
+        ],
+      ],
+    ] as const) {
+      expect(sql).toContain(`function public.${fn}`);
+      for (const table of tables) expect(sql).toContain(table);
+    }
+    const occurrences = sql.split("public.record_runtime_evidence(").length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(3);
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("re-enforces the equivalent RLS authorization inside each SECURITY DEFINER function", () => {
+    const occurrences = sql.split("public.has_organization_role(").length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(3);
+    expect(sql).toContain("array['pharmacist']");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),
