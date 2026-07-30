@@ -73,7 +73,19 @@ describe("payment reservation foreign-key prerequisite", () => {
   ).toLowerCase();
 
   it("provides the composite reservation key referenced by payments", () => {
-    expect(accessSql).toContain("unique (id, organization_id, patient_id)");
+    const reservationsTable = accessSql.match(
+      /create table public\.reservations \(([\s\S]*?)\n\);/,
+    )?.[1];
+    const clinicalReviewsTable = accessSql.match(
+      /create table public\.clinical_reviews \(([\s\S]*?)\n\);/,
+    )?.[1];
+
+    expect(reservationsTable).toContain(
+      "unique (id, organization_id, patient_id)",
+    );
+    expect(clinicalReviewsTable).not.toContain(
+      "unique (id, organization_id, patient_id)",
+    );
   });
 });
 
