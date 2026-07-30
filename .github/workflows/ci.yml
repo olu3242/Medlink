@@ -20,6 +20,8 @@ jobs:
         run: npm run test:operations
       - name: Validate enterprise service operations
         run: npm run test:service-operations
+      - name: Validate wave transition framework
+        run: npm run test:wave-transition
       - run: npm run test:coverage
       - run: npm run build --workspaces --if-present
       - run: npm run typecheck --workspaces --if-present

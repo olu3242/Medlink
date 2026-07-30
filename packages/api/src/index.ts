@@ -16,6 +16,7 @@ import { z } from "zod";
 
 export * from "./professional";
 export * from "./events";
+export * from "./platform-contracts";
 
 const environmentSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),

@@ -6,3 +6,4 @@ export * from "./portal-architecture";
 export * from "./identity-certification";
 export * from "./enterprise-administration";
 export * from "./enterprise-dashboards";
+export * from "./capability-registry";
