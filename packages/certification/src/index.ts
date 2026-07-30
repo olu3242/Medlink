@@ -12,3 +12,4 @@ export * from "./business-continuity";
 export * from "./production-operations";
 export * from "./enterprise-service-operations";
 export * from "./wave-transition";
+export * from "./platform-evolution";
