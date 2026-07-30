@@ -48,7 +48,6 @@ Source certification: **PASS**.
 Immutable CI and isolated migration certification: **PASS** in GitHub Actions
 run 20 for commit `b8ad95b5947233431b5265cdd575c298fe443f0b`.
 
-Hosted deployment certification remains conditional. The configured hosted
-project responded to the live probe but did not contain
-`public.runtime_outbox_events`, so hosted migration and live RLS evidence remain
-open.
+Hosted migration and the credential-gated anonymous runtime-outbox RLS probe:
+**PASS** on 2026-07-30. Broader authenticated cross-tenant fixtures remain part
+of environment certification.

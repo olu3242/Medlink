@@ -47,11 +47,13 @@ not authorization to implement multiple batches at once.
 6. **Execute migrations against isolated PostgreSQL/Supabase — complete**
    - GitHub Actions run 20 successfully started Supabase and reset the database
      across the complete RC1 migration chain.
-   - Applying the reviewed chain to the intended hosted project remains an
-     environment operation.
+   - The same 14-migration chain applied successfully to the configured hosted
+     project on 2026-07-30.
 7. **Add migration and cross-tenant RLS tests — source/isolated complete**
    - Migration structure and the complete tenant RLS matrix pass source tests.
-   - Hosted RLS execution remains pending after hosted migration apply.
+   - The hosted anonymous runtime-outbox RLS probe passes.
+   - Broader authenticated cross-tenant fixtures remain pending environment
+     identities.
 8. Complete Medicine Knowledge application services and repositories.
    - Application service and repository ports pass source certification.
 9. Integrate equivalency, prescription, clinical, and search APIs through the

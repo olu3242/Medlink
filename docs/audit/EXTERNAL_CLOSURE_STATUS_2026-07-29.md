@@ -13,17 +13,18 @@ Date: 2026-07-29
 - Evidence:
   <https://github.com/olu3242/Medlink/actions/runs/30512306836>
 
-## 2. Hosted database and live RLS — BLOCKED
+## 2. Hosted database and live RLS — PASS WITH SCOPED EVIDENCE
 
-- The credential-gated live test reached the configured hosted Supabase project
-  using its anonymous client credential.
-- PostgREST returned `PGRST205` because
-  `public.runtime_outbox_events` was absent from the schema cache.
-- This demonstrates that the configured hosted project has not received the RC1
-  migrations. It is not represented as a live RLS pass.
-- Closure requires applying the reviewed migrations to the intended hosted
-  environment, refreshing its PostgREST schema cache if necessary, and rerunning
-  the live suite.
+- On 2026-07-30, the Supabase CLI dry-run identified exactly the 14 reviewed RC1
+  migrations, with no seeds or role changes.
+- Migrations `202607270001` through `202607290014` then applied successfully to
+  the configured hosted project.
+- The credential-gated anonymous-client test successfully queried
+  `public.runtime_outbox_events` through PostgREST and received an RLS-filtered
+  array without an API error.
+- The complete tenant-policy matrix remains source-certified. The current live
+  evidence covers hosted migration presence and the anonymous runtime-outbox
+  path; authenticated cross-tenant fixtures remain a broader environment test.
 
 ## 3. Approved-provider conformance — PENDING EXTERNAL INPUT
 
@@ -50,5 +51,6 @@ Date: 2026-07-29
 
 **CONDITIONAL / NOT CERTIFIED FOR PRODUCTION**
 
-The source and isolated migration gates pass. Hosted migration/RLS, external
-provider conformance, environment exercises, and human signatures remain open.
+The source, isolated migration, hosted migration, and scoped live RLS gates
+pass. External provider conformance, environment exercises, broader
+authenticated cross-tenant fixtures, and human signatures remain open.
