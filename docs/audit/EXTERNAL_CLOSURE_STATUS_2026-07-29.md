@@ -19,12 +19,15 @@ Date: 2026-07-29
   migrations, with no seeds or role changes.
 - Migrations `202607270001` through `202607290014` then applied successfully to
   the configured hosted project.
-- The credential-gated anonymous-client test successfully queried
-  `public.runtime_outbox_events` through PostgREST and received an RLS-filtered
-  array without an API error.
+- The expanded credential-gated anonymous-client matrix passed eight live
+  probes. It received no rows from `organizations`, `runtime_outbox_events`,
+  both notification delivery tables, both integration delivery/webhook tables,
+  and `api_client_credentials`, while each table remained available through
+  PostgREST without a schema error.
 - The complete tenant-policy matrix remains source-certified. The current live
-  evidence covers hosted migration presence and the anonymous runtime-outbox
-  path; authenticated cross-tenant fixtures remain a broader environment test.
+  evidence covers hosted migration presence and anonymous denial for tenant,
+  queue, webhook, delivery, and credential data; authenticated cross-tenant
+  fixtures remain a broader environment test.
 
 ## 3. Approved-provider conformance — PENDING EXTERNAL INPUT
 

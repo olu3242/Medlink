@@ -48,6 +48,6 @@ Source certification: **PASS**.
 Immutable CI and isolated migration certification: **PASS** in GitHub Actions
 run 20 for commit `b8ad95b5947233431b5265cdd575c298fe443f0b`.
 
-Hosted migration and the credential-gated anonymous runtime-outbox RLS probe:
-**PASS** on 2026-07-30. Broader authenticated cross-tenant fixtures remain part
-of environment certification.
+Hosted migration and the eight-probe anonymous RLS matrix: **PASS** on
+2026-07-30. Broader authenticated cross-tenant fixtures remain part of
+environment certification.

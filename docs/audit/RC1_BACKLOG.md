@@ -51,7 +51,8 @@ not authorization to implement multiple batches at once.
      project on 2026-07-30.
 7. **Add migration and cross-tenant RLS tests — source/isolated complete**
    - Migration structure and the complete tenant RLS matrix pass source tests.
-   - The hosted anonymous runtime-outbox RLS probe passes.
+   - The hosted eight-probe anonymous RLS matrix passes across tenant, queue,
+     webhook, delivery, and credential tables.
    - Broader authenticated cross-tenant fixtures remain pending environment
      identities.
 8. Complete Medicine Knowledge application services and repositories.
