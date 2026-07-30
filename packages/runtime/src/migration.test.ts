@@ -89,6 +89,19 @@ describe("payment reservation foreign-key prerequisite", () => {
   });
 });
 
+describe("medicine search migration", () => {
+  const searchSql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202607290010_medicine_search.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("schema-qualifies pg_trgm functions and operators with an empty search path", () => {
+    expect(searchSql).toContain("extensions.similarity(");
+    expect(searchSql).toContain("operator(extensions.%)");
+    expect(searchSql).not.toMatch(/(^|[^.])\bsimilarity\(/);
+  });
+});
+
 describe("durable observability migration", () => {
   const observabilitySql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607290009_durable_observability.sql"),
