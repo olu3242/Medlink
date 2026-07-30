@@ -35,6 +35,9 @@ Date: 2026-07-29
   clean database reset it produced a non-empty public-schema export, verified
   the runtime outbox was present, computed SHA-256, and deleted the temporary
   export.
+- GitHub Actions CI run 27 strengthened this to deterministic schema recovery:
+  two independent clean resets produced non-empty, SHA-256-hashed,
+  byte-identical public-schema exports.
 
 ## 3. Approved-provider conformance — PENDING EXTERNAL INPUT
 
@@ -51,6 +54,9 @@ Date: 2026-07-29
   was not running. No dump was produced or retained.
 - The equivalent isolated schema-export integrity check subsequently passed in
   GitHub Actions run 25, where Docker was available.
+- Deterministic schema reconstruction subsequently passed in run 27. This is
+  schema recovery evidence, not a managed data-backup restore or regional DR
+  exercise.
 - Production-like load, authorized penetration, managed encrypted backup,
   isolated restore, and regional/provider failover evidence have not been
   executed in a designated environment.
