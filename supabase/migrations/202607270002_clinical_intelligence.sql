@@ -2,7 +2,7 @@
 -- Global medicine knowledge is shared across tenants. Prescriptions, extraction
 -- results, equivalency reviews, and clinical validation are tenant isolated.
 
-create extension if not exists pg_trgm;
+create extension if not exists pg_trgm with schema extensions;
 
 create type public.medicine_record_status as enum (
   'draft', 'active', 'retired'

@@ -90,12 +90,19 @@ describe("payment reservation foreign-key prerequisite", () => {
 });
 
 describe("medicine search migration", () => {
+  const clinicalSql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202607270002_clinical_intelligence.sql"),
+    "utf8",
+  ).toLowerCase();
   const searchSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607290010_medicine_search.sql"),
     "utf8",
   ).toLowerCase();
 
   it("schema-qualifies pg_trgm functions and operators with an empty search path", () => {
+    expect(clinicalSql).toContain(
+      "create extension if not exists pg_trgm with schema extensions",
+    );
     expect(searchSql).toContain("extensions.similarity(");
     expect(searchSql).toContain("operator(extensions.%)");
     expect(searchSql).not.toMatch(/(^|[^.])\bsimilarity\(/);
