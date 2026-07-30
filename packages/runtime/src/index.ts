@@ -3,6 +3,7 @@ import { z } from "zod";
 export * from "./transaction";
 export * from "./operations";
 export * from "./incident-evidence";
+export * from "./incident-management";
 export * from "./logger";
 export * from "./logger.adapter";
 export * from "./logger.context";

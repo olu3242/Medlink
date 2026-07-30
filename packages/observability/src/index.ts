@@ -22,6 +22,7 @@ import {
   type RuntimeContext,
 } from "@medlink/runtime";
 import { PinoLogAdapter } from "./logger.adapter";
+export * from "./enterprise-certification";
 
 const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",
