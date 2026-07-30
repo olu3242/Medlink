@@ -18,6 +18,8 @@ jobs:
       - run: npm run check
       - name: Validate production operations framework
         run: npm run test:operations
+      - name: Validate enterprise service operations
+        run: npm run test:service-operations
       - run: npm run test:coverage
       - run: npm run build --workspaces --if-present
       - run: npm run typecheck --workspaces --if-present

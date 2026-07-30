@@ -10,3 +10,4 @@ export * from "./readiness-dashboard";
 export * from "./deployment-orchestration";
 export * from "./business-continuity";
 export * from "./production-operations";
+export * from "./enterprise-service-operations";

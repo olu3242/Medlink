@@ -4,3 +4,5 @@ export * from "./request-context";
 export * from "./roles";
 export * from "./portal-architecture";
 export * from "./identity-certification";
+export * from "./enterprise-administration";
+export * from "./enterprise-dashboards";

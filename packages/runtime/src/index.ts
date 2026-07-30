@@ -6,6 +6,7 @@ export * from "./incident-evidence";
 export * from "./incident-management";
 export * from "./hypercare";
 export * from "./support-operations";
+export * from "./service-management";
 export * from "./logger";
 export * from "./logger.adapter";
 export * from "./logger.context";
