@@ -3,3 +3,7 @@ export * from "./exercises";
 export * from "./approvals";
 export * from "./release-decision";
 export * from "./recovery-certification";
+export * from "./release-governance";
+export * from "./artifact-repository";
+export * from "./enterprise-approvals";
+export * from "./readiness-dashboard";
