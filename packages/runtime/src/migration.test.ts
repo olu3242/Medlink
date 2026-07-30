@@ -66,6 +66,17 @@ describe("atomic reservation migration", () => {
   });
 });
 
+describe("payment reservation foreign-key prerequisite", () => {
+  const accessSql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202607270003_medication_access_core.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("provides the composite reservation key referenced by payments", () => {
+    expect(accessSql).toContain("unique (id, organization_id, patient_id)");
+  });
+});
+
 describe("durable observability migration", () => {
   const observabilitySql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607290009_durable_observability.sql"),
