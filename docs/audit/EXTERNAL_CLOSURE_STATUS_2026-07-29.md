@@ -28,6 +28,9 @@ Date: 2026-07-29
   evidence covers hosted migration presence and anonymous denial for tenant,
   queue, webhook, delivery, and credential data; authenticated cross-tenant
   fixtures remain a broader environment test.
+- Hosted `public` and `extensions` schema lint completed with zero findings.
+- A subsequent migration dry-run reported the remote database is up to date
+  with no pending migrations, seeds, or role changes.
 
 ## 3. Approved-provider conformance — PENDING EXTERNAL INPUT
 
@@ -39,6 +42,9 @@ Date: 2026-07-29
 ## 4. Performance, penetration, backup, restore, and DR — PENDING EXECUTION
 
 - Source contracts and completeness checks pass.
+- A hosted schema-export smoke test was attempted on 2026-07-30, but the local
+  Supabase CLI requires Docker for `pg_dump` and Docker Desktop's Linux engine
+  was not running. No dump was produced or retained.
 - Production-like load, authorized penetration, managed encrypted backup,
   isolated restore, and regional/provider failover evidence have not been
   executed in a designated environment.
