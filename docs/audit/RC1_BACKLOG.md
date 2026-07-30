@@ -44,8 +44,14 @@ not authorization to implement multiple batches at once.
 
 ## P1 — Wave 2 certification
 
-6. Execute migrations against local PostgreSQL/Supabase.
-7. Add migration and cross-tenant RLS tests.
+6. **Execute migrations against isolated PostgreSQL/Supabase — complete**
+   - GitHub Actions run 20 successfully started Supabase and reset the database
+     across the complete RC1 migration chain.
+   - Applying the reviewed chain to the intended hosted project remains an
+     environment operation.
+7. **Add migration and cross-tenant RLS tests — source/isolated complete**
+   - Migration structure and the complete tenant RLS matrix pass source tests.
+   - Hosted RLS execution remains pending after hosted migration apply.
 8. Complete Medicine Knowledge application services and repositories.
    - Application service and repository ports pass source certification.
 9. Integrate equivalency, prescription, clinical, and search APIs through the

@@ -2,8 +2,8 @@
 
 ## Status
 
-Conditional. Source gates pass; live PostgreSQL, RLS, OCR-provider, and API
-integration evidence remain required.
+Conditional. Source gates and isolated PostgreSQL migration apply pass; hosted
+RLS, OCR-provider, and API integration evidence remain required.
 
 ## S01.10 Enterprise Test Harness
 
@@ -42,7 +42,10 @@ integration evidence remain required.
 - `npm run check`: pass
 - `npm run test:coverage`: pass
 - 90 tests pass; one live-database test is skipped without configured secrets
-- Live migration/RLS and OCR adapter certification: pending
+- Isolated migration apply: pass in GitHub Actions run 20
+- Hosted migration/RLS: blocked because the configured project does not contain
+  the RC1 runtime schema
+- OCR adapter certification: pending configured provider evidence
 
 ## Wave 2.5 Search
 
