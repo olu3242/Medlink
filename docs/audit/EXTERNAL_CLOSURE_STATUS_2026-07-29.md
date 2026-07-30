@@ -24,6 +24,10 @@ Date: 2026-07-29
   both notification delivery tables, both integration delivery/webhook tables,
   and `api_client_credentials`, while each table remained available through
   PostgREST without a schema error.
+- Repository Actions secrets now provide only the hosted URL and anonymous key,
+  and `RUN_LIVE_DATABASE_TESTS=true` enables the credential-gated job.
+- GitHub Actions run 27, rerun attempt 2, executed `live-database` instead of
+  skipping it; all eight hosted RLS probes passed.
 - The complete tenant-policy matrix remains source-certified. The current live
   evidence covers hosted migration presence and anonymous denial for tenant,
   queue, webhook, delivery, and credential data; authenticated cross-tenant

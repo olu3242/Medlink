@@ -49,5 +49,6 @@ Immutable CI and isolated migration certification: **PASS** in GitHub Actions
 run 20 for commit `b8ad95b5947233431b5265cdd575c298fe443f0b`.
 
 Hosted migration and the eight-probe anonymous RLS matrix: **PASS** on
-2026-07-30. Broader authenticated cross-tenant fixtures remain part of
-environment certification.
+2026-07-30. The matrix also passes as the enabled `live-database` job in GitHub
+Actions run 27, rerun attempt 2. Broader authenticated cross-tenant fixtures
+remain part of environment certification.
