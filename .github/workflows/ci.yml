@@ -31,6 +31,16 @@ jobs:
       - run: npm ci
       - run: npx supabase start
       - run: npx supabase db reset
+      - name: Verify schema export integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          dump_file="$(mktemp)"
+          trap 'rm -f "$dump_file"' EXIT
+          npx supabase db dump --local --schema public --file "$dump_file"
+          test -s "$dump_file"
+          grep -q "runtime_outbox_events" "$dump_file"
+          sha256sum "$dump_file"
       - if: always()
         run: npx supabase stop
 
