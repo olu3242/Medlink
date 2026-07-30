@@ -4,6 +4,8 @@ export * from "./transaction";
 export * from "./operations";
 export * from "./incident-evidence";
 export * from "./incident-management";
+export * from "./hypercare";
+export * from "./support-operations";
 export * from "./logger";
 export * from "./logger.adapter";
 export * from "./logger.context";

@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:live": "vitest run packages/runtime/src/live-database.test.ts",
+    "test:operations": "vitest run packages/certification/src/deployment-orchestration.test.ts packages/runtime/src/hypercare.test.ts packages/governance/src/runbook-management.test.ts packages/runtime/src/support-operations.test.ts packages/certification/src/business-continuity.test.ts packages/certification/src/production-operations.test.ts",
     "check": "npm run lint && npm run typecheck && npm run test",
     "db:start": "supabase start",
     "db:stop": "supabase stop",

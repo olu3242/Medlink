@@ -7,3 +7,6 @@ export * from "./release-governance";
 export * from "./artifact-repository";
 export * from "./enterprise-approvals";
 export * from "./readiness-dashboard";
+export * from "./deployment-orchestration";
+export * from "./business-continuity";
+export * from "./production-operations";

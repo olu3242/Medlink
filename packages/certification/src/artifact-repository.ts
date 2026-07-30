@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 export type CertificationArtifactCategory =
   | "runtime" | "database" | "security" | "observability" | "identity"
   | "tenant" | "providers" | "backup" | "disaster-recovery" | "compliance"
-  | "clinical" | "releases" | "approvals";
+  | "clinical" | "releases" | "approvals" | "operations";
 
 export interface CertificationArtifactInput {
   readonly category: CertificationArtifactCategory;
