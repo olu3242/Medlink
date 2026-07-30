@@ -31,6 +31,10 @@ Date: 2026-07-29
 - Hosted `public` and `extensions` schema lint completed with zero findings.
 - A subsequent migration dry-run reported the remote database is up to date
   with no pending migrations, seeds, or role changes.
+- GitHub Actions CI run 25 passed the isolated recovery smoke gate: after a
+  clean database reset it produced a non-empty public-schema export, verified
+  the runtime outbox was present, computed SHA-256, and deleted the temporary
+  export.
 
 ## 3. Approved-provider conformance — PENDING EXTERNAL INPUT
 
@@ -45,6 +49,8 @@ Date: 2026-07-29
 - A hosted schema-export smoke test was attempted on 2026-07-30, but the local
   Supabase CLI requires Docker for `pg_dump` and Docker Desktop's Linux engine
   was not running. No dump was produced or retained.
+- The equivalent isolated schema-export integrity check subsequently passed in
+  GitHub Actions run 25, where Docker was available.
 - Production-like load, authorized penetration, managed encrypted backup,
   isolated restore, and regional/provider failover evidence have not been
   executed in a designated environment.
