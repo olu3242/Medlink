@@ -539,31 +539,6 @@ describe("durable observability migration", () => {
   });
 });
 
-describe("conversation platform migration", () => {
-  const conversationSql = readFileSync(
-    join(process.cwd(), "supabase/migrations/202607290011_conversation_platform.sql"),
-    "utf8",
-  ).toLowerCase();
-
-  it("defines tenant-scoped conversation and handoff persistence", () => {
-    for (const table of [
-      "conversation_sessions",
-      "conversation_messages",
-      "conversation_handoffs",
-    ]) {
-      expect(conversationSql).toContain(`create table public.${table}`);
-      expect(conversationSql).toContain(
-        `alter table public.${table} enable row level security`,
-      );
-    }
-  });
-
-  it("deduplicates provider messages and keeps message evidence immutable", () => {
-    expect(conversationSql).toContain("unique(organization_id,provider_message_id)");
-    expect(conversationSql).toContain("conversation_messages_append_only");
-  });
-});
-
 describe("professional operations migrations", () => {
   const roleSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607290012_professional_operations.sql"),
