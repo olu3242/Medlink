@@ -1,4 +1,4 @@
-export type NotificationChannelName="email"|"sms"|"push";
+export type NotificationChannelName="email"|"sms"|"push"|"whatsapp";
 export interface Notification{readonly id:string;readonly tenantId:string;readonly recipientId:string;readonly template:string;readonly variables:Readonly<Record<string,string>>;readonly channel:NotificationChannelName;}
 export interface NotificationChannel{readonly name:NotificationChannelName;send(message:Notification):Promise<{readonly providerId:string}>;}
 export interface NotificationStore{find(key:string):Promise<{readonly providerId:string}|null>;record(key:string,result:{readonly providerId:string}):Promise<void>;}

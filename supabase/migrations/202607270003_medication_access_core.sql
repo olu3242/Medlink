@@ -311,6 +311,7 @@ create table public.reservations (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (id, organization_id),
+  unique (id, organization_id, patient_id),
   unique (organization_id, idempotency_key),
   foreign key (mar_id, organization_id, patient_id)
     references public.medication_access_requests(id, organization_id, patient_id),

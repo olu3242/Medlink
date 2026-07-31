@@ -9,6 +9,10 @@ import {
 } from "@medlink/runtime";
 import { z } from "zod";
 
+export * from "./professional";
+export * from "./events";
+export * from "./platform-contracts";
+
 const environmentSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),

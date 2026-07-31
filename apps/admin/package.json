@@ -13,6 +13,7 @@
     "@medlink/api": "*",
     "@medlink/medicine": "*",
     "@medlink/prescription": "*",
+    "@medlink/search": "*",
     "@medlink/platform": "*",
     "@medlink/runtime": "*",
     "@medlink/observability": "*",

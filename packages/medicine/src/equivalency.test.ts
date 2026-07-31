@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { BrandMedicine } from "./models";
 import type { MedicineCatalogReader } from "./repository";
 import {
   CatalogEquivalencyService,
   EquivalencyReviewRequiredError,
+  PharmacistEquivalencyService,
 } from "./index";
 
 const now = new Date("2026-07-27T00:00:00.000Z");
@@ -64,5 +65,21 @@ describe("CatalogEquivalencyService", () => {
     expect(() => service.assertReviewed(null)).toThrow(
       EquivalencyReviewRequiredError,
     );
+  });
+
+  it("persists an attributed pharmacist decision", async () => {
+    const record = vi.fn().mockResolvedValue(undefined);
+    const service = new PharmacistEquivalencyService(
+      new CatalogEquivalencyService(catalog([])),
+      { record },
+    );
+    await service.decide({
+      candidateBrandId: source.id,
+      approved: true,
+      pharmacistId: "pharmacist-1",
+      reviewedAt: new Date(),
+      rationale: "Exact pharmaceutical match.",
+    });
+    expect(record).toHaveBeenCalledOnce();
   });
 });

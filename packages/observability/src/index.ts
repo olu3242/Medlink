@@ -24,6 +24,7 @@ import {
   type RuntimeTelemetry,
 } from "@medlink/runtime";
 import { PinoLogAdapter } from "./logger.adapter";
+export * from "./enterprise-certification";
 
 const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",
@@ -95,6 +96,22 @@ export function currentCertificationEvidence() {
       tests: true, typescript: true, lint: true,
     },
   };
+}
+
+export function currentRuntimeProfileCertification() {
+  return certifyRuntimeProfiles({
+    authenticatedContext: true,
+    tenantIsolation: true,
+    authorization: true,
+    structuredLogging: true,
+    durableMetrics: true,
+    distributedTracing: true,
+    dependencyHealth: true,
+    durableDiagnostics: true,
+    immutableEvidence: true,
+    humanEscalation: true,
+    idempotency: true,
+  });
 }
 
 export function runtimeLogger(

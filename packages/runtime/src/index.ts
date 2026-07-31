@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 export * from "./transaction";
+export * from "./operations";
+export * from "./incident-evidence";
+export * from "./incident-management";
+export * from "./hypercare";
+export * from "./support-operations";
+export * from "./service-management";
 export * from "./logger";
 export * from "./logger.adapter";
 export * from "./logger.context";
@@ -11,6 +17,7 @@ export * from "./health";
 export * from "./diagnostics";
 export * from "./certification";
 export * from "./evidence";
+export * from "./supabase-observability";
 import type { RuntimeTracing } from "./tracing";
 
 export const runtimeContextSchema = z.object({

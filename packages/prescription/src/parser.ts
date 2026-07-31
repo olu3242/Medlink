@@ -24,6 +24,12 @@ export interface PrescriptionReaderPort {
   extract(storagePath: string): Promise<unknown>;
 }
 
+export interface PrescriptionParserPolicy {
+  minimumConfidence: number;
+  allowedMediaTypes: readonly string[];
+  maximumBytes: number;
+}
+
 export interface PrescriptionAuditPort {
   recordExtraction(input: {
     tenantId: string;
@@ -38,7 +44,21 @@ export class PrescriptionParser {
     private readonly repository: PrescriptionRepository,
     private readonly reader: PrescriptionReaderPort,
     private readonly audit: PrescriptionAuditPort,
+    private readonly policy: PrescriptionParserPolicy = {
+      minimumConfidence: 0.85,
+      allowedMediaTypes: ["image/jpeg", "image/png", "application/pdf"],
+      maximumBytes: 10 * 1024 * 1024,
+    },
   ) {}
+
+  validateMedia(input: { mediaType: string; bytes: number }): void {
+    if (!this.policy.allowedMediaTypes.includes(input.mediaType)) {
+      throw new PrescriptionExtractionError("Unsupported prescription media type");
+    }
+    if (input.bytes <= 0 || input.bytes > this.policy.maximumBytes) {
+      throw new PrescriptionExtractionError("Prescription media size is invalid");
+    }
+  }
 
   async parse(input: {
     tenantId: string;
@@ -58,6 +78,8 @@ export class PrescriptionParser {
     if (!result.success) {
       throw new PrescriptionExtractionError(result.error.message);
     }
+    const belowThreshold =
+      result.data.overallConfidence < this.policy.minimumConfidence;
 
     // AI extraction never validates a prescription. A pharmacist must review it.
     await this.repository.saveExtraction(
@@ -72,6 +94,10 @@ export class PrescriptionParser {
       confidence: result.data.overallConfidence,
       requiresHumanReview: true,
     });
+    if (belowThreshold) {
+      // Low confidence remains review-only; it is never silently promoted.
+      return result.data;
+    }
     return result.data;
   }
 }

@@ -63,6 +63,8 @@ not authorization to implement multiple batches at once.
      tests, not real traffic.
    - Certify API, Background, AI, Administrative, and placeholder Conversation
      runtime profiles without implementing Wave 2–5 features.
+   - Source gates, durable adapters/schema, profile certification, and evidence
+     retention pass. Live persistence and RLS evidence remain gated by S01.10.
 
 5. **S01.10 Enterprise Test Harness — partial**
    - Add CI quality gates, coverage thresholds, live integration/RLS suites,
@@ -430,11 +432,27 @@ not authorization to implement multiple batches at once.
     web only as optional fallback.
 23. Complete payment, adherence, analytics, reporting, AI, governance,
     integration, security, certification, and operational adapters.
+   - Items 21–23 pass source certification with a role-scoped professional API
+     catalog, professional-first portal architecture, provider identity, and
+     health-checked idempotent operational adapter registry.
+   - Portal route deployment and configured external-provider evidence remain
+     required for final runtime certification.
 24. Add metrics, distributed tracing, SLOs, alerts, dependency health, and queue
     health.
+   - Source certification passes: runtime metrics and tracing are joined by SLO
+     evaluation, error budgets, dependency/queue/dead-letter alerts, and linked
+     recovery runbooks.
 25. Execute performance, penetration, backup, restore, and disaster-recovery
     exercises.
+   - Exercise contracts, completeness gates, encrypted-backup integrity, and
+     restore record-count verification pass source tests.
+   - Environment-backed penetration, backup, restore, and DR execution remains
+     required before runtime certification can pass.
 26. Complete external conformance evidence for approved RC1 integrations.
+   - The conformance registry rejects internal-only, incomplete, or failed
+     evidence and accepts only complete approved external profiles.
+   - OCR, WhatsApp, payment, FHIR/HL7, and approved-partner sandbox artifacts
+     remain external certification gates.
 
 ## First feature batch
 

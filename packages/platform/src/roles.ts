@@ -5,6 +5,7 @@ export const roles = [
   "pharmacy_owner",
   "pharmacy_staff",
   "inventory_manager",
+  "provider",
   "patient",
 ] as const;
 
@@ -23,6 +24,7 @@ export const permissions = [
   "inventory:manage",
   "reservation:read",
   "reservation:create",
+  "reservation:manage",
   "mar:read",
   "mar:create",
   "mar:transition",

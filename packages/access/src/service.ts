@@ -9,13 +9,14 @@ const allowed: Readonly<Record<MarState, readonly MarState[]>> = {
   created: ["validated", "cancelled"],
   validated: ["reviewed", "cancelled"],
   reviewed: ["searching", "cancelled"],
-  searching: ["matched", "cancelled"],
-  matched: ["reserved", "searching", "cancelled"],
-  reserved: ["paid", "matched", "cancelled"],
+  searching: ["matched", "cancelled", "expired"],
+  matched: ["reserved", "searching", "cancelled", "expired"],
+  reserved: ["paid", "dispensed", "cancelled", "expired"],
   paid: ["dispensed", "cancelled"],
   dispensed: ["completed"],
   completed: [],
   cancelled: [],
+  expired: [],
 };
 
 export class MarWorkflowService {

@@ -6,3 +6,4 @@ export * from "./policy";
 export * from "./policy-registry";
 export * from "./policy-types";
 export * from "./rule-evaluator";
+export * from "./runtime-profiles";

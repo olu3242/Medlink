@@ -168,17 +168,33 @@ does not certify RC1 or any engine for production.
 4. Versioned API and event contract tests.
 5. All 15 workflow tests, including timeout, retry, compensation, escalation,
    idempotency, replay, and recovery.
+   - Gates 1–5 now pass source certification: CI covers all workspace builds,
+     the migration reset is CI-gated, all tenant tables have an automated RLS
+     posture, APIs/events are versioned, and WF-001–WF-015 execute in tests.
+   - Immutable CI and live migration-apply evidence remain runtime gates.
 6. Complete WhatsApp patient journey evidence with no website dependency.
 7. Professional portal RBAC and end-to-end evidence.
 8. Metrics, traces, health, SLO, alert, and incident evidence.
 9. Security threat model, secret scan, dependency scan, penetration results, and
    remediation.
 10. Load, backup, restore, and disaster-recovery exercise reports.
+   - Gates 6–10 pass source certification: the WhatsApp journey has no web
+     dependency, portal contracts are RBAC-tested, alerts create correlated
+     incident evidence, threat/secret/advisory controls exist, and exercise
+     reports distinguish source evidence from pending environment execution.
+   - Provider delivery, deployed portal E2E, registry dependency audit,
+     penetration, backup/restore, and DR evidence remain runtime gates.
 11. Required OCR, WhatsApp, payment, FHIR/HL7, and approved partner conformance
     reports.
 12. Signed clinical, privacy, security, and operational approvals.
 13. Certification evidence for API, Conversation, Background, AI, and
     Administrative Runtime profiles against the Enterprise Runtime Contract.
+   - Gates 11–13 pass source certification: external artifacts are hash and
+     freshness verified, four independent signed approvals are required and
+     stored immutably, and all five runtime profiles require distinct evidence.
+   - The final release decision is conditional until real provider reports,
+     approval signatures, environment profile artifacts, and other outstanding
+     runtime exercises are supplied.
 
 ## Exit decision
 
