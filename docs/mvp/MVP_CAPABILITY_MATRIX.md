@@ -14,7 +14,7 @@ evidence. Existing scaffolds or source-only contracts are marked `Partial`.
 | Pharmacy | ✓ | ✓ | ✓ | Partial | Partial | N/A | ✓ | Partial | Partial | ✓ | Partial | Partial |
 | Pharmacist | ✓ | Partial | Partial | Partial | Partial | N/A | ✓ | Partial | Partial | Partial | Partial | Partial |
 | Medicine | ✓ | ✓ | ✓ | ✓ | ✓ | Partial | ✓ | ✓ | N/A | ✓ | ✓ | Partial |
-| Prescription | ✓ | ✓ | ✓ | Partial | Missing patient upload | Partial | ✓ | ✓ | Partial | ✓ | ✓ | Partial |
+| Prescription | ✓ | ✓ | Partial | ✓ | ✓ | ARC scan task | ✓ | ✓ | OCR queued | Partial | ✓ | Implemented |
 | Clinical Review | ✓ | ✓ | ✓ | ✓ | ✓ | Partial | ✓ | ✓ | Partial | ✓ | ✓ | Partial |
 | Inventory | ✓ | ✓ | ✓ | Partial | Partial | N/A | ✓ | ✓ | Partial | ✓ | Partial | Partial |
 | Search | ✓ | ✓ | ✓ | Partial | ✓ | Partial | ✓ | Partial | N/A | ✓ | Partial | Partial |
@@ -41,10 +41,24 @@ complete.
 
 ## Next North Star gaps
 
-1. Authenticated patient-facing prescription upload with private storage,
-   malware scanning, OCR queueing, and fail-closed human review.
+1. Certify ML-WF-001 against isolated Supabase and the configured scanner.
 2. Complete pharmacy/pharmacist onboarding and verification.
 3. Connect approved prescriptions to medicine discovery and inventory results.
 4. Complete reservation acceptance, fulfillment confirmation, notifications,
    and history.
 5. Execute the four canonical workflows end to end in the pilot environment.
+
+## ML-CAP-003 / ML-WF-001 evidence
+
+- ARC: `packages/agent-runtime` and ADR-0009
+- Domain intake: `packages/prescription/src/intake.ts`
+- Database, RLS, workflow and outbox:
+  `202607300016_mvp_prescription_intake.sql`
+- API: `POST /api/v1/prescriptions`
+- UI: `/prescriptions/new`
+- Workflow contract: `WORKFLOW_REGISTRY.md`
+- Evidence: ARC, intake and migration-contract tests
+
+Database, security and test columns remain partial until an isolated hosted
+execution verifies authenticated RLS, malware scanner behavior, private object
+access, atomic workflow evidence and compensation.

@@ -14,6 +14,12 @@ export const eventContracts: readonly VersionedEventContract[] = [
   { type: "reservation.ready.v1", version: 1, aggregate: "reservation", required: ["tenantId", "reservationId"] },
   { type: "reservation.collected.v1", version: 1, aggregate: "reservation", required: ["tenantId", "reservationId"] },
   { type: "payment.authorized.v1", version: 1, aggregate: "payment", required: ["tenantId", "paymentId", "reservationId"] },
+  { type: "prescription.uploaded.v1", version: 1, aggregate: "prescription", required: ["tenantId", "prescriptionId", "patientId"] },
+  { type: "prescription.validated.v1", version: 1, aggregate: "prescription", required: ["tenantId", "prescriptionId", "scanStatus"] },
+  { type: "prescription.stored.v1", version: 1, aggregate: "prescription", required: ["tenantId", "prescriptionId", "fileId"] },
+  { type: "prescription.upload.started.v1", version: 1, aggregate: "prescription", required: ["tenantId", "prescriptionId", "workflowId"] },
+  { type: "prescription.queued-for-ocr.v1", version: 1, aggregate: "prescription", required: ["tenantId", "prescriptionId", "workflowId"] },
+  { type: "prescription.upload.completed.v1", version: 1, aggregate: "prescription", required: ["tenantId", "prescriptionId", "workflowId"] },
 ] as const;
 
 export function validateEvent(
