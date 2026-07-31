@@ -12,6 +12,7 @@ import {
   type ClinicalValidationInput,
 } from "@medlink/clinical";
 import { PrescriptionParser } from "@medlink/prescription";
+import { SupabaseMedicineSearchIndex, type SearchIndexHit } from "@medlink/search";
 import {
   LoggingPrescriptionAuditPort,
   PendingOcrPrescriptionReader,
@@ -174,13 +175,13 @@ export class CatalogApplication {
       limit: input.limit ?? 20,
       ...(input.cursor ? { cursor: input.cursor } : {}),
     });
-    const ids = [...new Set(page.hits.map((hit) => hit.id))];
+    const ids = [...new Set(page.hits.map((hit: SearchIndexHit) => hit.id))];
     const rows = ids.length === 0
       ? []
       : await result(this.database.from("medicines").select("*").in("id", ids));
     const byId = new Map((rows ?? []).map((row) => [row.id, row]));
     return {
-      matches: page.hits.flatMap((hit) => {
+      matches: page.hits.flatMap((hit: SearchIndexHit) => {
         const medicine = byId.get(hit.id);
         return medicine ? [{ ...hit, medicine }] : [];
       }),

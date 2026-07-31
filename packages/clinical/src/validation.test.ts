@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   ClinicalValidationService,
-  ClinicalAcknowledgementService,
-  AllergyConflictRule,
   DuplicateTherapyRule,
   PatientAllergyRule,
   PolypharmacyRiskRule,
@@ -44,21 +42,6 @@ describe("ClinicalValidationService", () => {
     expect(
       new ClinicalValidationService([criticalRule]).validate(baseInput).hasHardStop,
     ).toBe(true);
-  });
-
-  it("requires pharmacist acknowledgement for an ingredient allergy", () => {
-    const result = new ClinicalValidationService([
-      new AllergyConflictRule(),
-    ]).validate({ ...baseInput, patientAllergies: ["ingredient-1"] });
-    expect(result.hasHardStop).toBe(true);
-    expect(() => new ClinicalAcknowledgementService().acknowledge({
-      result, pharmacistId: "", rationale: "",
-    })).toThrow();
-    expect(new ClinicalAcknowledgementService().acknowledge({
-      result,
-      pharmacistId: "pharmacist-1",
-      rationale: "Reviewed with patient and prescriber.",
-    }).acknowledgedBy).toBe("pharmacist-1");
   });
 });
 

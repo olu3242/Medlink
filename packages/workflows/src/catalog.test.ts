@@ -22,6 +22,7 @@ describe("canonical workflow contract", () => {
         type: id,
         status: "running",
         completedSteps,
+        context: {},
       }),
       markStep: async (_instanceId, step) => {
         completedSteps = [...completedSteps, step];
@@ -31,6 +32,7 @@ describe("canonical workflow contract", () => {
           type: id,
           status: "running",
           completedSteps,
+          context: {},
         };
       },
       complete: async () => ({
@@ -39,6 +41,7 @@ describe("canonical workflow contract", () => {
         type: id,
         status: "completed",
         completedSteps,
+        context: {},
       }),
     });
     const execute = async () => undefined;

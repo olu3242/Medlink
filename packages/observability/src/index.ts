@@ -18,6 +18,7 @@ import {
   MemoryEvidenceStore,
   RetentionPolicyRegistry,
   runtimeLogContext,
+  certifyRuntimeProfiles,
   type RuntimeAudit,
   type RuntimeContext,
   type RuntimeEvents,
