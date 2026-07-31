@@ -1,6 +1,4 @@
-import{createHmac,timingSafeEqual}from"node:crypto";
-export interface WhatsAppMessage{readonly eventId:string;readonly providerMessageId:string;readonly identity:string;readonly kind:"text"|"image"|"document"|"interactive";readonly text?:string;readonly mediaId?:string;}
-export class WhatsAppSignatureVerifier{constructor(private readonly secret:string){}verify(body:Uint8Array,signature:string){const expected=createHmac("sha256",this.secret).update(body).digest();const supplied=Buffer.from(signature.replace(/^sha256=/,""),"hex");return supplied.length===expected.length&&timingSafeEqual(supplied,expected);}}
-export interface WhatsAppProvider{downloadMedia(id:string):Promise<{bytes:Uint8Array;mediaType:string}>;send(input:{to:string;body:string;idempotencyKey:string}):Promise<{providerMessageId:string}>;}
-export function normalizeWhatsAppPayload(value:unknown):WhatsAppMessage{if(!value||typeof value!=="object")throw new Error("Invalid WhatsApp payload");const x=value as Record<string,unknown>;if(typeof x.eventId!=="string"||typeof x.messageId!=="string"||typeof x.from!=="string")throw new Error("Invalid WhatsApp payload");return{eventId:x.eventId,providerMessageId:x.messageId,identity:x.from,kind:x.kind==="image"||x.kind==="document"||x.kind==="interactive"?x.kind:"text",...(typeof x.text==="string"?{text:x.text}:{}),...(typeof x.mediaId==="string"?{mediaId:x.mediaId}:{})};}
-export * from "./journey";
+export * from "./errors";
+export * from "./signature";
+export * from "./payload";
+export * from "./sender";

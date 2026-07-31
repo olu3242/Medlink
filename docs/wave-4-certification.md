@@ -1,4 +1,15 @@
-# Wave 4 certification — Experience and Intelligence
+# [HISTORICAL / PRE-CDA] Wave 4 certification — Experience and Intelligence
+
+> **This document predates the Conversation-Driven Architecture pivot and
+> does not describe the current Wave 4.** The current Wave 4 is
+> "Professional Portals" (pharmacy, pharmacist, hospital, administrator) per
+> `docs/release-scope.md`; this file describes an earlier "notification/
+> payment/adherence/analytics/AI + dashboard/provider" grouping that has
+> since been redistributed — those domain packages are now Wave 5 scope, and
+> `apps/dashboard`/`apps/provider` are unstarted UI scaffolds with no backing
+> routes (see `docs/audit/RC1_BACKLOG.md`). Kept for its still-relevant
+> safety/privacy invariants, not as current status. Closes
+> `docs/audit/RC1_BACKLOG.md` P0 item 5.
 
 Wave 4 adds notification, payment, adherence, analytics, and AI domain packages,
 plus patient dashboard and provider applications.

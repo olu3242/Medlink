@@ -32,7 +32,6 @@ export function MedicineTable({ medicines }: { medicines: MedicineSummary[] }) {
                 <Link className="medicine-link" href={`/medicine/${medicine.id}`}>
                   {medicine.name}
                 </Link>
-                {medicine.brandName ? <div className="muted">{medicine.brandName}</div> : null}
               </td>
               <td>{medicine.genericName}</td>
               <td>{medicine.strength}</td>

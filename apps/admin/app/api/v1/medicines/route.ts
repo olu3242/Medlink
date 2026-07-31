@@ -37,7 +37,11 @@ export const POST = (request: Request) => runApi(request, {
   permission: "medicine:manage",
   schema: createSchema,
   input: (value) => value.json(),
-  execute: async (input, _context, database) =>
-    new CatalogApplication(database).create(input),
+  execute: async (input, context, database) =>
+    new CatalogApplication(database).create(
+      context,
+      request.headers.get("idempotency-key") ?? context.requestId,
+      input,
+    ),
   success: (data) => Response.json({ data }, { status: 201 }),
 });

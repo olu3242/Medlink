@@ -8,10 +8,14 @@
     "start": "next start"
   },
   "dependencies": {
+    "@medlink/conversation": "*",
     "@medlink/database": "*",
     "@medlink/observability": "*",
     "@medlink/platform": "*",
     "@medlink/runtime": "*",
-    "@medlink/ui": "*"
+    "@medlink/search": "*",
+    "@medlink/ui": "*",
+    "@medlink/workflows": "*",
+    "@supabase/supabase-js": "^2.52.0"
   }
 }

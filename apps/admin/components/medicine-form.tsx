@@ -35,20 +35,16 @@ export function MedicineForm({ medicine }: { medicine?: MedicineDetail }) {
     <form onSubmit={submit}>
       <div className="form-grid">
         <div className="field">
-          <label htmlFor="name">Canonical name</label>
-          <input defaultValue={medicine?.name} id="name" name="name" required />
+          <label htmlFor="brandName">Medicine name</label>
+          <input defaultValue={medicine?.name} id="brandName" name="brandName" required />
         </div>
         <div className="field">
           <label htmlFor="genericName">Generic name</label>
           <input defaultValue={medicine?.genericName} id="genericName" name="genericName" required />
         </div>
         <div className="field">
-          <label htmlFor="brandName">Brand name</label>
-          <input defaultValue={medicine?.brandName} id="brandName" name="brandName" />
-        </div>
-        <div className="field">
-          <label htmlFor="therapeuticClass">Therapeutic class</label>
-          <input defaultValue={medicine?.therapeuticClass} id="therapeuticClass" name="therapeuticClass" />
+          <label htmlFor="manufacturer">Manufacturer</label>
+          <input defaultValue={medicine?.manufacturer} id="manufacturer" name="manufacturer" />
         </div>
         <div className="field">
           <label htmlFor="strength">Strength</label>
@@ -60,7 +56,7 @@ export function MedicineForm({ medicine }: { medicine?: MedicineDetail }) {
         </div>
         <div className="field">
           <label htmlFor="route">Route</label>
-          <input defaultValue={medicine?.route} id="route" name="route" placeholder="e.g. oral" />
+          <input defaultValue={medicine?.route} id="route" name="route" placeholder="e.g. oral" required />
         </div>
         <div className="field">
           <label htmlFor="status">Catalog status</label>

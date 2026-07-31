@@ -1,12 +1,9 @@
 import { z } from "zod";
 import { AccessApplication } from "../../../../../lib/application";
 import { runApi } from "../../../../../lib/api-server";
+import { decisionSchema } from "./schema";
 
 const idSchema = z.string().uuid();
-const decisionSchema = z.object({
-  decision: z.enum(["approved", "rejected", "needs_information"]),
-  recommendation: z.string().min(3).max(4000),
-});
 type Context = { params: Promise<{ id: string }> };
 
 export const GET = async (request: Request, route: Context) => {
@@ -29,11 +26,6 @@ export const PATCH = async (request: Request, route: Context) => {
     schema: z.object({ id: idSchema, decision: decisionSchema }),
     input: async (value) => ({ id, decision: await value.json() }),
     execute: async (input, context, database) =>
-      new AccessApplication(database).decideReview(
-        context.organizationId,
-        context.userId,
-        input.id,
-        input.decision,
-      ),
+      new AccessApplication(database).decideReview(context, input.id, input.decision),
   });
 };
