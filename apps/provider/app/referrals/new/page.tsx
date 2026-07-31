@@ -1,0 +1,1 @@
+import{SubmissionForm}from"../../../components/submission-form";export default function Page(){return <><header className="head"><div><div className="eyebrow">Care coordination</div><h1>New referral</h1><p className="muted">Send the minimum necessary information to the selected care service.</p></div></header><SubmissionForm kind="referral"/></>}

@@ -1,0 +1,33 @@
+export const standardRuntimeMetrics = {
+  counters: [
+    "requests_total",
+    "requests_success",
+    "requests_failed",
+    "requests_unauthorized",
+    "requests_forbidden",
+    "transaction_count",
+    "transaction_failures",
+    "retries_total",
+    "audit_records_written",
+    "audit_failures",
+    "outbox_events_created",
+    "outbox_events_published",
+    "outbox_failures",
+  ],
+  gauges: [
+    "active_requests",
+    "active_transactions",
+    "queued_events",
+    "dead_letter_size",
+    "active_workers",
+    "runtime_memory_placeholder",
+    "runtime_cpu_placeholder",
+  ],
+  histograms: [
+    "api_request_duration_ms",
+    "transaction_duration_ms",
+    "repository_duration_ms",
+    "audit_persistence_duration_ms",
+    "outbox_persistence_duration_ms",
+  ],
+} as const;

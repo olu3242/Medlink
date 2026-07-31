@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{AgentOrchestrator}from"./service";
+describe("AI orchestration",()=>{it("escalates low confidence and has no decision authority",async()=>{const s=new AgentOrchestrator({append:async()=>{}},{threshold:async()=>.8},()=>new Date(0));const out=await s.execute({requestId:"q",tenantId:"t",marId:"m",kind:"medicine_matcher",input:{}},{kind:"medicine_matcher",run:async()=>({data:{},confidence:.4})});expect(out).toMatchObject({kind:"escalation",requiresHumanReview:true,mayTransitionMar:false,mayMakeClinicalDecision:false});});});

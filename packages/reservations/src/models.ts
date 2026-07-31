@@ -1,0 +1,2 @@
+export type ReservationStatus="pending"|"confirmed"|"ready"|"collected"|"cancelled"|"expired";
+export interface Reservation {readonly id:string;readonly tenantId:string;readonly marId:string;readonly patientId:string;readonly pharmacyId:string;readonly inventoryItemId:string;readonly inventoryLockId:string;readonly quantity:number;readonly status:ReservationStatus;readonly expiresAt:Date;readonly createdAt:Date;}

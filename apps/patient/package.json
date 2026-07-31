@@ -1,0 +1,20 @@
+{
+  "name": "@medlink/patient-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@medlink/ui": "*",
+    "@medlink/api": "*",
+    "@medlink/platform": "*",
+    "@medlink/runtime": "*",
+    "@medlink/observability": "*",
+    "@supabase/supabase-js": "^2.52.0",
+    "zod": "^3.25.0"
+  }
+}

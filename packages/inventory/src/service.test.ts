@@ -1,0 +1,2 @@
+import {describe,expect,it} from "vitest"; import {InventoryService} from "./service";
+describe("inventory",()=>{it("never reports reserved units available",async()=>{const s=new InventoryService({findItem:async()=>({id:"i",tenantId:"t",pharmacyId:"p",medicineId:"m",onHand:3,reserved:2,version:1}),acquireLockAtomically:async()=>null,releaseLockAtomically:async()=>null,findLockByIdempotencyKey:async()=>null},{now:()=>new Date(0)});expect(await s.availability("t","i")).toEqual({itemId:"i",available:1,inStock:true});});});

@@ -1,0 +1,21 @@
+{
+  "name": "@medlink/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@medlink/conversation": "*",
+    "@medlink/database": "*",
+    "@medlink/observability": "*",
+    "@medlink/platform": "*",
+    "@medlink/runtime": "*",
+    "@medlink/search": "*",
+    "@medlink/ui": "*",
+    "@medlink/workflows": "*",
+    "@supabase/supabase-js": "^2.52.0"
+  }
+}

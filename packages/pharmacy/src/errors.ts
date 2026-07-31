@@ -1,0 +1,1 @@
+export class InvalidDiscoveryRadiusError extends Error {readonly code="invalid_discovery_radius";readonly status=400;constructor(){super("Discovery radius must be between 1 and 200 km");this.name=new.target.name;}}

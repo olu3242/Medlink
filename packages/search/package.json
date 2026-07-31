@@ -1,0 +1,12 @@
+{
+  "name": "@medlink/search",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@medlink/medicine": "0.1.0",
+    "@supabase/supabase-js": "^2.52.0",
+    "zod": "^3.25.0"
+  }
+}

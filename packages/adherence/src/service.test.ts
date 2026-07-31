@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{AdherenceService}from"./service";
+describe("adherence",()=>{it("validates local times",()=>{const s=new AdherenceService({saveSchedule:async x=>x,findEventByKey:async()=>null,saveEvent:async x=>x},()=>"i",()=>new Date());expect(()=>s.createSchedule({tenantId:"t",patientId:"p",medicineId:"m",timezone:"UTC",times:["25:00"],startsOn:"2026-01-01"})).toThrow();});});

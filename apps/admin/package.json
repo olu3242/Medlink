@@ -1,0 +1,25 @@
+{
+  "name": "@medlink/admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@medlink/clinical": "*",
+    "@medlink/api": "*",
+    "@medlink/medicine": "*",
+    "@medlink/prescription": "*",
+    "@medlink/search": "*",
+    "@medlink/platform": "*",
+    "@medlink/runtime": "*",
+    "@medlink/observability": "*",
+    "@medlink/search": "*",
+    "@supabase/supabase-js": "^2.52.0",
+    "zod": "^3.25.0",
+    "@medlink/ui": "*"
+  }
+}

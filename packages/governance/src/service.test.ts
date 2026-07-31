@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{GovernanceService}from"./service";
+describe("governance",()=>{it("appends audit with server identity and time",async()=>{let record:unknown;const s=new GovernanceService({appendAudit:async x=>{record=x},appendConsent:async()=>{},appendIncident:async()=>{}},()=>"id",()=>new Date(0));await s.audit({tenantId:"t",actorId:"u",action:"read",subjectType:"mar",subjectId:"m",metadata:{}});expect(record).toMatchObject({id:"id",occurredAt:new Date(0)});});});

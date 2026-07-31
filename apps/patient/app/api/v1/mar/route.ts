@@ -1,0 +1,33 @@
+import { z } from "zod";
+import { AccessApplication } from "../../../../lib/application";
+import { runApi } from "../../../../lib/api-server";
+
+const createSchema = z.object({
+  prescriptionId: z.string().uuid().optional(),
+  medicineId: z.string().uuid(),
+  notes: z.string().max(2000).optional(),
+  idempotencyKey: z.string().min(8).max(200),
+});
+
+export const GET = (request: Request) => runApi(request, {
+  name: "mar.list",
+  permission: "mar:read",
+  schema: z.object({}),
+  input: async () => ({}),
+  execute: async (_input, context, database) =>
+    new AccessApplication(database).listMars(context.organizationId),
+});
+
+export const POST = (request: Request) => runApi(request, {
+  name: "mar.create",
+  permission: "mar:create",
+  schema: createSchema,
+  input: (value) => value.json(),
+  execute: async (input, context, database) =>
+    new AccessApplication(database).createMar(context, input.idempotencyKey, {
+      prescriptionId: input.prescriptionId,
+      medicineId: input.medicineId,
+      notes: input.notes,
+    }),
+  success: (data) => Response.json({ data }, { status: 201 }),
+});
