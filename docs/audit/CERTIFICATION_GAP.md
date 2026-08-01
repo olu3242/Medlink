@@ -24,7 +24,7 @@ does not certify RC1 or any engine for production.
 | API integration contracts | Fail | No live-database/provider contract suite |
 | Workflow identity | Pass | All 15 stable IDs are executable contracts |
 | Workflow behavior | Fail | Canonical end-to-end workflow suites are absent, and could not pass today regardless: `searching`/`matched` transitions still have no implementation, so no MAR can legally reach `reserve_inventory`'s precondition even though `validated`/`reviewed` are now real — see Wave 3 section below |
-| CDA conformance | Fail | Conversation Engine domain/application boundaries and schema exist (`packages/conversation`, migration `202607290012`); WhatsApp channel-adapter transport slice exists (`packages/whatsapp`, migration `202607290013`); route wiring is blocked on an ADR for webhook identity in `RuntimeContext` (see RC1_BACKLOG item 15), and Workflow Orchestrator integration is still missing |
+| CDA conformance | Conditional | Conversation Engine domain/application boundaries and schema exist (`packages/conversation`, migration `202607290012`); WhatsApp channel-adapter transport slice exists (`packages/whatsapp`, migration `202607290013`); route wiring is now closed (ADR 0004 accepted, `apps/web/app/api/whatsapp/webhook/route.ts` calls `createRuntime()` for real — see RC1_BACKLOG item 15); still open: no route wires a workflow requiring an actor-checked mutation, and the `auth.users` system-identity migration lacks live-Supabase execution evidence |
 | Audit/event completeness | Conditional | General outbox exists (migration 006); Wave 2 catalog/prescription/equivalency/clinical-validation use cases (migrations 008-009) and reservation creation (migration 010) all commit business state, audit, and outbox atomically in one function; MAR pickup/fulfillment transitions and other unimplemented Wave 3 use cases remain out of scope until built |
 | Observability | Fail | No metrics/tracing/SLO evidence; health dependency checks are now real (no hardcoded results) but still unexercised outside unit tests |
 | Performance | Not evidenced | No load/latency evidence |
@@ -71,13 +71,15 @@ does not certify RC1 or any engine for production.
   (`packages/whatsapp`: signature verification, payload normalization,
   outbound sender) and `conversation_channel_bindings` (migration
   `202607290013`) resolves which organization a channel identifier belongs
-  to. **Route wiring is blocked, not just undone**: `packages/runtime`'s
-  `runtimeContextSchema` requires a non-optional `userId`, which an
-  unauthenticated webhook never has, so no route can call `createRuntime()`
-  for it today without either modifying frozen platform code without an
-  ADR or hand-rolling a non-conformant pipeline. See
-  `docs/audit/RC1_BACKLOG.md` P1 item 15 for the full finding — this needs
-  an accepted ADR, not another wiring pass.
+  to. **Route wiring is now closed**: ADR 0004 is accepted, and
+  `apps/web/app/api/whatsapp/webhook/route.ts` calls `createRuntime()`'s
+  `run()` for real — signature-verified, tenant-resolved, idempotent on
+  retry, and non-crashing on an unwired workflow (hands off to a human
+  instead). See `docs/audit/RC1_BACKLOG.md` P1 item 15 and
+  `docs/audit/WHATSAPP_RUNTIME_CERTIFICATION.md` for full evidence and what
+  remains open (medicine-search-over-WhatsApp needs its own adapter in
+  `apps/web`; the system-identity migration needs live-Supabase
+  execution).
 - Batch 3.2 groundwork: `packages/workflows` now carries context between
   steps, all 15 canonical workflows have a structural step-name
   definition, and WF-005 (Medicine Search), WF-006 (Medication Access

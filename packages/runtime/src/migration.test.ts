@@ -432,6 +432,88 @@ describe("clinical_validations idempotency migration", () => {
   });
 });
 
+describe("agent memory governance migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202607310001_agent_memory_governance.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("defines tenant-scoped agent memory with RLS enabled", () => {
+    expect(sql).toContain("create table public.agent_memory_entries");
+    expect(sql).toContain("alter table public.agent_memory_entries enable row level security");
+    expect(sql).toContain("organization_id uuid not null references public.organizations(id)");
+  });
+
+  it("requires session-scoped memory to carry an expiry, independent of the calling code", () => {
+    expect(sql).toContain(
+      "check (memory_boundary <> 'session' or expires_at is not null)",
+    );
+  });
+
+  it("requires subject_id so the uniqueness constraint cannot be defeated by null", () => {
+    expect(sql).toContain("subject_id uuid not null");
+    expect(sql).toContain("unique (organization_id, agent_id, subject_id, key)");
+  });
+
+  it("has no authenticated write policy -- an agent acts through the service role", () => {
+    expect(sql).not.toContain("for insert to authenticated");
+    expect(sql).not.toContain("for update to authenticated");
+    expect(sql).not.toContain("for all to authenticated");
+  });
+
+  it("grants authenticated platform/tenant admins read-only access for support and audit", () => {
+    expect(sql).toContain("agent_memory_entries_admin_read");
+    expect(sql).toContain("for select to authenticated");
+    expect(sql).toContain("array['platform_admin', 'tenant_admin']::public.member_role[]");
+  });
+});
+
+describe("agent escalations migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202607310002_agent_escalations.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("defines a tenant-scoped escalation table with RLS enabled", () => {
+    expect(sql).toContain("create table public.agent_escalations");
+    expect(sql).toContain("alter table public.agent_escalations enable row level security");
+    expect(sql).toContain("status public.agent_escalation_status not null default 'pending'");
+  });
+
+  it("raises idempotently on (organization_id, idempotency_key)", () => {
+    expect(sql).toContain("function public.raise_agent_escalation");
+    expect(sql).toContain("unique (organization_id, idempotency_key)");
+    expect(sql).toContain("where organization_id = target_organization_id and idempotency_key = target_idempotency_key");
+    expect(sql).toContain("if found then\n    return existing;\n  end if;");
+  });
+
+  it("restricts deciding an escalation to a licensed pharmacist, matching decide_clinical_review", () => {
+    expect(sql).toContain("function public.decide_agent_escalation");
+    expect(sql).toContain("only a licensed pharmacist may decide an agent escalation");
+    expect(sql).toContain("array['pharmacist']::public.member_role[]");
+  });
+
+  it("replays an already-decided escalation idempotently on matching actor/status/rationale, and rejects a conflicting redecision", () => {
+    expect(sql).toContain("if existing.status <> 'pending' then");
+    expect(sql).toContain("existing.status = target_status");
+    expect(sql).toContain("and existing.decided_by = target_actor_id");
+    expect(sql).toContain("raise exception 'agent escalation has already been decided'");
+  });
+
+  it("commits both the raise and the decision atomically with runtime evidence, never a bare commit", () => {
+    expect(sql).toContain("'agent_escalation.raised'");
+    expect(sql).toContain("'agent_escalation.decided'");
+    const occurrences = sql.split("public.record_runtime_evidence(").length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(2);
+    expect(sql).not.toContain("commit;");
+  });
+});
+
 describe("runtime evidence repository migration", () => {
   const evidenceSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607280007_runtime_evidence_repository.sql"),
@@ -578,6 +660,29 @@ describe("certification approval migration", () => {
       "alter table public.certification_approvals enable row level security",
     );
     expect(approvalSql).toContain("certification_approvals_append_only");
+  });
+});
+
+describe("conversation runtime system identity migration (ADR 0004)", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608010001_conversation_runtime_system_identity.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("provisions exactly the documented, fixed system identity, idempotently", () => {
+    expect(sql).toContain("insert into auth.users");
+    expect(sql).toContain("'11111111-1111-4111-8111-111111111111'");
+    expect(sql).toContain("on conflict (id) do nothing");
+  });
+
+  it("never sets a usable password -- this identity never logs in via GoTrue", () => {
+    expect(sql).toContain("encrypted_password");
+    expect(sql).not.toMatch(/encrypted_password.*\n.*'\$2/);
   });
 });
 

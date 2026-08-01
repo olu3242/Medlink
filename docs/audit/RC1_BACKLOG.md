@@ -174,48 +174,54 @@ not authorization to implement multiple batches at once.
     `ConversationEventLog` now exist too
     (`apps/web/lib/conversation-store.ts`, following
     `apps/admin/lib/medicine-repository.ts`'s adapter-lives-in-the-app
-    pattern). Not yet wired to a route or the real WhatsApp adapter — see
-    item 15 below, blocked on ADR 0004.
+    pattern), and are now wired to a real route — see item 15 below,
+    closed via accepted ADR 0004.
 15. Implement WhatsApp webhook, signature, media, identity, consent, and
-    delivery adapter. Partial: `packages/whatsapp` implements the transport
-    slice ADR 0003 scopes to channel adapters — `verifyWebhookSignature`
-    (HMAC-SHA256 over the raw body, per the Cloud API's
-    `X-Hub-Signature-256` header), `normalizeInboundPayload` (Cloud API
-    webhook JSON → a flat list of typed message/unsupported-message/status
-    events), and `GraphApiWhatsAppSender` (outbound send via injected
-    `fetch`, so it's unit-testable without live network) — plus migration
-    `202607290013`'s `conversation_channel_bindings` table for resolving
-    which organization a `phone_number_id` belongs to. **Not built: the
-    webhook route itself.** Wiring one exposed a genuine architecture gap
-    rather than a wiring gap — see the new finding below.
-    - **`RuntimeContext.userId` blocks the Conversation Runtime profile.**
-      `docs/ENTERPRISE_RUNTIME_CONTRACT.md` documents `userId` as optional
-      (`userId?: string`) specifically so profiles without an authenticated
-      end user (Conversation Runtime's webhooks, Background Runtime's
-      workers) can populate a context. `packages/runtime`'s actual
-      `runtimeContextSchema` requires it as a non-optional
-      `z.string().uuid()` — an inbound WhatsApp webhook, which by
-      definition has no Supabase-authenticated user, cannot construct a
-      valid `RuntimeContext` and therefore cannot call `createRuntime()`'s
-      `run()` at all. This is not a bug in `packages/whatsapp` or
-      `packages/conversation` to route around; `packages/runtime` is
-      frozen platform (see `IMPLEMENTATION.md`'s Platform Freeze Gate) and
-      "No component may create a custom execution pipeline or bypass a
-      mandatory stage." Building a webhook route today would mean either
-      quietly modifying frozen code without an ADR, or hand-rolling a
-      parallel pipeline that only claims to satisfy the same obligations —
-      both rejected. This needs an accepted ADR deciding how a
-      system/webhook identity is represented in `RuntimeContext` before
-      route wiring can proceed. Drafted, not accepted:
-      `docs/adr/0004-conversation-runtime-webhook-identity.md` — three
-      options considered, recommends a well-known system identity
-      (`context.userId` stays required and always populated; no existing
-      Wave 1/2 RLS policy, RPC signature, or audit consumer changes) over
-      making `userId` genuinely optional or giving Conversation Runtime a
-      distinct lifecycle outside `createRuntime()`. Also flags that ADR
-      0001's "service-role access is not used by request handlers" needs a
-      narrow, explicit exception for this one profile's already-scoped
-      service-role-only writes (migration 202607290012).
+    delivery adapter. **Closed** (route wiring): ADR 0004 (system-identity
+    Option 2) is accepted, and `apps/web/app/api/whatsapp/webhook/route.ts`
+    is a real, tested entry point calling `createRuntime()`'s `run()` --
+    the "one pipeline" invariant is intact, not bypassed. GET handles
+    Meta's `hub.challenge` verification handshake; POST verifies the
+    `X-Hub-Signature-256` HMAC before parsing anything, resolves the
+    organization via `conversation_channel_bindings`, and drives
+    `ConversationEngine.receiveMessage()` through to a response. A
+    retried/duplicate delivery replays the existing `conversation_messages`
+    row instead of erroring (`SupabaseMessageStore.recordInbound`'s new
+    unique-violation handling); a classified intent with no wired workflow
+    step hands off to a human instead of crashing the request
+    (`ConversationEngine.receiveMessage()`'s new `catch` around
+    `workflows.invoke()`). See
+    `docs/audit/WHATSAPP_RUNTIME_CERTIFICATION.md` for full evidence,
+    including what's still open (medicine-search-over-WhatsApp needs
+    `apps/web`'s own medicine-search adapter, which doesn't exist yet --
+    only `apps/admin`'s does -- and the `auth.users` system-identity
+    migration has not been executed against a live Supabase instance).
+    - **`RuntimeContext.userId` blocked the Conversation Runtime profile —
+      now resolved.** `packages/runtime`'s `runtimeContextSchema` still
+      requires `userId` as a non-optional `z.string().uuid()`
+      (`docs/ENTERPRISE_RUNTIME_CONTRACT.md`'s "optional" documentation for
+      this field remains inaccurate and should be corrected in a future
+      pass, tracked separately from this closure). ADR 0004 resolves the
+      contradiction with a well-known system identity instead
+      (`11111111-1111-4111-8111-111111111111`, migration
+      `202608010001_conversation_runtime_system_identity.sql`) rather than
+      changing the schema — `context.userId` stays required and always
+      populated, so no existing Wave 1/2 RLS policy, RPC signature, or
+      audit consumer changes. ADR 0001's "service-role access is not used
+      by request handlers" now carries the narrow, explicit exception this
+      needed, for exactly this profile's already-scoped service-role-only
+      writes (migration `202607290012`) and no other request handler.
+    - **New finding made while implementing this:** every actor-checked
+      RPC in this repository, `record_runtime_evidence` included, requires
+      a genuine `auth.uid()` match a service-role connection can never
+      produce. The system identity therefore cannot call any of them
+      today — see ADR 0004's "Refinement discovered during implementation"
+      section. This doesn't block what's built (message receipt only
+      touches service-role-safe tables), but it does mean a future pass
+      wiring a WhatsApp intent to an actor-checked mutation (e.g.
+      `prescription_upload` eventually driving `create_mar`) needs a
+      deliberate decision on minting the system identity a real signed
+      session first.
 16. Implement durable Workflow Orchestrator and all applicable canonical
     definitions. Partial: `packages/workflows/src/definitions.ts` gives all
     15 canonical workflows a structural step sequence (grounded in the
