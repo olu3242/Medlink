@@ -580,3 +580,70 @@ describe("certification approval migration", () => {
     expect(approvalSql).toContain("certification_approvals_append_only");
   });
 });
+
+describe("prescription file storage migration (G05, Engine 26)", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608010003_prescription_file_storage.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("provisions a private bucket with size and MIME enforcement", () => {
+    expect(sql).toContain("insert into storage.buckets");
+    expect(sql).toContain("'prescriptions',\n  'prescriptions',\n  false,");
+    expect(sql).toContain("15728640");
+    expect(sql).toContain(
+      "array['image/jpeg', 'image/png', 'image/webp', 'application/pdf']",
+    );
+  });
+
+  it("scopes storage RLS to the uploader's own patient folder or staff role, within tenant membership", () => {
+    expect(sql).toContain("create policy prescriptions_bucket_insert");
+    expect(sql).toContain("create policy prescriptions_bucket_read");
+    expect(sql).toContain("public.is_organization_member(((storage.foldername(name))[1])::uuid)");
+    expect(sql).toContain("(storage.foldername(name))[2] = auth.uid()::text");
+    expect(sql).toContain(
+      "array['platform_admin', 'tenant_admin', 'pharmacist', 'pharmacy_staff']::public.member_role[]",
+    );
+  });
+
+  it("defines no update/delete policy -- an uploaded prescription image is immutable", () => {
+    expect(sql).not.toContain("for update");
+    expect(sql).not.toContain("for delete");
+  });
+
+  it("adds nullable checksum/mime/size columns and a per-tenant duplicate-detection index", () => {
+    expect(sql).toContain("add column storage_checksum text");
+    expect(sql).toContain("add column storage_mime_type text");
+    expect(sql).toContain("add column storage_size_bytes bigint");
+    expect(sql).toContain("create unique index prescriptions_org_checksum_idx");
+    expect(sql).toContain("on public.prescriptions(organization_id, storage_checksum)");
+    expect(sql).toContain("where storage_checksum is not null");
+  });
+
+  it("drops the old 11-argument signature before creating the extended one, so callers share one function", () => {
+    expect(sql).toContain(
+      "drop function if exists public.create_prescription_record(\n  uuid, uuid, text, text, text, text, uuid, public.prescription_source, text, text, text\n);",
+    );
+    expect(sql).toContain("target_storage_checksum text default null");
+    expect(sql).toContain("target_storage_mime_type text default null");
+    expect(sql).toContain("target_storage_size_bytes bigint default null");
+  });
+
+  it("replays the existing row on a checksum match within the same organization instead of erroring", () => {
+    expect(sql).toContain("if target_storage_checksum is not null then");
+    expect(sql).toContain("where organization_id = target_organization_id");
+    expect(sql).toContain("and storage_checksum = target_storage_checksum");
+    expect(sql).toContain("if found then\n      return existing;\n    end if;");
+  });
+
+  it("still commits the prescription and runtime evidence atomically", () => {
+    expect(sql).toContain("insert into public.prescriptions (");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+});
