@@ -1,10 +1,24 @@
 # RC1 Release Candidate
 
-Date: 2026-08-01. Candidate reference: commit `ac87d58` on both `main`
-and `release/rc1-candidate`. This document is the release-candidate
-declaration itself -- what this candidate contains, how it was produced,
-and what governs it from this point forward. It supersedes no prior
-certification document; it packages them.
+Date: 2026-08-01. This document is the release-candidate declaration
+itself -- what this candidate contains, how it was produced, and what
+governs it from this point forward. It supersedes no prior certification
+document; it packages them.
+
+**Two distinct references, not one, because this document cannot describe
+its own commit:**
+
+- **Code content**: fixed at commit `ac87d58` -- the last commit produced
+  by merging PR #5 through #10. All runtime code, migrations, and prior
+  certification documents in this candidate are frozen as of this commit.
+- **Full package (code + this document and its three companions)**: the
+  commit that merges this PR (docs/rc1-release-candidate-integration) on
+  top of `ac87d58`. `release/rc1-candidate` is advanced to that commit
+  once merged, specifically so the branch's tip always contains both the
+  code it describes and the documents describing it -- a prior draft of
+  this document named `ac87d58` as if it were also the tip after this PR
+  merged, which cannot be true by construction (a commit cannot contain
+  the PR that adds it). Corrected here per review.
 
 ## What this candidate is
 
@@ -57,8 +71,10 @@ convert them into real tags from an environment with tag-push rights:
 
 - **`rc1-pre-integration`** = commit `ecf3ab4` -- last known-good state
   before any runtime PR (#5, #6, #8) was integrated.
-- **`rc1-candidate-1`** = commit `ac87d58` -- this candidate, fully
-  integrated and certified.
+- **`rc1-candidate-1`** = commit `ac87d58` -- this candidate's frozen
+  *code* content, fully integrated and certified. The full package
+  (code plus this certification document set) lands one commit later,
+  on `release/rc1-candidate`, once this PR merges -- see the note above.
 
 ## Next decision point
 
