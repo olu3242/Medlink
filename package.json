@@ -16,6 +16,7 @@
     "test:service-operations": "vitest run packages/runtime/src/service-management.test.ts packages/analytics/src/customer-success.test.ts packages/platform/src/enterprise-administration.test.ts packages/analytics/src/operational-intelligence.test.ts packages/governance/src/continuous-improvement.test.ts packages/platform/src/enterprise-dashboards.test.ts packages/ai/src/operations-assistant.test.ts packages/certification/src/enterprise-service-operations.test.ts",
     "test:wave-transition": "vitest run packages/governance/src/wave-governance.test.ts packages/platform/src/capability-registry.test.ts packages/integrations/src/extension-framework.test.ts packages/api/src/platform-contracts.test.ts packages/governance/src/roadmap-execution.test.ts packages/certification/src/wave-transition.test.ts",
     "test:platform-evolution": "vitest run packages/governance/src/enterprise-portfolio.test.ts packages/platform/src/architecture-governance.test.ts packages/ai/src/model-governance.test.ts packages/integrations/src/partner-trust.test.ts packages/analytics/src/digital-twin.test.ts packages/certification/src/platform-evolution.test.ts",
+    "test:architecture": "vitest run packages/platform/src/experience-conformance.test.ts packages/api/src/experience-contracts.test.ts packages/platform/src/portal-architecture.test.ts",
     "check": "npm run lint && npm run typecheck && npm run test",
     "db:start": "supabase start",
     "db:stop": "supabase stop",

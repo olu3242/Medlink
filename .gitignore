@@ -8,3 +8,4 @@ dist/
 .env.*.local
 .supabase/
 npm-debug.log*
+.codex-run/

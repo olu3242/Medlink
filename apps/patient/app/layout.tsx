@@ -1,3 +1,3 @@
-import type { Metadata } from "next";import Link from "next/link";import type { ReactNode } from "react";import "./globals.css";
+import type { Metadata } from "next";import type { ReactNode } from "react";import {AppShell} from "@medlink/ui";import "@medlink/ui/styles.css";import "./globals.css";
 export const metadata:Metadata={title:"MedLink Patient",description:"Find and reserve medication"};
-export default function Layout({children}:{children:ReactNode}){return <html lang="en"><body><a className="skip" href="#main">Skip to content</a><header className="top"><Link className="brand" href="/">MedLink Patient</Link><nav className="nav" aria-label="Patient navigation"><Link href="/">My requests</Link><Link href="/search">Find medicine</Link></nav></header><main className="main" id="main">{children}</main></body></html>}
+export default function Layout({children}:{children:ReactNode}){return <html lang="en"><body className="ml-body"><AppShell brand={<a href="/">MedLink Patient</a>} navigation={[{label:"My requests",href:"/"},{label:"Find medicine",href:"/search"},{label:"Notifications",href:"/notifications"}]}>{children}</AppShell></body></html>}

@@ -49,6 +49,20 @@ export class AccessApplication {
       .eq("id", id).single());
   }
 
+  async timeline(organizationId: string, marId: string) {
+    return (await result(this.database.from("mar_audit_events")
+      .select("id,event_type,from_state,to_state,correlation_id,occurred_at,metadata")
+      .eq("organization_id", organizationId).eq("mar_id", marId)
+      .order("occurred_at", { ascending: true }).order("id", { ascending: true }))) ?? [];
+  }
+
+  async notifications(organizationId: string, recipientId: string) {
+    return (await result(this.database.from("notifications")
+      .select("id,channel,template_key,status,correlation_id,scheduled_for,sent_at,delivered_at,created_at")
+      .eq("organization_id", organizationId).eq("recipient_id", recipientId)
+      .order("created_at", { ascending: false }).limit(100))) ?? [];
+  }
+
   async createMar(
     organizationId: string,
     userId: string,

@@ -16,6 +16,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Enforce architecture conformance
+        run: npm run test:architecture
       - name: Validate production operations framework
         run: npm run test:operations
       - name: Validate enterprise service operations
