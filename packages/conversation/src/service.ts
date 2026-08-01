@@ -105,13 +105,29 @@ export class ConversationEngine {
       return { conversation: handedOff, message, action: "handoff_requested" };
     }
 
-    const invoked = await this.workflows.invoke({
-      organizationId: input.organizationId,
-      conversationId: conversation.id,
-      workflowType: detected.intent,
-      idempotencyKey: message.externalMessageId ?? message.id,
-      context: conversation.context,
-    });
+    // A recognized intent can still name a workflow type the orchestrator
+    // has no executable steps for yet (packages/workflows/src/definitions.ts
+    // documents all 15 canonical workflows structurally, but most don't have
+    // executable steps behind them -- see apps/web/lib/workflow-invoker.ts's
+    // WorkflowOrchestratorInvoker). Per the Conversation Runtime profile's
+    // "support ... escalation, human handoff" obligation, that must hand the
+    // conversation to a human the same way low intent confidence already
+    // does, not throw and crash the entry point -- a crash here is a
+    // provider-visible failure Meta will retry indefinitely, for a message
+    // that was never actually unrecoverable, just unroutable today.
+    let invoked;
+    try {
+      invoked = await this.workflows.invoke({
+        organizationId: input.organizationId,
+        conversationId: conversation.id,
+        workflowType: detected.intent,
+        idempotencyKey: message.externalMessageId ?? message.id,
+        context: conversation.context,
+      });
+    } catch {
+      const handedOff = await this.requestHandoff(conversation.id, "workflow_invocation_failed");
+      return { conversation: handedOff, message, action: "handoff_requested" };
+    }
     await this.events.append(conversation.id, "workflow_invoked", {
       workflowType: detected.intent,
       workflowInstanceId: invoked.workflowInstanceId,

@@ -580,3 +580,26 @@ describe("certification approval migration", () => {
     expect(approvalSql).toContain("certification_approvals_append_only");
   });
 });
+
+describe("conversation runtime system identity migration (ADR 0004)", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608010001_conversation_runtime_system_identity.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("provisions exactly the documented, fixed system identity, idempotently", () => {
+    expect(sql).toContain("insert into auth.users");
+    expect(sql).toContain("'11111111-1111-4111-8111-111111111111'");
+    expect(sql).toContain("on conflict (id) do nothing");
+  });
+
+  it("never sets a usable password -- this identity never logs in via GoTrue", () => {
+    expect(sql).toContain("encrypted_password");
+    expect(sql).not.toMatch(/encrypted_password.*\n.*'\$2/);
+  });
+});
