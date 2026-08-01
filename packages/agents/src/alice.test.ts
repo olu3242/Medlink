@@ -1,7 +1,8 @@
 import { AIGateway, PromptRegistry, FakeModelProvider } from "@medlink/ai";
 import type { RuntimeContext } from "@medlink/runtime";
 import { describe, expect, it } from "vitest";
-import { AliceAgent, AliceCapabilityDeniedError, alicePromptDefinitions } from "./alice";
+import { AgentCapabilityDeniedError } from "./agent-runtime";
+import { AliceAgent, alicePromptDefinitions } from "./alice";
 import { InMemoryEscalationStore } from "./supervision";
 
 const patientContext: RuntimeContext = {
@@ -82,7 +83,7 @@ describe("AliceAgent.respond", () => {
     const pharmacistContext: RuntimeContext = { ...patientContext, role: "pharmacist" };
     await expect(
       agent.respond(pharmacistContext, { capability: "answer_platform_question", question: "hi" }),
-    ).rejects.toThrow(AliceCapabilityDeniedError);
+    ).rejects.toThrow(AgentCapabilityDeniedError);
   });
 
   it("escalates instead of answering when the patient's own question seeks clinical advice", async () => {
