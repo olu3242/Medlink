@@ -1,0 +1,3 @@
+import { SectionHeader } from "./SectionHeader";
+const steps = [{ title: "Upload or search", body: "Send a prescription photo or enter the medicine you need." }, { title: "A pharmacist checks", body: "A licensed professional verifies the request and reviews clinical flags." }, { title: "Reserve and receive", body: "Choose verified stock nearby for secure pickup or delivery." }];
+export function HowItWorks() { return <section id="how-it-works" className="section"><div className="container"><SectionHeader eyebrow="Simple by design" title="From prescription to fulfillment in three moves" /><ol className="steps">{steps.map((step, index) => <li key={step.title}><span>0{index + 1}</span><h3>{step.title}</h3><p>{step.body}</p></li>)}</ol></div></section>; }

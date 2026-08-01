@@ -1,0 +1,1 @@
+export function TrustBar() { return <aside className="trust-bar" aria-label="MedLink trust commitments"><div className="container"><span>Licensed pharmacist review</span><span>Verified pharmacy stock</span><span>Private, role-based access</span><span>Secure pickup or delivery</span></div></aside>; }
