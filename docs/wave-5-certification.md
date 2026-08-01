@@ -1,4 +1,11 @@
-# Wave 5 certification — Enterprise and Scale
+# [HISTORICAL / PRE-CDA] Wave 5 certification — Enterprise and Scale
+
+> **This document predates the Conversation-Driven Architecture pivot.**
+> The current Wave 5 ("Enterprise Services" per `docs/release-scope.md`)
+> substantially overlaps with what's described here, but "durable workflows"
+> is now Wave 3 (Workflow Orchestrator) scope, not Wave 5. Kept for its
+> still-relevant enterprise invariants, not as current status. Closes
+> `docs/audit/RC1_BACKLOG.md` P0 item 5.
 
 Wave 5 adds integrations, governance, reporting, security, certification,
 durable workflows, and the developer portal.

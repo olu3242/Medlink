@@ -6,10 +6,20 @@ export default defineConfig({
     include: ["**/*.test.ts"],
     coverage: {
       provider: "v8",
-      include: ["packages/*/src/**/*.ts"],
+      reporter: ["text", "lcov"],
+      // Scoped to packages/**: domain, application, and runtime logic that
+      // vitest unit-tests directly. apps/** are Next.js UI and route
+      // handlers exercised through integration/e2e coverage instead (see
+      // docs/audit/RC1_BACKLOG.md P1 item 11), so including them here would
+      // just dilute the gate with untested React/route boilerplate.
+      include: ["packages/**/src/**/*.ts"],
       exclude: ["**/*.test.ts", "**/index.ts"],
-      thresholds: { lines: 55, functions: 55, statements: 55, branches: 50 },
-      reporter: ["text", "json-summary"],
+      thresholds: {
+        statements: 70,
+        branches: 70,
+        functions: 65,
+        lines: 70,
+      },
     },
   },
 });

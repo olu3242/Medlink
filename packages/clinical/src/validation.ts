@@ -62,42 +62,59 @@ export class DuplicateTherapyRule implements ClinicalRule {
   }
 }
 
-export class AllergyConflictRule implements ClinicalRule {
-  readonly id = "allergy_conflict";
+// Matches a candidate medicine's active ingredients against the patient's
+// declared allergies. patientAllergies is caller-supplied free text (there
+// is no ingredient-name resolution in this package), so this does an exact,
+// case-insensitive match against activeIngredientIds rather than fuzzy
+// text matching - a caller passing allergy values in the same identifier
+// space as activeIngredientIds gets a real check; a caller passing prose
+// ("penicillin") gets a safe no-match rather than a false one. Either way
+// this only ever produces an advisory finding requiring pharmacist
+// acknowledgement, never a decision.
+export class PatientAllergyRule implements ClinicalRule {
+  readonly id = "allergy";
 
   evaluate(input: ClinicalValidationInput): readonly ValidationFinding[] {
-    const normalizedAllergies = new Set(
-      input.patientAllergies.map((value) => value.trim().toLocaleLowerCase("en")),
+    const allergies = new Set(
+      input.patientAllergies.map((allergy) => allergy.trim().toLowerCase()).filter(Boolean),
     );
-    const conflict = input.activeIngredientIds.find((ingredient) =>
-      normalizedAllergies.has(ingredient.trim().toLocaleLowerCase("en")));
-    if (!conflict) return [];
-    return [{
-      code: this.id,
-      severity: "critical",
-      summary: "A prescribed ingredient conflicts with a recorded allergy.",
-      source: "patient.allergies",
-      requiresAcknowledgement: true,
-    }];
+    if (allergies.size === 0) return [];
+    const matched = input.activeIngredientIds.some(
+      (ingredientId) => allergies.has(ingredientId.trim().toLowerCase()),
+    );
+    if (!matched) return [];
+    return [
+      {
+        code: this.id,
+        severity: "critical",
+        summary: "The patient has a declared allergy matching one of this medicine's active ingredients.",
+        source: "patient.allergies",
+        requiresAcknowledgement: true,
+      },
+    ];
   }
 }
 
-export class ClinicalAcknowledgementService {
-  acknowledge(input: {
-    result: ClinicalValidationResult;
-    pharmacistId: string;
-    rationale: string;
-  }): { acknowledgedBy: string; acknowledgedAt: string } {
-    if (
-      !input.result.hasHardStop
-      || input.pharmacistId.trim() === ""
-      || input.rationale.trim().length < 3
-    ) {
-      throw new Error("A pharmacist rationale is required for a clinical hard stop");
-    }
-    return {
-      acknowledgedBy: input.pharmacistId,
-      acknowledgedAt: new Date().toISOString(),
-    };
+const POLYPHARMACY_CONCURRENT_MEDICINE_THRESHOLD = 5;
+
+// Flags polypharmacy risk (a patient on several concurrent medications faces
+// materially higher interaction and adherence risk - a well-established
+// clinical heuristic, not a specific interaction claim) using only the
+// count already available on the input. Does not attempt real interaction
+// checking between specific drugs.
+export class PolypharmacyRiskRule implements ClinicalRule {
+  readonly id = "polypharmacy_risk";
+
+  evaluate(input: ClinicalValidationInput): readonly ValidationFinding[] {
+    if (input.currentMedicineIds.length < POLYPHARMACY_CONCURRENT_MEDICINE_THRESHOLD) return [];
+    return [
+      {
+        code: this.id,
+        severity: "warning",
+        summary: `The patient is currently on ${input.currentMedicineIds.length} other medications; review for interaction and polypharmacy risk.`,
+        source: "patient.current_medications",
+        requiresAcknowledgement: true,
+      },
+    ];
   }
 }

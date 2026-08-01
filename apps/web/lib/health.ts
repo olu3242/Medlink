@@ -51,13 +51,25 @@ function createPlatformHealth(): HealthService {
     name: "audit",
     category: "audit",
     critical: true,
-    check: async () => true,
+    check: async () => {
+      const database = await createSupabaseServerClient();
+      const { error } = await database.from("governance_audit_events")
+        .select("id").limit(1);
+      return !error;
+    },
+    recoveryHint: "Verify the governance audit event store is reachable.",
   }));
   registry.register(dependencyCheck({
     name: "outbox",
     category: "outbox",
     critical: true,
-    check: async () => true,
+    check: async () => {
+      const database = await createSupabaseServerClient();
+      const { error } = await database.from("runtime_outbox_events")
+        .select("id").limit(1);
+      return !error;
+    },
+    recoveryHint: "Verify the runtime outbox event store is reachable.",
   }));
 
   return new HealthService(registry, {

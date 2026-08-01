@@ -1,4 +1,4 @@
-import { normalizeMedicineName } from "../../medicine/src/index";
+import { normalizeMedicineName } from "@medlink/medicine";
 import type {
   MedicineSearchQuery,
   SearchMatch,

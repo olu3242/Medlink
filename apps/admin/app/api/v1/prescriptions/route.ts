@@ -28,8 +28,8 @@ export const POST = (request: Request) => runApi(request, {
   input: (value) => value.json(),
   execute: async (input, context, database) =>
     new PrescriptionApplication(database).create(
-      context.organizationId,
-      context.userId,
+      context,
+      request.headers.get("idempotency-key") ?? context.requestId,
       input,
     ),
   success: (data) => Response.json({ data }, { status: 201 }),

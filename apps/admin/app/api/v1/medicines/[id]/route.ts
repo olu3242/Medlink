@@ -34,7 +34,12 @@ export const PATCH = async (request: Request, route: Context) => {
     permission: "medicine:manage",
     schema: z.object({ id: idSchema, changes: updateSchema }),
     input: async (value) => ({ id, changes: await value.json() }),
-    execute: async (input, _context, database) =>
-      new CatalogApplication(database).update(input.id, input.changes),
+    execute: async (input, context, database) =>
+      new CatalogApplication(database).update(
+        context,
+        request.headers.get("idempotency-key") ?? context.requestId,
+        input.id,
+        input.changes,
+      ),
   });
 };

@@ -4,7 +4,6 @@ export interface MedicineSummary {
   id: string;
   name: string;
   genericName: string;
-  brandName?: string;
   strength: string;
   dosageForm: string;
   status: MedicineStatus;
@@ -12,7 +11,7 @@ export interface MedicineSummary {
 
 export interface MedicineDetail extends MedicineSummary {
   route?: string;
-  therapeuticClass?: string;
+  manufacturer?: string;
   controlled: boolean;
   updatedAt?: string;
 }

@@ -1,4 +1,4 @@
-import type { BrandMedicine } from "../../medicine/src/index";
+import type { BrandMedicine } from "@medlink/medicine";
 import { describe, expect, it } from "vitest";
 import { InvalidSearchQueryError } from "./errors";
 import { IndexedMedicineSearchService } from "./service";

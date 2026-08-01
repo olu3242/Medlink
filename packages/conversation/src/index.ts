@@ -1,7 +1,17 @@
-export type ConversationStatus="active"|"waiting_for_human"|"completed"|"expired";
-export interface ConversationSession{readonly id:string;readonly tenantId:string;readonly channel:"whatsapp";readonly channelIdentityHash:string;readonly status:ConversationStatus;readonly workflowId?:string;readonly version:number;}
-export interface ConversationMessage{readonly id:string;readonly sessionId:string;readonly direction:"inbound"|"outbound";readonly providerMessageId:string;readonly kind:"text"|"image"|"document"|"interactive";readonly receivedAt:Date;}
-export interface ConversationStore{findByProviderMessage(tenantId:string,id:string):Promise<ConversationMessage|null>;session(id:string):Promise<ConversationSession|null>;append(input:ConversationMessage):Promise<void>;transition(input:{id:string;expectedVersion:number;status:ConversationStatus;workflowId?:string}):Promise<ConversationSession|null>;}
-export interface ConversationIntent{readonly name:string;readonly confidence:number;readonly requiresHumanReview:boolean;}
-export class ConversationService{constructor(private readonly store:ConversationStore){}
- async accept(input:{tenantId:string;sessionId:string;message:ConversationMessage;intent:ConversationIntent}){const prior=await this.store.findByProviderMessage(input.tenantId,input.message.providerMessageId);if(prior)return{duplicate:true,message:prior};const session=await this.store.session(input.sessionId);if(!session||session.tenantId!==input.tenantId)throw new Error("Conversation session was not found");await this.store.append(input.message);if(input.intent.requiresHumanReview||input.intent.confidence<0.75){await this.store.transition({id:session.id,expectedVersion:session.version,status:"waiting_for_human",...(session.workflowId?{workflowId:session.workflowId}:{})});}return{duplicate:false,message:input.message};}}
+export * from "./models";
+export * from "./ports";
+export * from "./errors";
+export * from "./intent";
+export * from "./service";
+export {
+  conversationSchema,
+  conversationMessageSchema,
+  conversationEventSchema,
+  createConversationSchema,
+  recordInboundMessageSchema,
+  parseConversation,
+  parseConversationMessage,
+  parseConversationEvent,
+  type CreateConversation,
+  type RecordInboundMessage,
+} from "./validation";

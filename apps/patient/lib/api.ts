@@ -1,5 +1,5 @@
 export interface Mar{ id:string; medicineName:string; status:string; createdAt:string; pharmacyName?:string }
-export interface Match{ inventoryId:string; pharmacyName:string; medicineName:string; distanceKm:number; stockStatus:string }
+export interface Match{ inventoryId:string; pharmacyName:string; pharmacyLocality?:string; medicineName:string; distanceKm?:number; stockStatus:string }
 export interface TimelineEvent{ id:number; event_type:string; from_state?:string; to_state?:string; correlation_id?:string; occurred_at:string; metadata:Record<string,unknown> }
 export interface PatientNotification{ id:string; channel:string; template_key:string; status:string; correlation_id?:string; scheduled_for:string; sent_at?:string; delivered_at?:string; created_at:string }
 const origin=process.env.MEDLINK_API_URL??"http://localhost:3000";
