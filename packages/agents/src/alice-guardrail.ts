@@ -27,6 +27,14 @@ const CLINICAL_DECISION_LANGUAGE_PATTERNS: readonly RegExp[] = [
   /\btake \d+\s?(mg|milligrams?|tablets?|capsules?)\b/i,
   /\bstop taking\b/i,
   /\bswitch (to|from) .* medicine\b/i,
+  // Added while testing Clara's equivalency-explanation capability: the
+  // existing patterns above were tuned against Alice's dosage-question
+  // domain and didn't catch substitution-directive language, which is
+  // exactly Clara's domain. Same heuristic, extended by a second real use
+  // case rather than guessed in advance.
+  /\byou should substitute\b/i,
+  /\bshould be substituted\b/i,
+  /\bi recommend substituting\b/i,
 ];
 
 // Checked against the patient's own message, before any model call --
