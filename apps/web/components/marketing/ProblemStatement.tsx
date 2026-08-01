@@ -1,0 +1,3 @@
+import { SectionHeader } from "./SectionHeader";
+const problems = ["Calling pharmacy after pharmacy", "Traveling only to find empty shelves", "Unclear pricing and availability", "Unsafe, unverified substitutions"];
+export function ProblemStatement() { return <section className="section section--light"><div className="container"><SectionHeader eyebrow="The access gap" title="Finding prescribed medicine should not be another health burden" description="MedLink turns a fragmented search into one coordinated, pharmacist-led journey." /> <div className="problem-grid">{problems.map((problem, index) => <article key={problem}><b>0{index + 1}</b><h3>{problem}</h3></article>)}</div></div></section>; }

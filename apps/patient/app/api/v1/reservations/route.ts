@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AccessApplication } from "../../../../lib/application";
-import { runApi } from "../../../../lib/api-server";
+import { runExperienceApi } from "../../../../lib/api-server";
 
 const createSchema = z.object({
   marId: z.string().uuid(),
@@ -11,7 +11,7 @@ const createSchema = z.object({
   expiresAt: z.string().datetime(),
 });
 
-export const GET = (request: Request) => runApi(request, {
+export const GET = (request: Request) => runExperienceApi(request, "patient.reservation.list", {
   name: "reservations.list",
   permission: "reservation:read",
   schema: z.object({}),
@@ -20,7 +20,7 @@ export const GET = (request: Request) => runApi(request, {
     new AccessApplication(database).reservations(context.organizationId),
 });
 
-export const POST = (request: Request) => runApi(request, {
+export const POST = (request: Request) => runExperienceApi(request, "patient.reservation.create", {
   name: "reservations.create",
   permission: "reservation:create",
   schema: createSchema,

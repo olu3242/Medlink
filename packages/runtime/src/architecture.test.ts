@@ -22,7 +22,9 @@ describe("API architecture", () => {
       .filter((path) => !path.endsWith(join("health", "route.ts")))
       .filter((path) => {
         const source = readFileSync(path, "utf8");
-        return !source.includes("runApi") && !source.includes("runWebApi");
+        return !source.includes("runApi")
+          && !source.includes("runWebApi")
+          && !source.includes("runExperienceApi");
       })
       .map((path) => relative(process.cwd(), path));
     expect(violations).toEqual([]);

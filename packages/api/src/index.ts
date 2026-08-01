@@ -4,14 +4,17 @@ import { authorize, permissions, type Permission, type Role } from "@medlink/pla
 import { runtimeTracing, standardRuntimeHooks } from "@medlink/observability";
 import {
   createRuntime,
+  problemResponse,
   RuntimeError,
   type RuntimeContext,
 } from "@medlink/runtime";
 import { z } from "zod";
+import { integrationContract } from "./experience-contracts";
 
 export * from "./professional";
 export * from "./events";
 export * from "./platform-contracts";
+export * from "./experience-contracts";
 
 const environmentSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
@@ -52,6 +55,44 @@ export interface ApiOperation<TInput, TOutput> {
     database: SupabaseClient,
   ): Promise<TOutput>;
   success?(output: TOutput): Response;
+}
+
+function contractPathMatches(template: string, pathname: string): boolean {
+  const expected = template.split("/").filter(Boolean);
+  const actual = pathname.split("/").filter(Boolean);
+  return expected.length === actual.length && expected.every(
+    (segment, index) => segment.startsWith(":") || segment === actual[index],
+  );
+}
+
+export async function runExperienceApi<TInput, TOutput>(
+  request: Request,
+  contractId: string,
+  operation: ApiOperation<TInput, TOutput>,
+): Promise<Response> {
+  const contract = integrationContract(contractId);
+  if (!contract || contract.status === "missing") {
+    return problemResponse(new RuntimeError(
+      "business_rule",
+      "experience_contract_unavailable",
+      "The experience operation is not available",
+      501,
+    ), request.headers.get("x-correlation-id") ?? crypto.randomUUID());
+  }
+  const pathname = new URL(request.url).pathname;
+  if (
+    request.method !== contract.method
+    || operation.permission !== contract.permission
+    || !contractPathMatches(contract.path, pathname)
+  ) {
+    return problemResponse(new RuntimeError(
+      "validation",
+      "experience_contract_mismatch",
+      "The API operation does not match its registered experience contract",
+      500,
+    ), request.headers.get("x-correlation-id") ?? crypto.randomUUID());
+  }
+  return runApi(request, operation);
 }
 
 export async function runApi<TInput, TOutput>(

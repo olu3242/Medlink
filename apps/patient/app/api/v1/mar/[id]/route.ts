@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { AccessApplication } from "../../../../../lib/application";
-import { runApi } from "../../../../../lib/api-server";
+import { runExperienceApi } from "../../../../../lib/api-server";
 
 type Context = { params: Promise<{ id: string }> };
 
 export const GET = async (request: Request, route: Context) => {
   const id = z.string().uuid().parse((await route.params).id);
-  return runApi(request, {
+  return runExperienceApi(request, "patient.mar.get", {
     name: "mar.get",
     permission: "mar:read",
     schema: z.object({ id: z.string().uuid() }),

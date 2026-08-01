@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AccessApplication } from "../../../../lib/application";
-import { runApi } from "../../../../lib/api-server";
+import { runExperienceApi } from "../../../../lib/api-server";
 
 const createSchema = z.object({
   prescriptionId: z.string().uuid().optional(),
@@ -9,7 +9,7 @@ const createSchema = z.object({
   idempotencyKey: z.string().min(8).max(200),
 });
 
-export const GET = (request: Request) => runApi(request, {
+export const GET = (request: Request) => runExperienceApi(request, "patient.mar.list", {
   name: "mar.list",
   permission: "mar:read",
   schema: z.object({}),
@@ -18,7 +18,7 @@ export const GET = (request: Request) => runApi(request, {
     new AccessApplication(database).listMars(context.organizationId),
 });
 
-export const POST = (request: Request) => runApi(request, {
+export const POST = (request: Request) => runExperienceApi(request, "patient.mar.create", {
   name: "mar.create",
   permission: "mar:create",
   schema: createSchema,

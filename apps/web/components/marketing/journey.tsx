@@ -1,0 +1,3 @@
+import { DashboardPreview, type DashboardRow } from "./DashboardPreview";
+interface JourneyProps { id: string; audience: string; title: string; description: string; points: string[]; rows: DashboardRow[]; reversed?: boolean; }
+export function Journey({ id, audience, title, description, points, rows, reversed }: JourneyProps) { return <section id={id} className={`journey ${reversed ? "journey--reversed" : ""}`}><div className="container journey__grid"><div className="journey__copy"><p className="eyebrow">For {audience}</p><h2>{title}</h2><p>{description}</p><ul>{points.map((point) => <li key={point}>✓ <span>{point}</span></li>)}</ul></div><DashboardPreview title={`${audience} workspace`} rows={rows} /></div></section>; }

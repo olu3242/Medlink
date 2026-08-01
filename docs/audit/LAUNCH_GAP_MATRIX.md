@@ -180,7 +180,7 @@ Full evidence: `docs/audit/WHATSAPP_RUNTIME_CERTIFICATION.md`. Summary:
 
 | Evidence | Finding |
 | --- | --- |
-| `supabase/migrations/202607290010_reserve_inventory.sql` | Atomic: reservation row, inventory lock, MAR transition, and evidence commit together. Concurrency safety is real and DB-enforced -- `inventory_locks`' `sync_inventory_lock_quantity()` trigger relies on Postgres row-level locking within the transaction, not application-level coordination. |
+| `supabase/migrations/20260729001001_reserve_inventory.sql` | Atomic: reservation row, inventory lock, MAR transition, and evidence commit together. Concurrency safety is real and DB-enforced -- `inventory_locks`' `sync_inventory_lock_quantity()` trigger relies on Postgres row-level locking within the transaction, not application-level coordination. |
 | `202607290020_reserve_inventory_replay_validation.sql` | Idempotent replay validates the replayed payload actually matches the stored reservation (fixed this session, Codex P2 finding). |
 | `grep` for actual concurrent-execution tests (`concurren`) across the test suite | All hits are **static SQL-content assertions** about `WHERE`-clause race guards (e.g. "guards the UPDATE itself against a concurrent transition"), not a test that runs two real concurrent transactions against a live database. |
 

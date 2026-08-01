@@ -1,0 +1,2 @@
+import Link from "next/link";
+export function CallToAction() { return <section id="cta" className="section cta"><div className="container"><div><p className="eyebrow">Start with one request</p><h2>Find the medicine you need without the runaround.</h2><p>Search nearby availability, then let a pharmacist guide the next safe step.</p><div className="button-row"><Link className="button" href="/auth/sign-in">Find my medicine</Link><a className="button button--secondary" href="mailto:hello@medlink.africa">Partner with MedLink</a></div></div></div></section>; }

@@ -2,7 +2,7 @@
 -- merge conflict against the base branch.
 --
 -- 202607280008_atomic_reservation.sql (base branch, merged into this branch
--- after 202607290010_reserve_inventory.sql was already written
+-- after 20260729001001_reserve_inventory.sql was already written
 -- independently) defines
 -- reserve_inventory(uuid, uuid, uuid, uuid, integer, text, timestamptz) --
 -- a different parameter list from this branch's

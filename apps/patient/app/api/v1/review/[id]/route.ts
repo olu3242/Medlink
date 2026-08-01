@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AccessApplication } from "../../../../../lib/application";
-import { runApi } from "../../../../../lib/api-server";
+import { runExperienceApi } from "../../../../../lib/api-server";
 import { decisionSchema } from "./schema";
 
 const idSchema = z.string().uuid();
@@ -8,7 +8,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export const GET = async (request: Request, route: Context) => {
   const id = idSchema.parse((await route.params).id);
-  return runApi(request, {
+  return runExperienceApi(request, "pharmacist.review.get", {
     name: "clinical.reviews.get",
     permission: "clinical:review",
     schema: z.object({ id: idSchema }),
@@ -20,7 +20,7 @@ export const GET = async (request: Request, route: Context) => {
 
 export const PATCH = async (request: Request, route: Context) => {
   const id = idSchema.parse((await route.params).id);
-  return runApi(request, {
+  return runExperienceApi(request, "pharmacist.review.decide", {
     name: "clinical.reviews.decide",
     permission: "clinical:review",
     schema: z.object({ id: idSchema, decision: decisionSchema }),

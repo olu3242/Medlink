@@ -16,9 +16,67 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm run build
+      - name: Enforce architecture conformance
+        run: npm run test:architecture
+      - name: Validate production operations framework
+        run: npm run test:operations
+      - name: Validate enterprise service operations
+        run: npm run test:service-operations
+      - name: Validate wave transition framework
+        run: npm run test:wave-transition
+      - name: Validate enterprise platform evolution
+        run: npm run test:platform-evolution
+      - run: npm run test:coverage
+      - run: npm run build --workspaces --if-present
+      - run: npm run typecheck --workspaces --if-present
       - uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage/
           retention-days: 14
+
+  migration-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx supabase start
+      - run: npx supabase db reset
+      - name: Verify deterministic schema recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          dump_dir="$(mktemp -d)"
+          trap 'rm -rf "$dump_dir"' EXIT
+          first_dump="$dump_dir/first.sql"
+          recovered_dump="$dump_dir/recovered.sql"
+          npx supabase db dump --local --schema public --file "$first_dump"
+          test -s "$first_dump"
+          grep -q "runtime_outbox_events" "$first_dump"
+          sha256sum "$first_dump"
+          npx supabase db reset
+          npx supabase db dump --local --schema public --file "$recovered_dump"
+          test -s "$recovered_dump"
+          sha256sum "$recovered_dump"
+          cmp "$first_dump" "$recovered_dump"
+      - if: always()
+        run: npx supabase stop
+
+  live-database:
+    if: github.event_name == 'pull_request' && vars.RUN_LIVE_DATABASE_TESTS == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:live
+        env:
+          MEDLINK_LIVE_SUPABASE_URL: ${{ secrets.MEDLINK_LIVE_SUPABASE_URL }}
+          MEDLINK_LIVE_SUPABASE_ANON_KEY: ${{ secrets.MEDLINK_LIVE_SUPABASE_ANON_KEY }}

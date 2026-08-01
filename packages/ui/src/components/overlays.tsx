@@ -1,0 +1,11 @@
+"use client";
+import React from "react";
+import { Component, createContext, useCallback, useContext, useState, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "./primitives";
+export function Modal({ open, title, children, onClose }: { open: boolean; title: string; children: ReactNode; onClose: () => void }) { if (!open) return null; return <div role="presentation" style={{ position: "fixed", inset: 0, background: "rgb(0 0 0 / .55)", display: "grid", placeItems: "center", zIndex: 100 }} onMouseDown={onClose}><section className="ml-card" role="dialog" aria-modal="true" aria-labelledby="ml-modal-title" onMouseDown={(event) => event.stopPropagation()}><h2 id="ml-modal-title">{title}</h2>{children}<Button variant="secondary" onClick={onClose}>Close</Button></section></div>; }
+interface ToastItem { id: number; message: string; }
+const ToastContext = createContext<((message: string) => void) | null>(null);
+export function ToastProvider({ children }: { children: ReactNode }) { const [items, setItems] = useState<ToastItem[]>([]); const notify = useCallback((message: string) => { const id = Date.now(); setItems((value) => [...value, { id, message }]); setTimeout(() => setItems((value) => value.filter((item) => item.id !== id)), 4000); }, []); return <ToastContext.Provider value={notify}>{children}<div aria-live="polite" style={{ position: "fixed", right: "1rem", bottom: "1rem", zIndex: 110 }}>{items.map((item) => <div className="ml-alert" key={item.id}>{item.message}</div>)}</div></ToastContext.Provider>; }
+export function useToast() { const value = useContext(ToastContext); if (!value) throw new Error("useToast must be used inside ToastProvider"); return value; }
+export class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { failed: boolean }> { state = { failed: false }; static getDerivedStateFromError() { return { failed: true }; } componentDidCatch(error: Error, info: ErrorInfo) { console.error("UI boundary", error, info); } render() { return this.state.failed ? (this.props.fallback ?? <AlertFallback />) : this.props.children; } }
+function AlertFallback() { return <div className="ml-alert" role="alert"><strong>Something went wrong</strong><p>Refresh the page or contact support if the problem continues.</p></div>; }

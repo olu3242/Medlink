@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { AccessApplication } from "../../../../lib/application";
-import { runApi } from "../../../../lib/api-server";
+import { runExperienceApi } from "../../../../lib/api-server";
 
-export const GET = (request: Request) => runApi(request, {
+export const GET = (request: Request) => runExperienceApi(request, "pharmacist.review.list", {
   name: "clinical.reviews.list",
   permission: "clinical:review",
   schema: z.object({}),

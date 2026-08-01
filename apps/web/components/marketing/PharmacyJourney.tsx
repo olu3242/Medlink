@@ -1,0 +1,2 @@
+import { Journey } from "./journey";
+export function PharmacyJourney() { return <Journey id="pharmacies" audience="pharmacies" title="Turn missed demand into fulfilled care" description="Make verified inventory visible to people already searching nearby." points={["Sync stock, batch, and expiry data", "Receive time-bound reservations", "Plan inventory around local demand", "Track fulfillment from one workspace"]} rows={[{ label: "Reservations", value: "18 active" }, { label: "Stock sync", value: "2 min ago" }, { label: "Weekly fulfilled", value: "342" }]} />; }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { AppShell } from "@medlink/ui";
+import "@medlink/ui/styles.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,21 +12,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body>
-        <a className="skip-link" href="#main">Skip to content</a>
-        <div className="shell">
-          <aside className="sidebar">
-            <Link className="brand" href="/catalog">
-              MedLink <small>Clinical Admin</small>
-            </Link>
-            <nav aria-label="Admin navigation" className="nav">
-              <Link href="/catalog">Medicine catalog</Link>
-              <Link href="/medicine/new">Add medicine</Link>
-            </nav>
-          </aside>
-          <main className="main" id="main">{children}</main>
-        </div>
-      </body>
+      <body className="ml-body"><AppShell brand={<a href="/catalog">MedLink <small>Clinical Admin</small></a>} navigation={[{label:"Medicine catalog",href:"/catalog"},{label:"Add medicine",href:"/medicine/new"}]}>{children}</AppShell></body>
     </html>
   );
 }

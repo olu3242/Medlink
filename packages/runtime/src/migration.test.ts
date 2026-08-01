@@ -1,6 +1,10 @@
-import { readFileSync } from "node:fs";
+import { readFileSync as readRawFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+function readFileSync(path: string, encoding: "utf8"): string {
+  return readRawFileSync(path, encoding).replaceAll("\r\n", "\n");
+}
 
 describe("transactional runtime migration", () => {
   const sql = readFileSync(join(
@@ -67,7 +71,7 @@ describe("wave 2 batch commit migration", () => {
       process.cwd(),
       "supabase",
       "migrations",
-      "202607290009_wave2_batch_commits.sql",
+      "20260729000901_wave2_batch_commits.sql",
     ),
     "utf8",
   ).toLowerCase();
@@ -108,7 +112,7 @@ describe("wave 2 batch commit migration", () => {
 
 describe("reserve_inventory migration", () => {
   const sql = readFileSync(
-    join(process.cwd(), "supabase", "migrations", "202607290010_reserve_inventory.sql"),
+    join(process.cwd(), "supabase", "migrations", "20260729001001_reserve_inventory.sql"),
     "utf8",
   ).toLowerCase();
 
@@ -217,7 +221,7 @@ describe("retire legacy reserve_inventory overload migration", () => {
       process.cwd(),
       "supabase",
       "migrations",
-      "202607290014_retire_legacy_reserve_inventory_overload.sql",
+      "20260729001401_retire_legacy_reserve_inventory_overload.sql",
     ),
     "utf8",
   ).toLowerCase();
@@ -623,11 +627,11 @@ describe("durable observability migration", () => {
 
 describe("professional operations migrations", () => {
   const roleSql = readFileSync(
-    join(process.cwd(), "supabase/migrations/202607290012_professional_operations.sql"),
+    join(process.cwd(), "supabase/migrations/20260729001201_professional_operations.sql"),
     "utf8",
   ).toLowerCase();
   const fulfillmentSql = readFileSync(
-    join(process.cwd(), "supabase/migrations/202607290013_fulfillment_transitions.sql"),
+    join(process.cwd(), "supabase/migrations/20260729001301_fulfillment_transitions.sql"),
     "utf8",
   ).toLowerCase();
 

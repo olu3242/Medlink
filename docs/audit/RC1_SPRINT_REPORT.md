@@ -12,7 +12,7 @@ deliberately not fixed, and what remains.
 exist in any migration. The reservation-creation path was not flaky or
 undertested; it failed unconditionally.
 
-Implemented in `supabase/migrations/202607290010_reserve_inventory.sql`.
+Implemented in `supabase/migrations/20260729001001_reserve_inventory.sql`.
 It does not invent new concurrency machinery: `inventory_locks`' existing
 `sync_inventory_lock_quantity()` trigger (migration `202607270003`) already
 moves quantity from `inventory_batches` into a lock via an atomic
@@ -480,7 +480,7 @@ client). One semantic conflict the file-level merge didn't catch: the
 incoming migration defined a second, 7-parameter `reserve_inventory`
 overload nothing calls and that skips the runtime-evidence commit this
 branch's 11-parameter version makes — added
-`202607290014_retire_legacy_reserve_inventory_overload.sql` to drop it
+`20260729001401_retire_legacy_reserve_inventory_overload.sql` to drop it
 rather than leave two implementations of the same operation to diverge.
 204 tests, all 8 workspaces building, after the merge.
 

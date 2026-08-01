@@ -4,3 +4,4 @@ export * from "./extension-framework";
 export * from "./partner-trust";
 export * from "./conformance";
 export * from "./provider-certification";
+export * from "./mvp-fabric";
