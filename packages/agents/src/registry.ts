@@ -105,10 +105,10 @@ export const governedAgentCatalog: readonly AgentIdentity[] = [
   },
   {
     id: "medicine-match",
-    name: "Medicine Match Agent",
-    mission: "Search the medicine catalog and record candidate matches.",
+    name: "Medicine Match Agent (retired)",
+    mission: "Retired: declared during AGL-1 but never wired to any workflow step or route (confirmed -- no reference to this agent id or its search_medicine capability exists anywhere outside this file). Its intended capability is now the real, implemented AtlasAgent.search_medicines below, rather than leaving two competing catalog declarations for the same concern.",
     memoryBoundary: "session",
-    status: "active",
+    status: "retired",
     capabilities: [
       {
         name: "search_medicine",
@@ -242,19 +242,35 @@ export const governedAgentCatalog: readonly AgentIdentity[] = [
   },
   {
     id: "atlas",
-    name: "Atlas, Medicine Intelligence Agent (skeleton)",
-    mission: "AGSDK-14 skeleton: proves the Agent SDK's shared lifecycle helper against a second agent. Not yet a real medicine-intelligence capability -- see docs/audit/AGENT_SDK_CERTIFICATION.md.",
+    name: "Atlas, Medicine Intelligence Agent",
+    mission: "Structured medicine intelligence: normalization, catalog/fuzzy search, and duplicate-entry detection. Prefers deterministic catalog lookups over the AI Gateway; the model is contacted only as normalize_medicine_name's last-resort fallback. Never recommends a substitution, never approves an alternative, never makes a clinical judgment -- see docs/audit/ATLAS_MEDICINE_INTELLIGENCE_CERTIFICATION.md.",
     memoryBoundary: "none",
     status: "active",
-    version: "0.1.0",
+    version: "0.2.0",
     owner: "medicine-intelligence-team",
     promptIds: ["atlas_normalize_medicine_name"],
     capabilities: [
       {
         name: "normalize_medicine_name",
-        description: "Placeholder capability proving SDK integration. Not a certified medicine-normalization result.",
+        description: "Resolve a free-text medicine name to a structured catalog entry, with confidence, evidence, and alternatives. Falls back to LLM-assisted identification only when the catalog and fuzzy search find no adequate match.",
         mutatesState: false,
         allowedRoles: ["patient", "pharmacist", "pharmacy_staff"],
+        requiresHumanApproval: false,
+        clinicalDecision: false,
+      },
+      {
+        name: "search_medicines",
+        description: "Search the medicine catalog by brand or generic name (trigram-ranked). Deterministic -- never contacts the AI Gateway.",
+        mutatesState: false,
+        allowedRoles: ["patient", "pharmacist", "pharmacy_staff"],
+        requiresHumanApproval: false,
+        clinicalDecision: false,
+      },
+      {
+        name: "detect_duplicate_medicines",
+        description: "Flag existing catalog entries that may be spelling variants or duplicates of a candidate medicine name, before it is added. Deterministic -- never contacts the AI Gateway. Restricted to roles that can actually create a medicine record.",
+        mutatesState: false,
+        allowedRoles: ["tenant_admin", "platform_admin"],
         requiresHumanApproval: false,
         clinicalDecision: false,
       },
