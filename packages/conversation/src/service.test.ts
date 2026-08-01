@@ -257,6 +257,39 @@ describe("ConversationEngine", () => {
     expect(events.events.map((event) => event.kind)).toContain("handoff_requested");
   });
 
+  it("hands off to a human rather than crashing when the classified intent names a workflow with no executable steps yet", async () => {
+    class FailingWorkflowInvoker implements WorkflowInvoker {
+      async invoke(): Promise<WorkflowInvocationResult> {
+        throw new Error("No canonical workflow definition is wired for workflow type 'prescription_upload'");
+      }
+    }
+    const conversations = new InMemoryConversationRepository();
+    const messages = new InMemoryMessageStore();
+    const events = new InMemoryEventLog();
+    const conversationEngine = new ConversationEngine(
+      conversations,
+      messages,
+      events,
+      new FixedIntentClassifier({ intent: "prescription_upload", confidence: 1 }),
+      new FailingWorkflowInvoker(),
+    );
+
+    const result = await conversationEngine.receiveMessage({
+      ...baseMessage,
+      contentType: "image",
+      body: null,
+      mediaUrl: "media-id-1",
+    });
+
+    expect(result.action).toBe("handoff_requested");
+    expect(result.conversation.status).toBe("handed_off");
+    expect(events.events.map((event) => event.kind)).toContain("handoff_requested");
+    // The message itself was still durably recorded before the failed
+    // invocation -- a patient's prescription photo is never lost just
+    // because the orchestrator can't route it yet.
+    expect(result.message.mediaUrl).toBe("media-id-1");
+  });
+
   it("does not re-run intent detection or invoke a workflow once handed off", async () => {
     const { engine: conversationEngine, workflows } = engine(
       new FixedIntentClassifier({ intent: "unknown", confidence: 0 }),

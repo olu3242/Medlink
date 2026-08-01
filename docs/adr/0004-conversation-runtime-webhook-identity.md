@@ -2,12 +2,11 @@
 
 ## Status
 
-Proposed. Not yet accepted — this changes frozen platform contract
-(`packages/runtime`, `docs/ENTERPRISE_RUNTIME_CONTRACT.md`) per
-`IMPLEMENTATION.md`'s Platform Freeze Gate, which requires an accepted ADR
-before such a change lands, not an engineering judgment call. Recorded in
-`docs/audit/RC1_BACKLOG.md` P1 item 15 and `docs/audit/CERTIFICATION_GAP.md`
-as the specific blocker on WhatsApp webhook route wiring.
+Accepted (Option 2), 2026-08-01. Recorded in `docs/audit/RC1_BACKLOG.md` P1
+item 15 and `docs/audit/CERTIFICATION_GAP.md` as the specific blocker this
+closes on WhatsApp webhook route wiring. See "Refinement discovered during
+implementation" below for a narrower scope finding made while building the
+route this ADR authorizes.
 
 ## Context
 
@@ -110,6 +109,44 @@ No other request handler gains this exception.
 - Only after this is accepted can a WhatsApp webhook route be built that
   actually calls `createRuntime()`'s `run()`, keeping the "one pipeline"
   invariant intact instead of bypassing it.
+
+## Refinement discovered during implementation
+
+Every existing atomic RPC in this repository (`create_mar`,
+`decide_clinical_review`, `reserve_inventory`, `raise_agent_escalation`,
+`validate_mar`, ...), and `record_runtime_evidence` itself, opens with:
+
+```sql
+if auth.uid() is null or target_actor_id is distinct from auth.uid() then
+  raise exception 'Authenticated actor mismatch';
+end if;
+```
+
+A service-role connection has `auth.uid()` return `null` — there is no JWT
+`sub` claim to resolve. This means the system identity, authenticated only
+by a verified webhook signature and never given a real Supabase session,
+cannot call any actor-checked RPC, `record_runtime_evidence` included, no
+matter how it's threaded through `RuntimeContext`. Minting the system
+identity a genuine signed session (via the Supabase Admin API or a
+project-JWT-secret-signed token) to authenticate as that `auth.users` row
+for such a call is a distinct, security-sensitive follow-on decision, not
+implied by accepting this ADR.
+
+This does not block what this ADR actually authorizes today:
+`ConversationEngine.receiveMessage()` (`packages/conversation`) only ever
+writes to `conversation_messages`/`conversation_events` (service-role-only
+by construction, migration `202607290012`, no actor check) and, through
+`WorkflowInvoker`, only the read-only canonical workflow steps
+`apps/web/lib/workflow-invoker.ts`'s `WorkflowOrchestratorInvoker` currently
+wires up (`medicine_search`/WF-005). A WhatsApp-originated intent that would
+require an actor-checked mutation (e.g. `prescription_upload` eventually
+driving `create_mar`) has no executable step behind it yet for an unrelated
+reason — `WorkflowOrchestratorInvoker` doesn't wire one — and
+`ConversationEngine.receiveMessage()` now hands such a conversation off to a
+human rather than crashing (see its `catch` around `workflows.invoke()`).
+When a future pass does wire an actor-checked workflow step to a WhatsApp
+intent, closing that gap needs this signed-session decision made explicitly,
+not assumed.
 
 ## Consequences if rejected or deferred
 

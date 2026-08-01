@@ -29,6 +29,21 @@ import { RuntimeError } from "@medlink/runtime";
 // so a row that fails to parse is a real bug, not an honest gap, and the
 // mappers below throw rather than swallow it.
 
+// Postgres' unique_violation SQLSTATE, surfaced verbatim on PostgrestError.code.
+// A duplicate WhatsApp webhook delivery (Meta retries any delivery it
+// doesn't get a fast 2xx for) hits conversation_messages'
+// unique(organization_id, external_message_id) constraint -- this is how
+// recordInbound tells "already processed, replay safely" apart from every
+// other insert failure, which still throws.
+export function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === "23505"
+  );
+}
+
 function infrastructureError(cause: unknown): RuntimeError {
   return new RuntimeError(
     "infrastructure",
@@ -225,7 +240,24 @@ export class SupabaseMessageStore implements MessageStore {
       })
       .select("*")
       .single<ConversationMessageRow>();
-    if (error) throw infrastructureError(error);
+    if (error) {
+      // A retried webhook delivery for a message this row's
+      // (organization_id, external_message_id) uniqueness already recorded
+      // replays the existing row rather than erroring -- erroring here
+      // would make Meta retry again, forever, for a message that was
+      // already durably persisted.
+      if (isUniqueViolation(error) && message.externalMessageId) {
+        const { data: existing, error: lookupError } = await this.database
+          .from("conversation_messages")
+          .select("*")
+          .eq("organization_id", organizationId)
+          .eq("external_message_id", message.externalMessageId)
+          .single<ConversationMessageRow>();
+        if (lookupError) throw infrastructureError(lookupError);
+        return toConversationMessage(existing);
+      }
+      throw infrastructureError(error);
+    }
     return toConversationMessage(data);
   }
 
