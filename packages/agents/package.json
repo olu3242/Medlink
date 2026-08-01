@@ -1,1 +1,2 @@
-{"name":"@medlink/agents","version":"0.1.0","private":true,"type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@medlink/conversation":"*","@medlink/runtime":"*","@medlink/workflows":"*"}}
+{"name":"@medlink/agents","version":"0.1.0","private":true,"type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@medlink/ai":"*","@medlink/conversation":"*","@medlink/runtime":"*","@medlink/workflows":"*"}}
+

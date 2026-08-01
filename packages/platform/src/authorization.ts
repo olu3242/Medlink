@@ -34,7 +34,7 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
   patient: new Set([
     "medicine:read", "prescription:read", "prescription:create",
     "inventory:read", "reservation:read", "reservation:create",
-    "mar:read", "mar:create",
+    "mar:read", "mar:create", "assistant:use",
   ]),
 };
 

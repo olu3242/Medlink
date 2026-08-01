@@ -25,6 +25,10 @@ export interface RaiseEscalationInput {
   readonly workflowType: string;
   readonly subjectId: string;
   readonly idempotencyKey: string;
+  // Optional, non-clinical debugging/triage context for the human who
+  // decides this escalation (e.g. why a guardrail tripped). Never patient
+  // clinical content -- callers must not put PHI or model output here.
+  readonly payload?: Readonly<Record<string, unknown>>;
 }
 
 export interface DecideEscalationInput {
