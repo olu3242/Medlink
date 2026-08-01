@@ -28,6 +28,7 @@ export const permissions = [
   "mar:read",
   "mar:create",
   "mar:transition",
+  "assistant:use",
 ] as const;
 
 export type Permission = (typeof permissions)[number];
