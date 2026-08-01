@@ -1,7 +1,7 @@
 import type { AIGateway, PromptDefinition } from "@medlink/ai";
 import type { RuntimeContext } from "@medlink/runtime";
 import { detectsClinicalAdviceRequest, detectsClinicalDecisionLanguage } from "./alice-guardrail";
-import { authorizeAgentCapability, type AgentAuthorizationDenialReason } from "./policy";
+import { invokeGovernedCapability } from "./agent-runtime";
 import type { EscalationStore } from "./supervision";
 
 // ENGINE AG-02 -- Alice, the Patient Experience Agent. The first real
@@ -44,13 +44,6 @@ export interface AliceEscalation {
 }
 
 export type AliceResponse = AliceAnswer | AliceEscalation;
-
-export class AliceCapabilityDeniedError extends Error {
-  constructor(readonly capability: AliceCapability, readonly reason: AgentAuthorizationDenialReason) {
-    super(`Alice denied capability "${capability}" (${reason})`);
-    this.name = "AliceCapabilityDeniedError";
-  }
-}
 
 const PROMPT_ID_BY_CAPABILITY: Readonly<Record<AliceCapability, string>> = {
   answer_platform_question: "alice_answer_platform_question",
@@ -118,34 +111,39 @@ export class AliceAgent {
   ) {}
 
   async respond(context: RuntimeContext, request: AliceRequest): Promise<AliceResponse> {
-    const authorization = authorizeAgentCapability(context, "alice", request.capability);
-    if (!authorization.allowed) {
-      throw new AliceCapabilityDeniedError(request.capability, authorization.reason!);
-    }
-
-    if (detectsClinicalAdviceRequest(request.question)) {
-      return this.escalate(context, request, "patient_question_requires_clinical_judgment");
-    }
-
     const inputs: Record<string, string> =
       request.capability === "explain_workflow_status"
         ? { question: request.question, status: request.workflowStatus }
         : { question: request.question };
 
-    const invocation = await this.gateway.invoke(context, {
-      promptId: PROMPT_ID_BY_CAPABILITY[request.capability],
-      inputs,
-    });
+    // Authorization, the input/output guardrail sequence, and the AI
+    // Gateway call itself are the shared Agent SDK lifecycle
+    // (agent-runtime.ts) -- Alice supplies only her own guardrail
+    // predicates and, below, her own escalation-reason mapping, which is
+    // agent-specific and stays here rather than in the shared helper.
+    const result = await invokeGovernedCapability(
+      context,
+      this.gateway,
+      "alice",
+      request.capability,
+      { promptId: PROMPT_ID_BY_CAPABILITY[request.capability], inputs },
+      {
+        checkInput: (values) => detectsClinicalAdviceRequest(values.question ?? ""),
+        checkOutput: (text) => detectsClinicalDecisionLanguage(text),
+      },
+    );
 
-    if (detectsClinicalDecisionLanguage(invocation.result.text)) {
+    if (result.outcome === "guardrail_input") {
+      return this.escalate(context, request, "patient_question_requires_clinical_judgment");
+    }
+    if (result.outcome === "guardrail_output") {
       return this.escalate(context, request, "response_required_clinical_judgment");
     }
-
     return {
       kind: "answer",
-      text: invocation.result.text,
-      promptVersionUsed: invocation.promptVersionUsed,
-      providerId: invocation.providerId,
+      text: result.text,
+      promptVersionUsed: result.promptVersionUsed,
+      providerId: result.providerId,
     };
   }
 

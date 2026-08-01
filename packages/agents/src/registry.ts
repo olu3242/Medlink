@@ -46,6 +46,20 @@ export interface AgentIdentity {
   readonly memoryBoundary: AgentMemoryBoundary;
   readonly status: "active" | "retired";
   readonly capabilities: readonly AgentCapability[];
+  // Optional -- extends this existing registry to cover part of what a
+  // requested "AgentRegistry" (version/owner/capabilities/status/prompt
+  // set) asked for, rather than standing up a second, competing registry
+  // next to this one. Deliberately does NOT add "dependencies",
+  // "certification", "allowedModels", or "supportedMcpTools" fields: none
+  // of those have any real data to populate yet (no MCP server exists,
+  // no per-agent model restriction exists beyond the Gateway's own route
+  // config, no separate certification-artifact reference format is
+  // established) -- adding them now would be speculative fields with
+  // nothing behind them. Optional so the 7 pre-existing catalog entries
+  // that don't set them remain valid without a mass edit.
+  readonly version?: string;
+  readonly owner?: string;
+  readonly promptIds?: readonly string[];
 }
 
 // The governed agent catalog IMPLEMENTATION.md's "AI agent catalog and
@@ -183,6 +197,14 @@ export const governedAgentCatalog: readonly AgentIdentity[] = [
     mission: "Guide patients through the MedLink platform. Never diagnose, prescribe, interpret a prescription clinically, or override a pharmacist -- a question or a response that crosses that boundary is escalated to a human, not answered.",
     memoryBoundary: "session",
     status: "active",
+    version: "1.0.0",
+    owner: "patient-experience-team",
+    promptIds: [
+      "alice_answer_platform_question",
+      "alice_guide_prescription_upload",
+      "alice_explain_workflow_status",
+      "alice_collect_administrative_information",
+    ],
     capabilities: [
       {
         name: "answer_platform_question",
@@ -213,6 +235,26 @@ export const governedAgentCatalog: readonly AgentIdentity[] = [
         description: "Ask a clarifying, non-clinical administrative question.",
         mutatesState: false,
         allowedRoles: ["patient"],
+        requiresHumanApproval: false,
+        clinicalDecision: false,
+      },
+    ],
+  },
+  {
+    id: "atlas",
+    name: "Atlas, Medicine Intelligence Agent (skeleton)",
+    mission: "AGSDK-14 skeleton: proves the Agent SDK's shared lifecycle helper against a second agent. Not yet a real medicine-intelligence capability -- see docs/audit/AGENT_SDK_CERTIFICATION.md.",
+    memoryBoundary: "none",
+    status: "active",
+    version: "0.1.0",
+    owner: "medicine-intelligence-team",
+    promptIds: ["atlas_normalize_medicine_name"],
+    capabilities: [
+      {
+        name: "normalize_medicine_name",
+        description: "Placeholder capability proving SDK integration. Not a certified medicine-normalization result.",
+        mutatesState: false,
+        allowedRoles: ["patient", "pharmacist", "pharmacy_staff"],
         requiresHumanApproval: false,
         clinicalDecision: false,
       },
