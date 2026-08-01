@@ -33,6 +33,9 @@ describe("detectsClinicalDecisionLanguage", () => {
     "Take 500 mg every eight hours.",
     "You should stop taking this medicine immediately.",
     "You could switch to a generic medicine instead.",
+    "You should substitute this with the generic.",
+    "This medicine should be substituted for the branded version.",
+    "I recommend substituting this for a cheaper alternative.",
   ])("flags clinical-decision language in a response: %s", (text) => {
     expect(detectsClinicalDecisionLanguage(text)).toBe(true);
   });
