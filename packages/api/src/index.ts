@@ -130,6 +130,13 @@ export async function runApi<TInput, TOutput>(
           target_event_payload: {
             operation: entry.operation,
             requestId: entry.context.requestId,
+            // G09 minimum slice (FINAL_GO_NO_GO.md): the only consumer this
+            // enables so far (ReservationConfirmedNotificationConsumer)
+            // needs to know who to notify. actorId is already computed at
+            // this call site for target_actor_id above -- this is the
+            // generic, operation-agnostic version of that, available to
+            // any future consumer of this outbox event.
+            actorId: entry.context.userId,
           },
         });
         if (error) {

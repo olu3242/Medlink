@@ -24,6 +24,12 @@ Unchanged and unclosed by this integration sequence:
    already-certified code, not new capability.
 3. **Build the minimum G09 slice.** One real `NotificationChannel`
    (WhatsApp) plus wiring `OutboxDispatcher` to one real event.
+   **Update, 2026-08-04: built** -- see
+   `docs/audit/G09_NOTIFICATION_SLICE_CERTIFICATION.md`. One WhatsApp
+   channel, one event (`reservations.create`), dispatched best-effort
+   from the reservations route in the absence of a scheduler in this
+   environment (named tradeoff, not hidden). Items 1, 2, and 4 below
+   remain open.
 4. **Rotate the two historical leaked credentials.** Independent of the
    other three; should not wait on them.
 
