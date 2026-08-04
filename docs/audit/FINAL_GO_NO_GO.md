@@ -61,11 +61,21 @@ identified:
 3. Build the minimum G09 slice: one real `NotificationChannel`
    (WhatsApp, since `GraphApiWhatsAppSender` already exists and is
    tested) plus wiring `OutboxDispatcher` to at least one real event.
+   **Update, 2026-08-04: built.** See
+   `docs/audit/G09_NOTIFICATION_SLICE_CERTIFICATION.md` -- one WhatsApp
+   `NotificationChannel`, `OutboxDispatcher` wired to the
+   `reservations.create` event, dispatched best-effort from the
+   reservations route (no scheduler exists in this environment; that
+   tradeoff is named in the certification doc, not hidden). Items 1, 2,
+   and 4 remain open.
 4. Rotate the two historical leaked credentials (independent of the above,
    should happen regardless of pilot timing).
 
 None of these four items requires inventing new architecture -- all four
-are extensions of work already certified in this program.
+are extensions of work already certified in this program. **Item 3 is now
+closed for a single WhatsApp channel and a single event, per its own
+"one WhatsApp-only slice is sufficient for a pilot" scoping below; the
+decision below remains NO-GO until items 1, 2, and 4 are also closed.**
 
 ## What does NOT need to happen before a pilot (explicitly, to avoid scope creep)
 
@@ -103,6 +113,8 @@ produced in this session's certification program:
   `docs/audit/AGENT_GOVERNANCE_LAYER.md` (prior rounds)
 - `docs/release/rc1-ga/GA_DECISION.md` (authoritative for GA, unaffected
   by this document)
+- `docs/audit/G09_NOTIFICATION_SLICE_CERTIFICATION.md` (2026-08-04,
+  closes item 3 above for a single WhatsApp channel and event)
 
 No claim in this document or any document it cites asserts a PASS without
 a specific test, migration, or command backing it. Every Blocked item

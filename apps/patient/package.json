@@ -17,6 +17,9 @@
     "@medlink/prescription": "*",
     "@medlink/ai": "*",
     "@medlink/agents": "*",
+    "@medlink/notifications": "*",
+    "@medlink/whatsapp": "*",
+    "@medlink/workflows": "*",
     "@supabase/supabase-js": "^2.52.0",
     "zod": "^3.25.0"
   }
