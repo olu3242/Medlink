@@ -252,6 +252,11 @@ describe("workflow instances migration", () => {
     expect(sql).toContain("alter table public.workflow_instances enable row level security");
   });
 
+  it("reuses the canonical workflow status type created by enterprise governance", () => {
+    expect(sql).toContain("status public.workflow_run_status not null default 'running'");
+    expect(sql).not.toContain("create type public.workflow_run_status");
+  });
+
   it("is idempotent per organization on the workflow's idempotency key", () => {
     expect(sql).toContain("unique (organization_id, idempotency_key)");
   });
