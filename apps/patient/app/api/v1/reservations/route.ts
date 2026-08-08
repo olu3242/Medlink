@@ -1,15 +1,7 @@
 import { z } from "zod";
+import { createReservationCommandSchema, requestIdempotencyKey } from "@medlink/api";
 import { AccessApplication } from "../../../../lib/application";
 import { runExperienceApi } from "../../../../lib/api-server";
-
-const createSchema = z.object({
-  marId: z.string().uuid(),
-  pharmacyLocationId: z.string().uuid(),
-  inventoryBatchId: z.string().uuid(),
-  quantity: z.number().int().positive(),
-  idempotencyKey: z.string().min(8).max(200),
-  expiresAt: z.string().datetime(),
-});
 
 export const GET = (request: Request) => runExperienceApi(request, "patient.reservation.list", {
   name: "reservations.list",
@@ -23,8 +15,11 @@ export const GET = (request: Request) => runExperienceApi(request, "patient.rese
 export const POST = (request: Request) => runExperienceApi(request, "patient.reservation.create", {
   name: "reservations.create",
   permission: "reservation:create",
-  schema: createSchema,
-  input: (value) => value.json(),
+  schema: createReservationCommandSchema,
+  input: async (value) => ({
+    ...await value.json() as object,
+    idempotencyKey: requestIdempotencyKey(value),
+  }),
   execute: async (input, context, database) =>
     new AccessApplication(database).reserve(context, input.idempotencyKey, {
       marId: input.marId,

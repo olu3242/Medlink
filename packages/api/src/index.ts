@@ -15,6 +15,7 @@ export * from "./professional";
 export * from "./events";
 export * from "./platform-contracts";
 export * from "./experience-contracts";
+export * from "./reservation-contracts";
 
 const environmentSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),

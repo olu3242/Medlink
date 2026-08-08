@@ -555,6 +555,27 @@ describe("atomic reservation migration", () => {
   });
 });
 
+describe("reservation decision migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase/migrations/202608010004_reservation_decision.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("atomically records decisions, compensates declined locks, and emits evidence", () => {
+    expect(sql).toContain("function public.decide_reservation");
+    expect(sql).toContain("for update");
+    expect(sql).toContain("insert into public.fulfillment_transitions");
+    expect(sql).toContain("status = 'released'");
+    expect(sql).toContain("record_runtime_evidence");
+  });
+
+  it("enforces professional authorization and idempotent replay binding", () => {
+    expect(sql).toContain("array['pharmacist', 'pharmacy_staff']");
+    expect(sql).toContain("idempotency key was already used for a different reservation decision");
+    expect(sql).toContain("only a pending reservation may receive a pharmacy decision");
+  });
+});
+
 describe("payment reservation foreign-key prerequisite", () => {
   const accessSql = readFileSync(
     join(process.cwd(), "supabase/migrations/202607270003_medication_access_core.sql"),

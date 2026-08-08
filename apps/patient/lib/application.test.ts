@@ -43,12 +43,21 @@ describe("toMatch", () => {
   it("maps inventory_batches columns to the Match contract using the real pharmacy locality, not a fabricated distance", () => {
     const row: InventoryRow = {
       id: "00000000-0000-4000-8000-000000000002",
+      medicine_id: "00000000-0000-4000-8000-000000000003",
+      pharmacy_location_id: "00000000-0000-4000-8000-000000000004",
+      available_quantity: 12,
+      expires_on: "2027-01-01",
       status: "available",
       medicine: { brand_name: "Panadol", generic_name: "Paracetamol" },
       pharmacy: { name: "Corner Pharmacy", locality: "Lekki" },
     };
     expect(toMatch(row)).toEqual({
       inventoryId: row.id,
+      inventoryBatchId: row.id,
+      medicineId: row.medicine_id,
+      pharmacyLocationId: row.pharmacy_location_id,
+      availableQuantity: 12,
+      expiresOn: "2027-01-01",
       medicineName: "Panadol",
       pharmacyName: "Corner Pharmacy",
       pharmacyLocality: "Lekki",
@@ -57,7 +66,14 @@ describe("toMatch", () => {
   });
 
   it("falls back to placeholders rather than throwing when a join is missing", () => {
-    const row: InventoryRow = { id: "1", status: "available" };
+    const row: InventoryRow = {
+      id: "1",
+      medicine_id: "2",
+      pharmacy_location_id: "3",
+      available_quantity: 1,
+      expires_on: "2027-01-01",
+      status: "available",
+    };
     const match = toMatch(row);
     expect(match.medicineName).toBe("Medicine");
     expect(match.pharmacyName).toBe("Pharmacy");
