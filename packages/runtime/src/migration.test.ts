@@ -732,6 +732,10 @@ describe("conversation runtime system identity migration (ADR 0004)", () => {
     expect(sql).toContain("encrypted_password");
     expect(sql).not.toMatch(/encrypted_password.*\n.*'\$2/);
   });
+
+  it("does not mutate metadata on the GoTrue-owned auth.users table", () => {
+    expect(sql).not.toContain("comment on table auth.users");
+  });
 });
 
 describe("prescription file storage migration (G05, Engine 26)", () => {
