@@ -141,6 +141,15 @@ describe("reserve_inventory migration", () => {
     expect(sql).toContain("public.is_organization_member(target_organization_id)");
     expect(sql).toContain("array['pharmacist', 'pharmacy_staff']");
   });
+
+  it("identifies the canonical overload in COMMENT ON FUNCTION", () => {
+    expect(sql).toContain(
+      "comment on function public.reserve_inventory(\n"
+      + "  uuid, uuid, text, text, text, text, uuid, uuid, uuid, integer, timestamptz\n"
+      + ") is",
+    );
+    expect(sql).not.toContain("comment on function public.reserve_inventory is");
+  });
 });
 
 describe("generics migration", () => {
@@ -399,6 +408,15 @@ describe("reserve_inventory replay validation migration", () => {
     expect(sql).toContain("insert into public.inventory_locks");
     expect(sql).toContain("public.record_runtime_evidence(");
     expect(sql).not.toContain("commit;");
+  });
+
+  it("continues to comment the canonical overload unambiguously", () => {
+    expect(sql).toContain(
+      "comment on function public.reserve_inventory(\n"
+      + "  uuid, uuid, text, text, text, text, uuid, uuid, uuid, integer, timestamptz\n"
+      + ") is",
+    );
+    expect(sql).not.toContain("comment on function public.reserve_inventory is");
   });
 });
 
