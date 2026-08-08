@@ -13,6 +13,7 @@ export interface ProfessionalOperation {
 export const professionalOperations: readonly ProfessionalOperation[] = [
   { id: "inventory.list", method: "GET", path: "/api/v1/inventory", permission: "inventory:read", roles: ["pharmacy_staff", "pharmacist", "provider"] },
   { id: "reservation.list", method: "GET", path: "/api/v1/reservations", permission: "reservation:read", roles: ["pharmacy_staff", "pharmacist"] },
+  { id: "reservation.decision", method: "PATCH", path: "/api/v1/reservations/:id/decision", permission: "reservation:manage", roles: ["pharmacy_staff", "pharmacist"] },
   { id: "reservation.ready", method: "PATCH", path: "/api/v1/reservations/:id/ready", permission: "reservation:manage", roles: ["pharmacy_staff", "pharmacist"] },
   { id: "reservation.collect", method: "PATCH", path: "/api/v1/reservations/:id/collect", permission: "reservation:manage", roles: ["pharmacy_staff", "pharmacist"] },
   { id: "review.list", method: "GET", path: "/api/v1/review", permission: "clinical:review", roles: ["pharmacist"] },

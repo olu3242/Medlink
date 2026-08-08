@@ -45,6 +45,10 @@ export function toMar(row: MarRow) {
 
 export interface InventoryRow {
   id: string;
+  medicine_id: string;
+  pharmacy_location_id: string;
+  available_quantity: number;
+  expires_on: string;
   status: string;
   medicine?: { brand_name: string; generic_name: string } | null;
   pharmacy?: { name: string; locality: string } | null;
@@ -61,6 +65,11 @@ export interface InventoryRow {
 export function toMatch(row: InventoryRow) {
   return {
     inventoryId: row.id,
+    inventoryBatchId: row.id,
+    medicineId: row.medicine_id,
+    pharmacyLocationId: row.pharmacy_location_id,
+    availableQuantity: row.available_quantity,
+    expiresOn: row.expires_on,
     medicineName: row.medicine?.brand_name || row.medicine?.generic_name || "Medicine",
     pharmacyName: row.pharmacy?.name || "Pharmacy",
     pharmacyLocality: row.pharmacy?.locality,
@@ -231,6 +240,25 @@ export class AccessApplication {
       target_inventory_batch_id: input.inventoryBatchId,
       target_quantity: input.quantity,
       target_expires_at: input.expiresAt,
+    }));
+  }
+
+  async decideReservation(
+    context: RuntimeContext,
+    idempotencyKey: string,
+    reservationId: string,
+    input: { decision: "confirmed" | "declined"; reason: string },
+  ) {
+    return result(this.database.rpc("decide_reservation", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: idempotencyKey,
+      target_channel: context.channel,
+      target_reservation_id: reservationId,
+      target_decision: input.decision,
+      target_reason: input.reason,
     }));
   }
 }

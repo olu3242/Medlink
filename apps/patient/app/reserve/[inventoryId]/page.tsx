@@ -1,2 +1,5 @@
-"use client";import {Button} from "@medlink/ui";import Link from "next/link";import {useParams} from "next/navigation";import {useState} from "react";
-export default function Reserve(){const {inventoryId}=useParams<{inventoryId:string}>();const[message,setMessage]=useState("");const[busy,setBusy]=useState(false);async function submit(){setBusy(true);setMessage("");try{const r=await fetch("/api/v1/reservations",{method:"POST",headers:{"Content-Type":"application/json","Idempotency-Key":crypto.randomUUID()},body:JSON.stringify({inventoryId})});if(!r.ok)throw new Error();setMessage("Reservation requested. The pharmacy will confirm availability.")}catch{setMessage("The reservation could not be requested. Please try again.")}finally{setBusy(false)}}return <><header className="head"><div><div className="eyebrow">Reservation</div><h1>Review your request</h1></div><Link className="secondary" href="/search">Back to results</Link></header><section className="card"><h2>Before you reserve</h2><p>This request does not guarantee stock until the pharmacy confirms it. A pharmacist must approve any clinical substitution.</p><div className="actions"><Button disabled={busy} onClick={submit}>{busy?"Requesting…":"Request reservation"}</Button><span aria-live="polite">{message}</span></div></section></>}
+import { redirect } from "next/navigation";
+
+export default function RetiredLegacyReservationPage() {
+  redirect("/patient/search");
+}
