@@ -1,5 +1,13 @@
 # MERDP Architecture Set
 
+## Implementation status
+
+**PROPOSED / CONSTITUTIONAL.** These documents define governed reference-data
+boundaries and future engine contracts; they do not establish deployed MERDP
+runtime engines or production certification. Transactional systems remain
+authoritative for live inventory quantities, reservations, prescriptions, MAR,
+and fulfillment state.
+
 ## Authority hierarchy
 
 | Level | Artifact | Authority |

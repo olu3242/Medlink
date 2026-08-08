@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { assertGatewayPath, gatewayHeaders, gatewayOrigin } from "./gateway-contract";
+import {
+  assertGatewayPath,
+  gatewayHeaders,
+  gatewayOrigin,
+  gatewaySignal,
+} from "./gateway-contract";
 
 describe("gateway API contract", () => {
   it("accepts only canonical relative API paths", () => {
@@ -30,5 +35,13 @@ describe("gateway API contract", () => {
       "x-forwarded-host": "app.medlink.com",
       "x-forwarded-proto": "https",
     }))).toBe("https://app.medlink.com");
+  });
+
+  it("preserves caller cancellation while always enforcing a timeout", () => {
+    const caller = new AbortController();
+    const signal = gatewaySignal(caller.signal, 60_000);
+    expect(signal.aborted).toBe(false);
+    caller.abort();
+    expect(signal.aborted).toBe(true);
   });
 });

@@ -1,6 +1,13 @@
 import "server-only";
 import { headers } from "next/headers";
-import { assertGatewayPath, gatewayHeaders, gatewayOrigin } from "./gateway-contract";
+import {
+  assertGatewayPath,
+  gatewayHeaders,
+  gatewayOrigin,
+  gatewaySignal,
+} from "./gateway-contract";
+
+type GatewayRequestInit = RequestInit & { timeoutMs?: number };
 
 export class GatewayApiError extends Error {
   constructor(
@@ -11,12 +18,14 @@ export class GatewayApiError extends Error {
   }
 }
 
-export async function gatewayApi<T>(path: string, init?: RequestInit): Promise<T> {
+export async function gatewayApi<T>(path: string, init?: GatewayRequestInit): Promise<T> {
   const incoming = await headers();
+  const { timeoutMs, ...requestInit } = init ?? {};
   const response = await fetch(new URL(assertGatewayPath(path), gatewayOrigin(incoming)), {
-    ...init,
+    ...requestInit,
     headers: gatewayHeaders(incoming, init?.headers),
     cache: init?.cache ?? "no-store",
+    signal: gatewaySignal(init?.signal, timeoutMs),
   });
   if (!response.ok) {
     throw new GatewayApiError(response.status, response.headers.get("x-correlation-id"));
@@ -24,6 +33,6 @@ export async function gatewayApi<T>(path: string, init?: RequestInit): Promise<T
   return response.json() as Promise<T>;
 }
 
-export async function gatewayData<T>(path: string, init?: RequestInit): Promise<T> {
+export async function gatewayData<T>(path: string, init?: GatewayRequestInit): Promise<T> {
   return (await gatewayApi<{ data: T }>(path, init)).data;
 }

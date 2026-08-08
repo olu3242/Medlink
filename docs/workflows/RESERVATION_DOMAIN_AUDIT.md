@@ -3,25 +3,27 @@
 ## Verdict
 
 The atomic creation command is authoritative and substantially correct. The
-client and professional fulfillment surfaces are not harmonized with it.
-Reservation creation is therefore `PARTIAL`; pharmacy decision and subsequent
-fulfillment are `MISSING` at the executable API/persistence boundary.
+gateway patient creation and pharmacy confirmation/decline surfaces are now
+harmonized with it. Reservation creation and pharmacy decision are
+`IMPLEMENTED` and source-tested, but remain `PARTIAL` for certification because
+live database/auth execution is blocked. Ready, collect, and expiry remain
+`MISSING` at the executable API/persistence boundary.
 
 ## Artifact inventory
 
 | Layer | Artifact | Finding |
 | --- | --- | --- |
 | Legacy patient UI | `apps/patient/app/reserve/[inventoryId]/page.tsx` | Sends only `inventoryId`; incompatible and must be retired |
-| Gateway search UI | `apps/web/app/(portals)/patient/search/page.tsx` | Has batch identity but does not select matched MAR or carry pharmacy location |
-| API creation | `apps/patient/app/api/v1/reservations/route.ts` | Correct core fields, but idempotency appears in body while runtime also reads header |
+| Gateway search UI | `apps/web/app/(portals)/patient/search/page.tsx` | Carries canonical batch, medicine, and pharmacy-location identity into a matched-MAR reservation form |
+| API creation | `apps/patient/app/api/v1/reservations/route.ts` | Validates the complete command and derives idempotency only from the required header |
 | Application | `AccessApplication.reserve()` | Correctly delegates to the atomic RPC |
 | Atomic RPC | `reserve_inventory` | Validates actor, tenant, matched MAR, batch/location, availability, quantity, expiry, replay payload; atomically inserts reservation/lock, transitions MAR, and records evidence |
 | Tables | `reservations`, `inventory_locks` | Canonical status and lock invariants exist |
 | Professional contract | `packages/api/src/professional.ts` | Defines `ready` and `collect`; no confirmation/decline decision |
-| Pharmacy UI | `apps/pharmacy/app/reservations/page.tsx` | Sends legacy `confirmed`/`declined` directly to an unimplemented resource patch |
+| Gateway pharmacy UI | `apps/web/app/(portals)/pharmacy/reservations/page.tsx` | Lists the canonical queue and sends confirmation/decline through the registered decision route |
 | Fulfillment domain | `FulfillmentCoordinator` | Defines reserve/ready/collect/compensate in memory-facing ports, not database/API binding |
-| Persistence | `fulfillment_transitions` | Append-only evidence table exists; no atomic transition command uses it |
-| Events | `packages/api/src/events.ts` | Created/ready/collected exist; confirmed/cancelled are absent |
+| Persistence | `fulfillment_transitions` | `decide_reservation` appends decision history atomically with state/lock/evidence changes |
+| Events | `packages/api/src/events.ts` | Created, confirmed, cancelled, ready, and collected contracts exist |
 | Notifications | notification domain/outbox | Infrastructure exists; no decision command schedules a reservation outcome notification |
 
 ## Canonical creation command
@@ -52,13 +54,10 @@ with an explicit reason; a new `declined` database state is unnecessary.
 
 ## Required closure
 
-1. Use one header idempotency key and reject its absence.
-2. Enrich inventory results with canonical batch/location/medicine identity.
-3. Require selection of a matched MAR before reservation.
-4. Add an atomic pharmacy decision RPC covering status, lock compensation,
-   fulfillment transition, runtime evidence/outbox, and replay validation.
-5. Register confirmed/cancelled event contracts and the decision operation.
-6. Implement ready/collect RPC bindings after the decision gate.
-7. Add live database tests for concurrency, replay, authorization, and rollback.
+1. Execute the complete migration chain and decision flow against live PostgreSQL.
+2. Add live database tests for concurrency, replay, authorization, and rollback.
+3. Implement ready/collect RPC bindings after the decision gate.
+4. Implement and exercise expiry scheduling and recovery.
+5. Bind notification delivery and realtime UI convergence to committed events.
 
 No compatibility endpoint or one-field payload is permitted.

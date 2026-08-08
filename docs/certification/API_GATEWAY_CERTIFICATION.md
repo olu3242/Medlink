@@ -13,8 +13,8 @@ runtime and full portal migration are not certified.**
 - `apps/web/lib/api/gateway-contract.ts` rejects absolute/cross-origin API paths.
 - The server gateway client forwards cookie, bearer authorization, tenant hint,
   locale, and correlation ID while preserving explicitly supplied headers.
-- The browser client uses relative paths, same-origin credentials, and timeout
-  cancellation.
+- Browser and server clients enforce timeout cancellation while preserving a
+  caller-supplied cancellation signal; the browser uses same-origin credentials.
 - Patient request list, search, timeline, and notification pages live under the
   `/patient/*` gateway route group.
 

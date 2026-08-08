@@ -39,3 +39,11 @@ export function gatewayOrigin(incoming: Headers): string {
   );
   return `${protocol}://${host}`;
 }
+
+export function gatewaySignal(
+  supplied: AbortSignal | null | undefined,
+  timeoutMs = 15_000,
+): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return supplied ? AbortSignal.any([supplied, timeout]) : timeout;
+}
