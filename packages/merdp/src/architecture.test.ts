@@ -1,0 +1,3 @@
+import { readFileSync } from "node:fs"; import { describe,expect,it } from "vitest";
+const sql=readFileSync("supabase/migrations/202608120022_merdp_wave1.sql","utf8");
+describe("MERDP guards",()=>{it("separates identities",()=>{expect(sql).toContain("canonical_product_id uuid references public.medicines(id)");expect(sql).not.toMatch(/regulatory_identifier text primary key/i);});it("isolates publication from raw",()=>{expect(sql).toContain("create table public.merdp_publications");expect(sql).toContain("alter table public.etl_source_records enable row level security");});it("does not own inventory",()=>expect(sql).not.toMatch(/\b(stock_quantity|reservation_quantity)\b/i));});
