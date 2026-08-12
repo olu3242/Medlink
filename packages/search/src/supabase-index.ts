@@ -7,8 +7,20 @@ type SearchRow = {
   entity_id: string;
   entity_type: SearchEntityType;
   relevance: number;
-  matched_on: SearchIndexHit["matchedOn"];
+  matched_on:
+    | "brand"
+    | "generic"
+    | "ingredient"
+    | "manufacturer"
+    | "registration"
+    | "synonym";
 };
+
+function legacyMatchedOn(value: SearchRow["matched_on"]):
+SearchIndexHit["matchedOn"] {
+  if (value === "manufacturer") return "manufacturer";
+  return "name";
+}
 
 export class SupabaseMedicineSearchIndex implements MedicineSearchIndex {
   constructor(private readonly database: SupabaseClient) {}
@@ -37,7 +49,7 @@ export class SupabaseMedicineSearchIndex implements MedicineSearchIndex {
         id: row.entity_id,
         type: row.entity_type,
         score: row.relevance,
-        matchedOn: row.matched_on,
+        matchedOn: legacyMatchedOn(row.matched_on),
       })),
       ...(rows.length > input.limit
         ? { nextCursor: String(offset + input.limit) }

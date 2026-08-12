@@ -2,6 +2,7 @@ export interface AgentContext {
   readonly tenantId: string;
   readonly patientId?: string | undefined;
   readonly prescriptionId?: string | undefined;
+  readonly workflowId?: string | undefined;
   readonly pharmacistId?: string | undefined;
   readonly pharmacyId?: string | undefined;
   readonly sessionId?: string | undefined;
@@ -71,4 +72,26 @@ export interface AgentPolicy {
       "action" | "actor" | "capability" | "context" | "engine" | "tenantId"
     >,
   ): AgentPolicyDecision;
+}
+
+export interface AgentStage<TInput, TContext, TOutput> {
+  readonly id: string;
+  initialize(input: TInput, signal: AbortSignal): Promise<TContext | null>;
+  validate(context: TContext, signal: AbortSignal): void | Promise<void>;
+  execute(context: TContext, signal: AbortSignal): Promise<TOutput>;
+  verify(
+    context: TContext,
+    output: TOutput,
+    signal: AbortSignal,
+  ): void | Promise<void>;
+  publish(
+    context: TContext,
+    output: TOutput,
+    signal: AbortSignal,
+  ): Promise<void>;
+  complete(
+    context: TContext,
+    output: TOutput,
+    signal: AbortSignal,
+  ): Promise<void>;
 }

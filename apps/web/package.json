@@ -8,10 +8,15 @@
     "start": "next start"
   },
   "dependencies": {
+    "@medlink/agent-runtime": "*",
     "@medlink/database": "*",
+    "@medlink/inventory": "*",
     "@medlink/observability": "*",
     "@medlink/platform": "*",
+    "@medlink/prescription": "*",
     "@medlink/runtime": "*",
-    "@medlink/ui": "*"
+    "@medlink/ui": "*",
+    "@supabase/supabase-js": "^2.52.0",
+    "zod": "^3.25.0"
   }
 }

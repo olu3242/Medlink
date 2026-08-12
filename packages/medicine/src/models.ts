@@ -1,4 +1,4 @@
-export const medicineStatuses = ["active", "inactive"] as const;
+export const medicineStatuses = ["draft", "active", "retired"] as const;
 export type MedicineStatus = (typeof medicineStatuses)[number];
 
 export const dosageForms = [

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { runtimeDiagnostics } from "@medlink/observability";
+import { clinicalWorkerConfigured } from "../../../../lib/clinical-worker";
 
 export const dynamic = "force-dynamic";
 
 export function GET() {
+  const clinicalWorker = clinicalWorkerConfigured();
   return NextResponse.json({
     status: "ok",
     service: "medlink-web",
@@ -11,10 +13,11 @@ export function GET() {
     timestamp: new Date().toISOString(),
     runtime: {
       api: "ready",
-      workers: "not_configured",
+      workers: clinicalWorker ? "configured" : "not_configured",
       conversation: "planned",
       database: "unknown",
-      queue: "not_configured",
+      queue: clinicalWorker ? "configured" : "not_configured",
+      clinicalPipeline: clinicalWorker ? "configured" : "not_configured",
     },
     metrics: runtimeDiagnostics(),
   });
