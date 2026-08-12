@@ -66,7 +66,7 @@ export class HttpPrescriptionScanner implements PrescriptionScanner {
     const result = await this.executor.execute({
       id: taskId,
       engine: "prescription-intake",
-      capability: "ML-CAP-003",
+      capability: "ML-CAP-006",
       action: "file_scan",
       actor: this.context.userId,
       tenantId: this.context.organizationId,

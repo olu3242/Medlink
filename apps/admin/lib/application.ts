@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RuntimeError } from "@medlink/runtime";
-import { SupabaseMedicineSearchIndex } from "@medlink/search";
+import {
+  CanonicalMedicineCatalog,
+  SupabaseCanonicalMedicineRepository,
+  type CanonicalMedicineRepository,
+} from "@medlink/medicine";
 
 async function result<T>(
   query: PromiseLike<{ data: T; error: { message: string } | null }>,
@@ -21,7 +25,13 @@ async function result<T>(
 }
 
 export class CatalogApplication {
-  constructor(private readonly database: SupabaseClient) {}
+  private readonly catalog: CanonicalMedicineCatalog;
+
+  constructor(private readonly database: SupabaseClient) {
+    this.catalog = new CanonicalMedicineCatalog(
+      new SupabaseCanonicalMedicineRepository(database),
+    );
+  }
 
   async brands() {
     const rows = await result(this.database.from("medicines")
@@ -38,34 +48,25 @@ export class CatalogApplication {
   }
 
   async equivalents(medicineId: string) {
-    return (await result(this.database.from("medicine_equivalences")
-      .select("*, equivalent:medicines!equivalent_medicine_id(*)")
-      .eq("source_medicine_id", medicineId).eq("status", "active")
-      .eq("requires_pharmacist_review", true).is("deleted_at", null))) ?? [];
+    return this.catalog.alternatives(medicineId);
   }
 
-  async list(input: { query?: string | undefined; status?: string | undefined }) {
-    let statement = this.database.from("medicines")
-      .select("*", { count: "exact" }).is("deleted_at", null)
-      .order("brand_name").limit(100);
-    if (input.query) {
-      const escaped = input.query.replaceAll(",", "").replaceAll("%", "");
-      statement = statement.or(
-        `brand_name.ilike.%${escaped}%,generic_name.ilike.%${escaped}%`,
-      );
-    }
-    if (input.status) statement = statement.eq("status", input.status);
-    const { data, error, count } = await statement;
-    if (error) {
-      throw new RuntimeError(
-        "infrastructure",
-        "medicine_list_failed",
-        "Medicines could not be loaded",
-        503,
-        true,
-      );
-    }
-    return { items: data ?? [], total: count ?? 0 };
+  ingredients() {
+    return this.catalog.listIngredients();
+  }
+
+  createIngredient(
+    input: Parameters<CanonicalMedicineCatalog["createIngredient"]>[0],
+  ) {
+    return this.catalog.createIngredient(input);
+  }
+
+  list(input: {
+    query?: string | undefined;
+    status?: Parameters<CanonicalMedicineRepository["list"]>[0]["status"];
+    limit?: number | undefined;
+  }) {
+    return this.catalog.list(input);
   }
 
   async search(input: {
@@ -73,71 +74,33 @@ export class CatalogApplication {
     limit?: number | undefined;
     cursor?: string | undefined;
   }) {
-    const index = new SupabaseMedicineSearchIndex(this.database);
-    const page = await index.search({
-      normalizedTerm: input.term.trim().toLocaleLowerCase("en"),
-      types: ["brand", "generic"],
+    return this.catalog.search({
+      query: input.term,
       limit: input.limit ?? 20,
-      ...(input.cursor ? { cursor: input.cursor } : {}),
+      offset: input.cursor ? Number(input.cursor) : 0,
     });
-    const ids = [...new Set(page.hits.map((hit) => hit.id))];
-    const rows = ids.length === 0
-      ? []
-      : await result(this.database.from("medicines").select("*").in("id", ids));
-    const byId = new Map((rows ?? []).map((row) => [row.id, row]));
-    return {
-      matches: page.hits.flatMap((hit) => {
-        const medicine = byId.get(hit.id);
-        return medicine ? [{ ...hit, medicine }] : [];
-      }),
-      nextCursor: page.nextCursor,
-    };
   }
 
   async get(id: string) {
-    return result(this.database.from("medicines").select("*").eq("id", id)
-      .is("deleted_at", null).single());
+    return this.catalog.find(id);
   }
 
-  async create(input: {
-    brandName: string;
-    genericName: string;
-    dosageForm: string;
-    route: string;
-    strength: string;
-    manufacturer?: string | undefined;
-    controlled?: boolean | undefined;
-  }) {
-    return result(this.database.from("medicines").insert({
-      brand_name: input.brandName,
-      generic_name: input.genericName,
-      dosage_form: input.dosageForm,
-      route: input.route,
-      strength_display: input.strength,
-      manufacturer_name: input.manufacturer,
-      controlled_substance: input.controlled ?? false,
-      status: "draft",
-    }).select().single());
+  create(input: Parameters<CanonicalMedicineCatalog["create"]>[0]) {
+    return this.catalog.create(input);
   }
 
-  async update(id: string, input: Record<string, unknown>) {
-    const mapping: Readonly<Record<string, string>> = {
-      brandName: "brand_name",
-      genericName: "generic_name",
-      dosageForm: "dosage_form",
-      route: "route",
-      strength: "strength_display",
-      manufacturer: "manufacturer_name",
-      controlled: "controlled_substance",
-      status: "status",
-    };
-    const updates = Object.fromEntries(
-      Object.entries(input)
-        .filter(([, value]) => value !== undefined)
-        .map(([key, value]) => [mapping[key] ?? key, value]),
-    );
-    return result(this.database.from("medicines").update(updates).eq("id", id)
-      .select().single());
+  update(input: Parameters<CanonicalMedicineCatalog["update"]>[0]) {
+    return this.catalog.update(input);
+  }
+
+  merge(input: Parameters<CanonicalMedicineCatalog["merge"]>[0]) {
+    return this.catalog.merge(input);
+  }
+
+  createAlternative(
+    input: Parameters<CanonicalMedicineCatalog["createAlternative"]>[0],
+  ) {
+    return this.catalog.createAlternative(input);
   }
 }
 

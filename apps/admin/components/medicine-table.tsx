@@ -30,15 +30,17 @@ export function MedicineTable({ medicines }: { medicines: MedicineSummary[] }) {
             <tr key={medicine.id}>
               <td>
                 <Link className="medicine-link" href={`/medicine/${medicine.id}`}>
-                  {medicine.name}
+                  {medicine.brandName}
                 </Link>
-                {medicine.brandName ? <div className="muted">{medicine.brandName}</div> : null}
+                {medicine.manufacturer
+                  ? <div className="muted">{medicine.manufacturer}</div>
+                  : null}
               </td>
               <td>{medicine.genericName}</td>
               <td>{medicine.strength}</td>
               <td>{medicine.dosageForm}</td>
               <td>
-                <span className={`badge ${medicine.status === "inactive" ? "inactive" : ""}`}>
+                <span className={`badge ${medicine.status !== "active" ? "inactive" : ""}`}>
                   {medicine.status}
                 </span>
               </td>

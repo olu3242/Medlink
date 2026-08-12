@@ -14,7 +14,11 @@ interface CatalogPageProps {
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const params = await searchParams;
   const status: MedicineStatus | undefined =
-    params.status === "active" || params.status === "inactive" ? params.status : undefined;
+    params.status === "draft"
+      || params.status === "active"
+      || params.status === "retired"
+      ? params.status
+      : undefined;
 
   let medicines: MedicineSummary[] = [];
   let error: string | null = null;

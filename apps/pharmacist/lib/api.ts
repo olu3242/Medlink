@@ -1,3 +1,37 @@
-export interface Review{id:string;medicineName:string;patientReference:string;priority:string;reason:string;status:string}
-export interface ReviewDetail extends Review{prescriptionText:string;allergies:string[];currentMedicines:string[];clinicalFlags:string[];equivalents:{id:string;name:string;rationale:string}[]}
-const origin=process.env.MEDLINK_API_URL??"http://localhost:3000";async function get<T>(p:string){const r=await fetch(new URL(p,origin),{cache:"no-store",headers:{Accept:"application/json"}});if(!r.ok)throw new Error();return(await r.json()as{data:T}).data}export const queue=()=>get<Review[]>("/api/v1/review");export const review=(id:string)=>get<ReviewDetail>(`/api/v1/review/${encodeURIComponent(id)}`);
+import type {
+  PharmacistDashboard,
+  PharmacistReviewDetail,
+  PharmacistReviewSummary,
+} from "@medlink/clinical";
+import type { InventoryBatch } from "@medlink/inventory";
+import { headers } from "next/headers";
+
+export type Review = PharmacistReviewSummary;
+export type ReviewDetail = PharmacistReviewDetail;
+
+async function get<T>(path: string) {
+  const incoming = await headers();
+  const origin = process.env.MEDLINK_PHARMACIST_URL
+    ?? process.env.MEDLINK_API_URL
+    ?? "http://localhost:3003";
+  const forwarded = new Headers({ Accept: "application/json" });
+  for (const name of ["cookie", "authorization", "x-medlink-tenant-id"]) {
+    const value = incoming.get(name);
+    if (value) forwarded.set(name, value);
+  }
+  const response = await fetch(new URL(path, origin), {
+    cache: "no-store",
+    headers: forwarded,
+  });
+  if (!response.ok) throw new Error("Review request failed");
+  return (await response.json() as { data: T }).data;
+}
+
+export const queue = () =>
+  get<PharmacistReviewSummary[]>("/api/v1/review");
+export const review = (id: string) =>
+  get<PharmacistReviewDetail>(`/api/v1/review/${encodeURIComponent(id)}`);
+export const dashboard = () =>
+  get<PharmacistDashboard>("/api/v1/dashboard");
+export const inventoryAlerts = () =>
+  get<InventoryBatch[]>("/api/v1/inventory");

@@ -1,5 +1,7 @@
 import {
+  createManualPrescriptionSchema,
   PrescriptionIntakeService,
+  PrescriptionManagementService,
   PrescriptionUploadRejectedError,
   prescriptionMediaPolicy,
 } from "@medlink/prescription";
@@ -12,8 +14,11 @@ import {
   SupabasePrescriptionIntakeRepository,
   SupabasePrescriptionStorage,
 } from "../../../../lib/prescription-intake";
+import { SupabasePrescriptionManagementRepository } from
+  "../../../../lib/prescription-management";
 
 const uploadSchema = z.object({
+  kind: z.literal("upload"),
   file: z.instanceof(File)
     .refine((file) => file.size > 0
       && file.size <= prescriptionMediaPolicy.maximumBytes, "Invalid file size")
@@ -23,18 +28,59 @@ const uploadSchema = z.object({
   idempotencyKey: z.string().min(8).max(200),
 });
 
+const manualSchema = z.object({
+  kind: z.literal("manual"),
+  value: createManualPrescriptionSchema,
+  idempotencyKey: z.string().min(8).max(200),
+});
+
+const createSchema = z.union([uploadSchema, manualSchema]);
+
+export const GET = (request: Request) => runApi(request, {
+  name: "prescriptions.list",
+  permission: "prescription:read",
+  schema: z.object({}),
+  input: async () => ({}),
+  execute: async (_input, context, database) =>
+    new PrescriptionManagementService(
+      new SupabasePrescriptionManagementRepository(database),
+    ).list(context.organizationId, context.userId),
+});
+
 export const POST = (request: Request) => runApi(request, {
   name: "prescriptions.intake",
   permission: "prescription:create",
-  schema: uploadSchema,
+  schema: createSchema,
   input: async (value) => {
+    const idempotencyKey = value.headers.get("idempotency-key");
+    if (value.headers.get("content-type")?.includes("application/json")) {
+      return {
+        kind: "manual",
+        value: await value.json(),
+        idempotencyKey,
+      };
+    }
     const form = await value.formData();
     return {
+      kind: "upload",
       file: form.get("file"),
-      idempotencyKey: value.headers.get("idempotency-key"),
+      idempotencyKey,
     };
   },
   execute: async (input, context, database) => {
+    if (input.kind === "manual") {
+      return new PrescriptionManagementService(
+        new SupabasePrescriptionManagementRepository(database),
+      ).createManual({
+        tenantId: context.organizationId,
+        patientId: context.userId,
+        actorId: context.userId,
+        value: input.value,
+        idempotencyKey: input.idempotencyKey,
+        correlationId: context.correlationId,
+        requestId: context.requestId,
+      });
+    }
     const service = new PrescriptionIntakeService(
       new HttpPrescriptionScanner(context),
       new SupabasePrescriptionStorage(database),
