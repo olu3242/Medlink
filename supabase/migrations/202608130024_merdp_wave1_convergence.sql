@@ -90,7 +90,8 @@ begin
   from public.merdp_latest_manufacturer_source_records r
   where true
     and nullif(btrim(r.raw_payload->>'manufacturer_name'), '') is not null
-  on conflict (slug) do update set name = excluded.name;
+  on conflict (slug) do update set name = excluded.name
+    where organizations.name is distinct from excluded.name;
 
   insert into public.merdp_manufacturer_source_links(
     source_record_id, source_manufacturer_id, canonical_organization_id,
@@ -113,6 +114,11 @@ begin
   from public.merdp_manufacturer_source_links l
   join public.etl_source_records r on r.id = l.source_record_id
   where l.canonical_organization_id is not null
+    and not exists (
+      select 1 from public.merdp_provenance existing
+      where existing.canonical_organization_id=l.canonical_organization_id
+        and existing.attribute_name='name'
+        and existing.winning_source_record_id=r.id)
   on conflict do nothing;
 
   insert into public.medicine_dosage_forms(code, display_name)
@@ -266,6 +272,11 @@ begin
     ('source_manufacturer_id', to_jsonb(r.raw_payload->>'manufacturer_id'))
   ) v(attribute_name, winning_value)
   where m.canonical_product_id is not null
+    and not exists (
+      select 1 from public.merdp_provenance existing
+      where existing.canonical_product_id=m.canonical_product_id
+        and existing.attribute_name=v.attribute_name
+        and existing.winning_source_record_id=r.id)
   on conflict do nothing;
 
   -- Certification is independent from source validity. Only current active
@@ -294,7 +305,9 @@ begin
     and (select count(*) from public.merdp_provenance p
       where p.canonical_product_id = m.canonical_product_id) >= 10
   on conflict (canonical_product_id, policy_version) do update set
-    status='certified', evidence=excluded.evidence, certified_at=excluded.certified_at;
+    status='certified', evidence=excluded.evidence, certified_at=excluded.certified_at
+  where (merdp_certifications.status,merdp_certifications.evidence)
+    is distinct from (excluded.status,excluded.evidence);
 
   insert into public.merdp_publications(
     canonical_product_id, certification_id, version, projection, provenance_manifest
