@@ -1,10 +1,11 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { GreenbookManufacturerAdapter, GreenbookProductAdapter, normalizeStrength } from "./greenbook";
 import { ingest, resolveProducts } from "./pipeline";
 const pp="C:/CDEV/NAFDAC-Greenbook/nafdac_greenbook_full.csv", mp="C:/CDEV/NAFDAC-Greenbook/nafdac_greenbook_manufacturers_full.csv";
 const ph="463247bd01cac1778fa887ce3854fdae713d91e59b0929eb1beb545e08b83d5c", mh="4167ce0bfa4d0d1c496b3705c8f445b599d25dc924f5a0b25785b8bd7cc4c857";
-describe("NAFDAC governed ingestion",()=>{const pr=ingest({adapter:new GreenbookProductAdapter(),content:readFileSync(pp,"utf8"),filePath:pp,authority:"NAFDAC Greenbook",expectedSha256:ph});const mr=ingest({adapter:new GreenbookManufacturerAdapter(),content:readFileSync(mp,"utf8"),filePath:mp,authority:"NAFDAC Greenbook",expectedSha256:mh});
+const sourceArtifactsAvailable=existsSync(pp)&&existsSync(mp);
+describe.skipIf(!sourceArtifactsAvailable)("NAFDAC governed ingestion",()=>{const pr=ingest({adapter:new GreenbookProductAdapter(),content:readFileSync(pp,"utf8"),filePath:pp,authority:"NAFDAC Greenbook",expectedSha256:ph});const mr=ingest({adapter:new GreenbookManufacturerAdapter(),content:readFileSync(mp,"utf8"),filePath:mp,authority:"NAFDAC Greenbook",expectedSha256:mh});
 it("certifies sources",()=>{expect(pr.manifest).toMatchObject({rowCount:9008,columnCount:36,byteSize:13036459,sha256:ph});expect(mr.manifest).toMatchObject({rowCount:1385,columnCount:8,byteSize:188515,sha256:mh});});
 it("preserves missing manufacturer 1161",()=>{const r=resolveProducts(pr.records.map(x=>x.raw),mr.records.map(x=>x.raw));expect(r.unresolvedManufacturer).toHaveLength(1);expect(r.unresolvedManufacturer[0]).toMatchObject({product_id:"9452",manufacturer_id:"1161"});});
 it("keeps same-name source identities distinct",()=>{const r=resolveProducts(pr.records.map(x=>x.raw),mr.records.map(x=>x.raw));expect(r.sameNameManufacturerGroups).toContainEqual(expect.arrayContaining(["370","718"]));});
