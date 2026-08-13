@@ -2,6 +2,7 @@ import type { QualityFinding, SourceAdapter } from "./model";
 
 export const productColumns = ["product_id","ingredient_id","manufacturer_id","product_name","form_id","strength","NAFDAC","product_category_id","marketing_category_id","applicant_id","approval_date","expiry_date","route_id","smpc","country_id","product_description","pack_size","biosimilar","atc","created_at","updated_at","deleted_at","status","composition","ingredient","form","applicant","route","product_category","category_name","ingredient_name","synonym","form_name","applicant_name","route_name","DT_RowIndex"] as const;
 export const manufacturerColumns = ["manufacturer_id","manufacturer_name","product_count","ingredient_count","detail_url","source_page","source_position","retrieved_at"] as const;
+export const manufacturerProductColumns = ["manufacturer_source_id","manufacturer_source_name","product_id","product_name","nrn","composition","detail_source_url","retrieved_at"] as const;
 
 export type CsvRecord = Readonly<Record<string, string>>;
 
@@ -47,6 +48,19 @@ export class GreenbookManufacturerAdapter implements SourceAdapter<CsvRecord> {
   parse(content: string) { const parsed = parseCsv(content); if (parsed.columns.join("|") !== manufacturerColumns.join("|")) throw new Error("SOURCE_SCHEMA_MISMATCH"); return parsed.rows; }
   sourceRecordId(record: CsvRecord) { return record.manufacturer_id ?? ""; }
   validate(record: CsvRecord): QualityFinding[] { return !record.manufacturer_id ? [{ rule: "SOURCE_ID_REQUIRED", severity: "REJECT", field: "manufacturer_id", message: "Missing source manufacturer_id" }] : !record.manufacturer_name ? [{ rule: "MANUFACTURER_NAME_MISSING", severity: "QUARANTINE", field: "manufacturer_name", message: "Missing manufacturer name" }] : []; }
+}
+
+export class GreenbookManufacturerProductAdapter implements SourceAdapter<CsvRecord> {
+  readonly sourceSystem = "NAFDAC_GREENBOOK_MANUFACTURER_PRODUCTS"; readonly schemaVersion = "greenbook-manufacturer-product-v1";
+  parse(content: string) { const parsed = parseCsv(content); if (parsed.columns.join("|") !== manufacturerProductColumns.join("|")) throw new Error("SOURCE_SCHEMA_MISMATCH"); return parsed.rows; }
+  sourceRecordId(record: CsvRecord) { return `${record.manufacturer_source_id ?? ""}:${record.product_id ?? ""}`; }
+  validate(record: CsvRecord): QualityFinding[] {
+    const findings: QualityFinding[] = [];
+    if (!record.manufacturer_source_id) findings.push({ rule: "SOURCE_MANUFACTURER_ID_REQUIRED", severity: "REJECT", field: "manufacturer_source_id", message: "Missing source manufacturer ID" });
+    if (!record.product_id) findings.push({ rule: "SOURCE_PRODUCT_ID_REQUIRED", severity: "REJECT", field: "product_id", message: "Missing Greenbook product ID" });
+    if (!record.product_name) findings.push({ rule: "PRODUCT_NAME_MISSING", severity: "QUARANTINE", field: "product_name", message: "Missing product name" });
+    return findings;
+  }
 }
 
 export function normalizeName(value: string): string { return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en"); }

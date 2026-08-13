@@ -31,6 +31,7 @@ def test_schema_change_or_malformed_entry_fails_loudly(html: str) -> None:
 
 
 def test_product_relationship_parser() -> None:
-    html = "<a href='/products/details/9452'>#Devhexol 300 Injection</a><a href='/products/details/21'>Café product</a><a href='/manufacturer/products/1161'>More</a>"
+    html = "<a href='/products/details/9452'><h5>#Devhexol 300 Injection</h5><span>Iohexol</span><span>NRN: A1-2</span></a><a href='/products/details/21'><h5>Café product</h5></a><a href='/manufacturer/products/1161'>More</a>"
     products = parse_product_page(html, "https://greenbook.nafdac.gov.ng/manufacturer/products/1161")
     assert [(item.product_id, item.product_name) for item in products] == [("9452", "#Devhexol 300 Injection"), ("21", "Café product")]
+    assert (products[0].composition, products[0].nrn) == ("Iohexol", "A1-2")

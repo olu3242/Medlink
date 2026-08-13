@@ -27,4 +27,6 @@ class ManufacturerPage:
 class ProductReference:
     product_id: str
     product_name: str
+    composition: str | None
+    nrn: str | None
     detail_url: str

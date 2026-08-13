@@ -107,7 +107,11 @@ def parse_product_page(html: str, source_url: str) -> tuple[ProductReference, ..
         href = urljoin(source_url, str(attrs.get("href") or ""))
         match = re.search(r"/products/details/(\d+)/?$", href)
         if match:
-            name = _text(node)
+            headings = [candidate for candidate in _walk(node["children"]) if candidate["tag"] == "h5"]  # type: ignore[arg-type]
+            spans = [_text(candidate) for candidate in _walk(node["children"]) if candidate["tag"] == "span"]  # type: ignore[arg-type]
+            name = _text(headings[0]) if headings else ""
             if name:
-                products[match.group(1)] = ProductReference(match.group(1), name, href)
+                nrn_value = next((value.removeprefix("NRN:").strip() for value in spans if value.upper().startswith("NRN:")), None)
+                composition = next((value for value in spans if value and not value.upper().startswith("NRN:") and value not in name), None)
+                products[match.group(1)] = ProductReference(match.group(1), name, composition, nrn_value, href)
     return tuple(products.values())
