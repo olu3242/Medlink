@@ -10,6 +10,10 @@ const sql = readFileSync(
 ).toLowerCase();
 
 describe("PI-1 clinical pipeline migration", () => {
+  it("uses valid PL/pgSQL parameter qualification in pharmacist decisions",()=>{
+    expect(sql).not.toContain("public.decide_prescription_validation.");
+    expect(sql).toContain("decide_prescription_validation.organization_id");
+  });
   it("uses the Supabase pgcrypto extension schema for definition backfill", () => {
     expect(sql).toContain("extensions.digest(\n      convert_to(\n        '{\"capabilityid\":\"ml-cap-006\"");
   });

@@ -633,7 +633,8 @@ begin
       'confidence', numeric_confidence
     )
   )
-  on conflict (organization_id, idempotency_key) do nothing;
+  on conflict on constraint workflow_run_events_organization_id_idempotency_key_key
+  do nothing;
 
   update public.ai_runs
   set status = 'completed',
@@ -667,7 +668,8 @@ begin
       'confidence', numeric_confidence
     )
   )
-  on conflict (organization_id, idempotency_key) do nothing;
+  on conflict on constraint workflow_run_events_organization_id_idempotency_key_key
+  do nothing;
 
   insert into public.runtime_outbox_events (
     organization_id, event_type, aggregate_type, aggregate_id, payload,
@@ -3055,7 +3057,7 @@ begin
         completed_at = now()
     where id = context_row.extraction_id;
 
-    update public.prescriptions
+    update public.prescriptions prescription
     set status = 'needs_review'
     where id = context_row.prescription_id
       and organization_id = context_row.organization_id;
@@ -3370,6 +3372,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   actor_id uuid := auth.uid();
   validation_row record;
@@ -3382,7 +3385,7 @@ declare
 begin
   if actor_id is null
      or not public.is_verified_active_pharmacist(
-       public.decide_prescription_validation.organization_id,
+       decide_prescription_validation.organization_id,
        actor_id
      )
   then
@@ -3390,22 +3393,22 @@ begin
       'a verified active pharmacist is required for clinical decisions'
       using errcode = '42501';
   end if;
-  if public.decide_prescription_validation.decision not in (
+  if decide_prescription_validation.decision not in (
        'approved'::public.review_status,
        'rejected'::public.review_status,
        'needs_information'::public.review_status
      )
      or char_length(btrim(
-       public.decide_prescription_validation.rationale
+       decide_prescription_validation.rationale
      )) not between 3 and 4000
      or char_length(btrim(
-       public.decide_prescription_validation.idempotency_key
+       decide_prescription_validation.idempotency_key
      )) not between 3 and 200
      or char_length(btrim(
-       public.decide_prescription_validation.correlation_id
+       decide_prescription_validation.correlation_id
      )) not between 1 and 200
      or char_length(btrim(
-       public.decide_prescription_validation.request_id
+       decide_prescription_validation.request_id
      )) not between 1 and 200
   then
     raise exception 'invalid pharmacist decision request'
@@ -3432,32 +3435,32 @@ begin
    and evidence.organization_id = validation.organization_id
    and evidence.version = 1
   where validation.id =
-      public.decide_prescription_validation.validation_id
+      decide_prescription_validation.validation_id
     and validation.organization_id =
-      public.decide_prescription_validation.organization_id
+      decide_prescription_validation.organization_id
   for update of validation;
 
   select event.* into existing_event
   from public.runtime_outbox_events event
   where event.organization_id =
-      public.decide_prescription_validation.organization_id
+      decide_prescription_validation.organization_id
     and event.idempotency_key =
-      public.decide_prescription_validation.idempotency_key
+      decide_prescription_validation.idempotency_key
         || ':review-completed';
 
   if found then
     if (existing_event.payload->>'validationId')::uuid <>
-         public.decide_prescription_validation.validation_id
+         decide_prescription_validation.validation_id
        or existing_event.payload->>'decision' <>
-         public.decide_prescription_validation.decision::text
+         decide_prescription_validation.decision::text
        or validation_row.decision_rationale is distinct from btrim(
-         public.decide_prescription_validation.rationale
+         decide_prescription_validation.rationale
        )
        or array(
          select distinct supplied_id
          from unnest(
            coalesce(
-             public.decide_prescription_validation.acknowledged_finding_ids,
+             decide_prescription_validation.acknowledged_finding_ids,
              array[]::uuid[]
            )
          ) as supplied(supplied_id)
@@ -3489,7 +3492,7 @@ begin
 
   if array_position(
        coalesce(
-         public.decide_prescription_validation.acknowledged_finding_ids,
+         decide_prescription_validation.acknowledged_finding_ids,
          array[]::uuid[]
        ),
        null
@@ -3503,7 +3506,7 @@ begin
   into supplied_acknowledgement_count
   from unnest(
     coalesce(
-      public.decide_prescription_validation.acknowledged_finding_ids,
+      decide_prescription_validation.acknowledged_finding_ids,
       array[]::uuid[]
     )
   ) as supplied(finding_id);
@@ -3514,7 +3517,7 @@ begin
   where finding.validation_id = validation_row.id
     and finding.id = any(
       coalesce(
-        public.decide_prescription_validation.acknowledged_finding_ids,
+        decide_prescription_validation.acknowledged_finding_ids,
         array[]::uuid[]
       )
     );
@@ -3532,7 +3535,7 @@ begin
     and not (
       finding.id = any(
         coalesce(
-          public.decide_prescription_validation.acknowledged_finding_ids,
+          decide_prescription_validation.acknowledged_finding_ids,
           array[]::uuid[]
         )
       )
@@ -3544,24 +3547,24 @@ begin
       using errcode = '22023';
   end if;
 
-  update public.clinical_findings
+  update public.clinical_findings finding
   set acknowledged_by = actor_id,
       acknowledged_at = now()
-  where validation_id = validation_row.id
-    and id = any(
+  where finding.validation_id = validation_row.id
+    and finding.id = any(
       coalesce(
-        public.decide_prescription_validation.acknowledged_finding_ids,
+        decide_prescription_validation.acknowledged_finding_ids,
         array[]::uuid[]
       )
     )
-    and acknowledged_at is null;
+    and finding.acknowledged_at is null;
 
-  update public.clinical_validations
-  set status = public.decide_prescription_validation.decision,
+  update public.clinical_validations validation
+  set status = decide_prescription_validation.decision,
       reviewed_by = actor_id,
       reviewed_at = now(),
       decision_rationale = btrim(
-        public.decide_prescription_validation.rationale
+        decide_prescription_validation.rationale
       ),
       pharmacist_acknowledged_high_risk_at = case
         when exists (
@@ -3575,8 +3578,8 @@ begin
         ) then now()
         else null
       end
-  where id = validation_row.id
-    and organization_id = validation_row.organization_id;
+  where validation.id = validation_row.id
+    and validation.organization_id = validation_row.organization_id;
 
   perform set_config(
     'medlink.authorized_clinical_validation_id',
@@ -3584,73 +3587,73 @@ begin
     true
   );
 
-  if public.decide_prescription_validation.decision =
+  if decide_prescription_validation.decision =
      'approved'::public.review_status
   then
     prescription_outcome := 'validated';
     terminal_event_type := 'prescription.clinically-approved.v1';
-    update public.prescriptions
+    update public.prescriptions prescription
     set status = 'validated',
         validated_by = actor_id,
         validated_at = now(),
         rejection_reason = null
-    where id = validation_row.prescription_id
-      and organization_id = validation_row.organization_id;
-  elsif public.decide_prescription_validation.decision =
+    where prescription.id = validation_row.prescription_id
+      and prescription.organization_id = validation_row.organization_id;
+  elsif decide_prescription_validation.decision =
         'rejected'::public.review_status
   then
     prescription_outcome := 'rejected';
     terminal_event_type := 'prescription.clinically-rejected.v1';
-    update public.prescriptions
+    update public.prescriptions prescription
     set status = 'rejected',
         validated_by = null,
         validated_at = null,
         rejection_reason = btrim(
-          public.decide_prescription_validation.rationale
+          decide_prescription_validation.rationale
         )
-    where id = validation_row.prescription_id
-      and organization_id = validation_row.organization_id;
+    where prescription.id = validation_row.prescription_id
+      and prescription.organization_id = validation_row.organization_id;
   else
     prescription_outcome := 'needs_review';
     terminal_event_type := 'prescription.clarification-requested.v1';
-    update public.prescriptions
+    update public.prescriptions prescription
     set status = 'needs_review',
         validated_by = null,
         validated_at = null
-    where id = validation_row.prescription_id
-      and organization_id = validation_row.organization_id;
+    where prescription.id = validation_row.prescription_id
+      and prescription.organization_id = validation_row.organization_id;
   end if;
 
-  update public.workflow_runs
+  update public.workflow_runs workflow
   set status = 'completed',
       current_step = 'completed',
       output_reference = jsonb_build_object(
         'validationId', validation_row.id,
-        'decision', public.decide_prescription_validation.decision,
+        'decision', decide_prescription_validation.decision,
         'pharmacistId', actor_id
       ),
       started_at = coalesce(started_at, now()),
       completed_at = now()
-  where id = validation_row.workflow_run_id
-    and organization_id = validation_row.organization_id;
+  where workflow.id = validation_row.workflow_run_id
+    and workflow.organization_id = validation_row.organization_id;
 
-  update public.workflow_runs
+  update public.workflow_runs workflow
   set status = case
-        when public.decide_prescription_validation.decision =
+        when decide_prescription_validation.decision =
           'needs_information'::public.review_status
           then 'waiting'::public.workflow_run_status
         else 'completed'::public.workflow_run_status
       end,
       previous_step = 'pharmacist_review',
       current_step = case
-        when public.decide_prescription_validation.decision =
+        when decide_prescription_validation.decision =
           'needs_information'::public.review_status
           then 'clarification'
         else 'completed'
       end,
       next_step = null,
       completed_at = case
-        when public.decide_prescription_validation.decision =
+        when decide_prescription_validation.decision =
           'needs_information'::public.review_status
           then null
         else now()
@@ -3658,11 +3661,11 @@ begin
       output_reference = coalesce(output_reference, '{}'::jsonb)
         || jsonb_build_object(
           'validationId', validation_row.id,
-          'decision', public.decide_prescription_validation.decision,
+          'decision', decide_prescription_validation.decision,
           'pharmacistId', actor_id
         )
-  where id = validation_row.pipeline_id
-    and organization_id = validation_row.organization_id;
+  where workflow.id = validation_row.pipeline_id
+    and workflow.organization_id = validation_row.organization_id;
 
   insert into public.workflow_run_events (
     organization_id, workflow_run_id, event_type, step_name, actor_id,
@@ -3674,12 +3677,12 @@ begin
     'workflow.human-decision.completed.v1',
     'pharmacist_review',
     actor_id,
-    public.decide_prescription_validation.idempotency_key
+    decide_prescription_validation.idempotency_key
       || ':workflow-review-completed',
     jsonb_build_object(
       'pipelineId', validation_row.pipeline_id,
       'validationId', validation_row.id,
-      'decision', public.decide_prescription_validation.decision,
+      'decision', decide_prescription_validation.decision,
       'acknowledgedFindingCount', supplied_acknowledgement_count
     )
   ),
@@ -3687,23 +3690,23 @@ begin
     validation_row.organization_id,
     validation_row.pipeline_id,
     case
-      when public.decide_prescription_validation.decision =
+      when decide_prescription_validation.decision =
         'needs_information'::public.review_status
         then 'pipeline.waiting-for-clarification.v1'
       else 'pipeline.completed.v1'
     end,
     case
-      when public.decide_prescription_validation.decision =
+      when decide_prescription_validation.decision =
         'needs_information'::public.review_status
         then 'clarification'
       else 'completed'
     end,
     actor_id,
-    public.decide_prescription_validation.idempotency_key
+    decide_prescription_validation.idempotency_key
       || ':pipeline-decision',
     jsonb_build_object(
       'validationId', validation_row.id,
-      'decision', public.decide_prescription_validation.decision
+      'decision', decide_prescription_validation.decision
     )
   )
   on conflict (organization_id, idempotency_key) do nothing;
@@ -3725,12 +3728,12 @@ begin
       'workflowId', validation_row.workflow_run_id,
       'validationId', validation_row.id,
       'evidenceId', validation_row.evidence_id,
-      'decision', public.decide_prescription_validation.decision
+      'decision', decide_prescription_validation.decision
     ),
-    public.decide_prescription_validation.correlation_id,
-    public.decide_prescription_validation.request_id,
+    decide_prescription_validation.correlation_id,
+    decide_prescription_validation.request_id,
     validation_row.workflow_run_id::text,
-    public.decide_prescription_validation.idempotency_key
+    decide_prescription_validation.idempotency_key
       || ':review-completed'
   ),
   (
@@ -3746,12 +3749,12 @@ begin
       'workflowId', validation_row.workflow_run_id,
       'validationId', validation_row.id,
       'evidenceId', validation_row.evidence_id,
-      'decision', public.decide_prescription_validation.decision
+      'decision', decide_prescription_validation.decision
     ),
-    public.decide_prescription_validation.correlation_id,
-    public.decide_prescription_validation.request_id,
+    decide_prescription_validation.correlation_id,
+    decide_prescription_validation.request_id,
     validation_row.workflow_run_id::text,
-    public.decide_prescription_validation.idempotency_key
+    decide_prescription_validation.idempotency_key
       || ':terminal'
   )
   on conflict (organization_id, idempotency_key) do nothing;
@@ -3768,19 +3771,19 @@ begin
     'prescription',
     validation_row.prescription_id::text,
     'pharmacist_review.'
-      || public.decide_prescription_validation.decision::text,
+      || decide_prescription_validation.decision::text,
     'success',
     'pharmacist-supervised prescription fulfillment',
-    public.decide_prescription_validation.correlation_id,
-    public.decide_prescription_validation.request_id,
-    public.decide_prescription_validation.idempotency_key || ':audit',
+    decide_prescription_validation.correlation_id,
+    decide_prescription_validation.request_id,
+    decide_prescription_validation.idempotency_key || ':audit',
     validation_row.workflow_run_id::text,
     'api',
     jsonb_build_object(
       'pipelineId', validation_row.pipeline_id,
       'validationId', validation_row.id,
       'evidenceId', validation_row.evidence_id,
-      'decision', public.decide_prescription_validation.decision,
+      'decision', decide_prescription_validation.decision,
       'acknowledgedFindingCount', supplied_acknowledgement_count
     )
   )
@@ -3790,7 +3793,7 @@ begin
     'reviewId', validation_row.id,
     'validationId', validation_row.id,
     'prescriptionId', validation_row.prescription_id,
-    'decision', public.decide_prescription_validation.decision,
+    'decision', decide_prescription_validation.decision,
     'prescriptionStatus', prescription_outcome,
     'status', 'completed'
   );

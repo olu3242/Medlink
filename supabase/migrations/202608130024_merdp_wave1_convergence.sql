@@ -1,6 +1,15 @@
 -- Compose the existing MERDP evidence tables with MedLink's canonical masters.
 create extension if not exists "uuid-ossp" with schema extensions;
 
+-- Compatibility wrapper for existing governed commands authored against the
+-- public pgcrypto schema before Supabase installed pgcrypto in extensions.
+create or replace function public.digest(value bytea, algorithm text)
+returns bytea language sql immutable strict set search_path='' as $$
+  select extensions.digest(value, algorithm);
+$$;
+revoke all on function public.digest(bytea,text) from public;
+grant execute on function public.digest(bytea,text) to authenticated,service_role;
+
 alter table public.merdp_review_cases
   add column source_record_id uuid references public.etl_source_records(id),
   add column quality_finding_id uuid references public.merdp_quality_findings(id),
@@ -12,10 +21,23 @@ create unique index merdp_provenance_product_attribute_source_unique
 create unique index merdp_provenance_organization_attribute_source_unique
   on public.merdp_provenance(canonical_organization_id, attribute_name, winning_source_record_id)
   where canonical_organization_id is not null;
-create unique index merdp_manufacturer_canonical_source_unique
-  on public.merdp_manufacturer_source_links(source_manufacturer_id);
+create view public.merdp_latest_product_source_records as
+select distinct on (r.source_record_id) r.*
+from public.etl_source_records r
+join public.etl_sources s on s.id = r.source_id
+join public.etl_snapshots sn on sn.id = r.snapshot_id
+where s.source_code = 'NAFDAC_GREENBOOK'
+order by r.source_record_id, sn.received_at desc, r.created_at desc;
 
-create or replace function public.run_merdp_wave1_convergence()
+create view public.merdp_latest_manufacturer_source_records as
+select distinct on (r.source_record_id) r.*
+from public.etl_source_records r
+join public.etl_sources s on s.id = r.source_id
+join public.etl_snapshots sn on sn.id = r.snapshot_id
+where s.source_code = 'NAFDAC_GREENBOOK_MANUFACTURERS'
+order by r.source_record_id, sn.received_at desc, r.created_at desc;
+
+create or replace function public.run_merdp_wave1_convergence(failure_stage text default null)
 returns jsonb
 language plpgsql
 security definer
@@ -38,15 +60,12 @@ begin
   select r.run_id, r.id, 'MANUFACTURER_REFERENCE_UNRESOLVED',
     'manufacturer_id', r.raw_payload->>'manufacturer_id', 'warning',
     'Product manufacturer source identity is absent from the manufacturer directory'
-  from public.etl_source_records r
-  join public.etl_sources s on s.id = r.source_id
-  where s.source_code = 'NAFDAC_GREENBOOK'
+  from public.merdp_latest_product_source_records r
+  where true
     and nullif(r.raw_payload->>'manufacturer_id','') is not null
     and not exists (
-      select 1 from public.etl_source_records mr
-      join public.etl_sources ms on ms.id = mr.source_id
-      where ms.source_code = 'NAFDAC_GREENBOOK_MANUFACTURERS'
-        and mr.source_record_id = r.raw_payload->>'manufacturer_id')
+      select 1 from public.merdp_latest_manufacturer_source_records mr
+      where mr.source_record_id = r.raw_payload->>'manufacturer_id')
   on conflict (run_id, source_record_id, rule_code, field_name) do nothing;
 
   -- Every quarantine finding becomes an explicit, unresolved review case.
@@ -65,12 +84,11 @@ begin
   -- Manufacturer source identities remain distinct, including equal names.
   insert into public.organizations(name, slug, type, branding)
   select r.raw_payload->>'manufacturer_name',
-    'nafdac-manufacturer-' || r.source_record_id, 'manufacturer',
+    'nafdac-manufacturer-' || lower(r.source_record_id), 'manufacturer',
     jsonb_build_object('source', 'NAFDAC Greenbook',
       'sourceManufacturerId', r.source_record_id)
-  from public.etl_source_records r
-  join public.etl_sources s on s.id = r.source_id
-  where s.source_code = 'NAFDAC_GREENBOOK_MANUFACTURERS'
+  from public.merdp_latest_manufacturer_source_records r
+  where true
     and nullif(btrim(r.raw_payload->>'manufacturer_name'), '') is not null
   on conflict (slug) do update set name = excluded.name;
 
@@ -81,10 +99,9 @@ begin
   select r.id, r.source_record_id, o.id, 'distinct',
     jsonb_build_object('method', 'source-identity-v1',
       'nameNotPrimaryKey', true, 'sourceName', r.raw_payload->>'manufacturer_name')
-  from public.etl_source_records r
-  join public.etl_sources s on s.id = r.source_id
-  join public.organizations o on o.slug = 'nafdac-manufacturer-' || r.source_record_id
-  where s.source_code = 'NAFDAC_GREENBOOK_MANUFACTURERS'
+  from public.merdp_latest_manufacturer_source_records r
+  join public.organizations o on o.slug = 'nafdac-manufacturer-' || lower(r.source_record_id)
+  where true
   on conflict (source_record_id, source_manufacturer_id) do nothing;
 
   insert into public.merdp_provenance(
@@ -102,9 +119,8 @@ begin
   select 'nafdac-form-' || coalesce(nullif(r.raw_payload->>'form_id',''), 'unspecified'),
     left(coalesce(nullif(btrim(r.raw_payload->>'form_name'), ''),
       nullif(btrim(r.raw_payload->>'form'), ''), 'Unspecified form'), 120)
-  from public.etl_source_records r
-  join public.etl_sources s on s.id = r.source_id
-  where s.source_code = 'NAFDAC_GREENBOOK'
+  from public.merdp_latest_product_source_records r
+  where true
   group by coalesce(nullif(r.raw_payload->>'form_id',''), 'unspecified'),
     coalesce(nullif(btrim(r.raw_payload->>'form_name'), ''),
       nullif(btrim(r.raw_payload->>'form'), ''), 'Unspecified form')
@@ -129,17 +145,24 @@ begin
     left(coalesce(nullif(btrim(r.raw_payload->>'strength'), ''), 'Unspecified'), 100),
     nullif(btrim(r.raw_payload->>'pack_size'), ''),
     (select mr.raw_payload->>'manufacturer_name'
-      from public.etl_source_records mr
-      join public.etl_sources ms on ms.id = mr.source_id
-      where ms.source_code = 'NAFDAC_GREENBOOK_MANUFACTURERS'
-        and mr.source_record_id = r.raw_payload->>'manufacturer_id'
+      from public.merdp_latest_manufacturer_source_records mr
+      where mr.source_record_id = r.raw_payload->>'manufacturer_id'
       limit 1), 'draft'
-  from public.etl_source_records r
-  join public.etl_sources s on s.id = r.source_id
-  where s.source_code = 'NAFDAC_GREENBOOK'
+  from public.merdp_latest_product_source_records r
+  where true
     and not exists (select 1 from public.merdp_quality_findings f
       where f.source_record_id = r.id and f.severity in ('quarantine','reject'))
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    brand_name=excluded.brand_name, generic_name=excluded.generic_name,
+    dosage_form=excluded.dosage_form, route=excluded.route,
+    strength_display=excluded.strength_display, pack_size=excluded.pack_size,
+    manufacturer_name=excluded.manufacturer_name, updated_at=now()
+  where (medicines.brand_name,medicines.generic_name,medicines.dosage_form,
+    medicines.route,medicines.strength_display,medicines.pack_size,
+    medicines.manufacturer_name) is distinct from
+    (excluded.brand_name,excluded.generic_name,excluded.dosage_form,
+    excluded.route,excluded.strength_display,excluded.pack_size,
+    excluded.manufacturer_name);
 
   insert into public.merdp_source_mappings(
     source_record_id, canonical_product_id, canonical_organization_id, regulatory_identifier,
@@ -152,14 +175,17 @@ begin
     nullif(btrim(r.raw_payload->>'NAFDAC'), ''), 'distinct',
     jsonb_build_object('method', 'source-product-identity-v1',
       'nrnIsCanonicalKey', false, 'sourceProductId', r.source_record_id)
-  from public.etl_source_records r
-  join public.etl_sources s on s.id = r.source_id
+  from public.merdp_latest_product_source_records r
   left join public.organizations o
-    on o.slug = 'nafdac-manufacturer-' || (r.raw_payload->>'manufacturer_id')
-  where s.source_code = 'NAFDAC_GREENBOOK'
+    on o.slug = 'nafdac-manufacturer-' || lower(r.raw_payload->>'manufacturer_id')
+  where true
     and not exists (select 1 from public.merdp_quality_findings f
       where f.source_record_id = r.id and f.severity in ('quarantine','reject'))
   on conflict (source_record_id) do nothing;
+
+  if failure_stage = 'after_mappings' then
+    raise exception 'MERDP_CONTROLLED_FAILURE_AFTER_MAPPINGS';
+  end if;
 
   -- The legacy registration table has a global uniqueness constraint. Only
   -- non-colliding NRNs enter that index; collision groups remain in mapping
@@ -191,9 +217,8 @@ begin
       min(coalesce(nullif(btrim(r.raw_payload->>'ingredient_name'), ''),
         nullif(btrim(r.raw_payload->>'ingredient'), ''),
         'NAFDAC ingredient ' || (r.raw_payload->>'ingredient_id'))) as source_name
-    from public.etl_source_records r
-    join public.etl_sources s on s.id = r.source_id
-    where s.source_code = 'NAFDAC_GREENBOOK'
+    from public.merdp_latest_product_source_records r
+    where true
       and nullif(r.raw_payload->>'ingredient_id', '') is not null
     group by r.raw_payload->>'ingredient_id'
   ), named as (
@@ -214,8 +239,8 @@ begin
   select m.canonical_product_id,
     extensions.uuid_generate_v5('6ba7b811-9dad-11d1-80b4-00c04fd430c8'::uuid,
       'NAFDAC_INGREDIENT:' || (r.raw_payload->>'ingredient_id')), true
-  from public.merdp_source_mappings m
-  join public.etl_source_records r on r.id = m.source_record_id
+  from public.merdp_latest_product_source_records r
+  join public.merdp_source_mappings m on m.source_record_id = r.id
   where m.canonical_product_id is not null
     and nullif(r.raw_payload->>'ingredient_id', '') is not null
   on conflict do nothing;
@@ -226,8 +251,8 @@ begin
   )
   select m.canonical_product_id, v.attribute_name, v.winning_value,
     r.id, 'greenbook-materialization-v1', '[]'::jsonb
-  from public.merdp_source_mappings m
-  join public.etl_source_records r on r.id = m.source_record_id
+  from public.merdp_latest_product_source_records r
+  join public.merdp_source_mappings m on m.source_record_id = r.id
   cross join lateral (values
     ('brand_name', to_jsonb(r.raw_payload->>'product_name')),
     ('ingredient', to_jsonb(r.raw_payload->>'ingredient_name')),
@@ -245,41 +270,63 @@ begin
 
   -- Certification is independent from source validity. Only current active
   -- human medicines with complete lineage qualify for ordinary publication.
+  update public.merdp_certifications c set status='revoked',
+    evidence=c.evidence || jsonb_build_object('reevaluatedAt',now(),'reason','latest-source-ineligible')
+  from public.merdp_source_mappings m
+  join public.merdp_latest_product_source_records r on r.id=m.source_record_id
+  where c.canonical_product_id=m.canonical_product_id
+    and c.policy_version='wave1-human-medicine-v1'
+    and not (r.raw_payload->>'category_name' in ('Drugs','Vaccines and Biologics')
+      and lower(coalesce(r.raw_payload->>'status',''))='active'
+      and nullif(r.raw_payload->>'expiry_date','')::date >= current_date);
+
   insert into public.merdp_certifications(
     canonical_product_id, status, policy_version, evidence, certified_at
   )
   select m.canonical_product_id, 'certified', 'wave1-human-medicine-v1',
     jsonb_build_object('sourceRecordId', r.id, 'category', r.raw_payload->>'category_name',
       'sourceStatus', r.raw_payload->>'status', 'expiry', r.raw_payload->>'expiry_date'), now()
-  from public.merdp_source_mappings m
-  join public.etl_source_records r on r.id = m.source_record_id
+  from public.merdp_latest_product_source_records r
+  join public.merdp_source_mappings m on m.source_record_id = r.id
   where r.raw_payload->>'category_name' in ('Drugs','Vaccines and Biologics')
     and lower(coalesce(r.raw_payload->>'status','')) = 'active'
     and nullif(r.raw_payload->>'expiry_date','')::date >= current_date
     and (select count(*) from public.merdp_provenance p
       where p.canonical_product_id = m.canonical_product_id) >= 10
-  on conflict (canonical_product_id, policy_version) do nothing;
+  on conflict (canonical_product_id, policy_version) do update set
+    status='certified', evidence=excluded.evidence, certified_at=excluded.certified_at;
 
   insert into public.merdp_publications(
     canonical_product_id, certification_id, version, projection, provenance_manifest
   )
-  select c.canonical_product_id, c.id, 1,
-    jsonb_build_object('medicineId', med.id, 'brandName', med.brand_name,
-      'genericName', med.generic_name, 'strength', med.strength_display,
-      'form', med.dosage_form, 'route', med.route,
-      'registrationNumber', m.regulatory_identifier),
+  select c.canonical_product_id, c.id, coalesce(lastp.version,0)+1,
+    projection.value,
     jsonb_build_object('sourceRecordId', m.source_record_id,
       'provenanceCount', (select count(*) from public.merdp_provenance p
         where p.canonical_product_id = c.canonical_product_id))
   from public.merdp_certifications c
   join public.medicines med on med.id = c.canonical_product_id
-  join public.merdp_source_mappings m on m.canonical_product_id = c.canonical_product_id
-  where c.status = 'certified'
+  join public.merdp_latest_product_source_records r on true
+  join public.merdp_source_mappings m on m.source_record_id=r.id
+    and m.canonical_product_id=c.canonical_product_id
+  cross join lateral (select jsonb_build_object('medicineId', med.id, 'brandName', med.brand_name,
+      'genericName', med.generic_name, 'strength', med.strength_display,
+      'form', med.dosage_form, 'route', med.route,
+      'registrationNumber', m.regulatory_identifier) value) projection
+  left join lateral (select p.version,p.projection from public.merdp_publications p
+    where p.canonical_product_id=c.canonical_product_id order by p.version desc limit 1) lastp on true
+  where c.status = 'certified' and lastp.projection is distinct from projection.value
   on conflict (canonical_product_id, version) do nothing;
 
   update public.medicines med set status = 'active'
   where exists (select 1 from public.merdp_publications p
     where p.canonical_product_id = med.id) and med.status <> 'active';
+
+  update public.medicines med set status='draft'
+  where exists(select 1 from public.merdp_source_mappings m where m.canonical_product_id=med.id)
+    and not exists(select 1 from public.merdp_certifications c
+      where c.canonical_product_id=med.id and c.status='certified')
+    and med.status <> 'draft';
 
   insert into public.runtime_outbox_events(
     organization_id, event_type, aggregate_type, aggregate_id, payload,
@@ -307,5 +354,50 @@ begin
 end;
 $$;
 
-revoke all on function public.run_merdp_wave1_convergence() from public;
-grant execute on function public.run_merdp_wave1_convergence() to service_role;
+revoke all on function public.run_merdp_wave1_convergence(text) from public;
+grant execute on function public.run_merdp_wave1_convergence(text) to service_role;
+
+create or replace function public.merdp_wave1_state()
+returns jsonb language sql stable security definer set search_path='' as $$
+  select jsonb_build_object(
+    'medicines',(select count(*) from public.medicines),
+    'organizations',(select count(*) from public.organizations),
+    'productMappings',(select count(*) from public.merdp_source_mappings),
+    'manufacturerMappings',(select count(*) from public.merdp_manufacturer_source_links),
+    'reviewCases',(select count(*) from public.merdp_review_cases),
+    'provenance',(select count(*) from public.merdp_provenance),
+    'certifications',(select count(*) from public.merdp_certifications),
+    'publications',(select count(*) from public.merdp_publications),
+    'events',(select count(*) from public.runtime_outbox_events)
+  );
+$$;
+revoke all on function public.merdp_wave1_state() from public;
+grant execute on function public.merdp_wave1_state() to service_role;
+
+create or replace function public.merdp_exit_fixture_state(
+  product_source_id text, manufacturer_source_id text)
+returns jsonb language sql stable security definer set search_path='' as $$
+  with product_mapping as (
+    select m.canonical_product_id from public.merdp_source_mappings m
+    join public.merdp_latest_product_source_records r on r.id=m.source_record_id
+    where r.source_record_id=product_source_id limit 1
+  ), manufacturer_mapping as (
+    select l.canonical_organization_id from public.merdp_manufacturer_source_links l
+    join public.merdp_latest_manufacturer_source_records r on r.id=l.source_record_id
+    where r.source_record_id=manufacturer_source_id limit 1
+  ) select jsonb_build_object(
+    'medicineId',(select canonical_product_id from product_mapping),
+    'medicineStatus',(select status from public.medicines where id=(select canonical_product_id from product_mapping)),
+    'strength',(select strength_display from public.medicines where id=(select canonical_product_id from product_mapping)),
+    'productEvidence',(select count(*) from public.etl_source_records where source_record_id=product_source_id),
+    'provenance',(select count(*) from public.merdp_provenance where canonical_product_id=(select canonical_product_id from product_mapping)),
+    'certification',(select status from public.merdp_certifications where canonical_product_id=(select canonical_product_id from product_mapping) and policy_version='wave1-human-medicine-v1'),
+    'publicationVersions',(select count(*) from public.merdp_publications where canonical_product_id=(select canonical_product_id from product_mapping)),
+    'publicationEvents',(select count(*) from public.runtime_outbox_events where aggregate_id=(select canonical_product_id from product_mapping)::text and event_type='merdp.medicine-published.v1'),
+    'organizationId',(select canonical_organization_id from manufacturer_mapping),
+    'organizationName',(select name from public.organizations where id=(select canonical_organization_id from manufacturer_mapping)),
+    'manufacturerEvidence',(select count(*) from public.etl_source_records where source_record_id=manufacturer_source_id)
+  );
+$$;
+revoke all on function public.merdp_exit_fixture_state(text,text) from public;
+grant execute on function public.merdp_exit_fixture_state(text,text) to service_role;

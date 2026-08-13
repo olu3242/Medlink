@@ -36,8 +36,8 @@ export class SupabaseMerdpRepository {
     const completed=await this.db.from("etl_runs").update({status:"completed",completed_at:new Date().toISOString(),rows_valid:result.records.length-result.rejected,rows_warning:result.warnings,rows_quarantined:result.quarantined,rows_rejected:result.rejected,rows_staged:rawPersisted,metrics:{durationMs:result.durationMs}}).eq("id",runId);fail(completed.error);
     return {runId,snapshotId,replay:false,rawPersisted,findingsPersisted};
   }
-  async converge():Promise<ConvergenceResult>{
-    const result=await this.db.rpc("run_merdp_wave1_convergence"); fail(result.error);
+  async converge(failureStage?:"after_mappings"):Promise<ConvergenceResult>{
+    const result=await this.db.rpc("run_merdp_wave1_convergence",{failure_stage:failureStage??null}); fail(result.error);
     return result.data as ConvergenceResult;
   }
 }

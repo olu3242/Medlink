@@ -11,6 +11,14 @@ it("persists 10,393 records and replays without duplicates",async()=>{const sour
 {path:"C:/CDEV/NAFDAC-Greenbook/nafdac_greenbook_full.csv",adapter:new GreenbookProductAdapter(),hash:"463247bd01cac1778fa887ce3854fdae713d91e59b0929eb1beb545e08b83d5c"},
 {path:"C:/CDEV/NAFDAC-Greenbook/nafdac_greenbook_manufacturers_full.csv",adapter:new GreenbookManufacturerAdapter(),hash:"4167ce0bfa4d0d1c496b3705c8f445b599d25dc924f5a0b25785b8bd7cc4c857"}] as const;let persisted=0;
 for(const source of sources){const run=ingest({adapter:source.adapter,content:readFileSync(source.path,"utf8"),filePath:source.path,authority:"NAFDAC Greenbook",expectedSha256:source.hash});const first=await repository().persist(run,source.path);expect(first.replay).toBe(false);persisted+=first.rawPersisted;const replay=await repository().persist(run,source.path);expect(replay).toMatchObject({replay:true,rawPersisted:0,findingsPersisted:0});}expect(persisted).toBe(10393);},120000);
+it("rolls back a controlled mid-convergence failure and recovers",async()=>{
+  const service=createClient(url!,key!,{auth:{persistSession:false}});
+  await expect(repository().converge("after_mappings"))
+    .rejects.toThrow("MERDP_CONTROLLED_FAILURE_AFTER_MAPPINGS");
+  const state=await service.rpc("merdp_wave1_state"); expect(state.error).toBeNull();
+  expect(Object.values(state.data as Record<string,number>)).toEqual(
+    expect.arrayContaining(Array(9).fill(0)));
+},120000);
 it("materializes, certifies, publishes, and replays deterministically",async()=>{
   const first=await repository().converge();
   expect(first.productMappings).toBeGreaterThan(0);
