@@ -7,4 +7,6 @@ dist/
 .env.local
 .env.*.local
 .supabase/
+supabase/.temp/
+supabase/.branches/
 npm-debug.log*

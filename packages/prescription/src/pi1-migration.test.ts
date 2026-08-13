@@ -10,6 +10,9 @@ const sql = readFileSync(
 ).toLowerCase();
 
 describe("PI-1 clinical pipeline migration", () => {
+  it("uses the Supabase pgcrypto extension schema for definition backfill", () => {
+    expect(sql).toContain("extensions.digest(\n      convert_to(\n        '{\"capabilityid\":\"ml-cap-006\"");
+  });
   it("registers the canonical pipeline and capability ownership", () => {
     expect(sql).toContain("'ml-cpp-001'");
     for (const workflow of [

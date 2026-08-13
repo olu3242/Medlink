@@ -1408,7 +1408,7 @@ select
   2,
   '{"capabilityId":"ML-CAP-006","steps":["initialized","validated","stored","queued_for_ocr","completed"],"version":2}'::jsonb,
   encode(
-    public.digest(
+    extensions.digest(
       convert_to(
         '{"capabilityId":"ML-CAP-006","steps":["initialized","validated","stored","queued_for_ocr","completed"],"version":2}',
         'UTF8'
