@@ -1,1 +1,14 @@
-import type{ReactNode}from"react";import{AppShell}from"@medlink/ui";import"@medlink/ui/styles.css";import"../app/globals.css";export default function Layout({children}:{children:ReactNode}){return <html lang="en"><body className="ml-body"><AppShell brand={<a href="/">MedLink Pharmacy</a>} navigation={[{label:"Inventory",href:"/"},{label:"Reservations",href:"/reservations"}]}>{children}</AppShell></body></html>}
+import type { ReactNode } from "react";
+import { AppShell } from "@medlink/ui";
+import "@medlink/ui/styles.css";
+import "../app/globals.css";
+
+export default function Layout({ children }: { children: ReactNode }) {
+  return <html lang="en"><body className="ml-body"><AppShell
+    brand={<a href="/">MedLink Pharmacy</a>}
+    navigation={[
+      { label: "Inventory", href: "/" },
+      { label: "Reservations", href: "/reservations" },
+    ]}
+  >{children}</AppShell></body></html>;
+}

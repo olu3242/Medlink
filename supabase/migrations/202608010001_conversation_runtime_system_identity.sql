@@ -50,5 +50,5 @@ insert into auth.users (
 )
 on conflict (id) do nothing;
 
-comment on table auth.users is
-  'GoTrue-managed. One row, id 11111111-1111-4111-8111-111111111111, is the Conversation Runtime system identity provisioned by migration 202608010001 per ADR 0004 -- not a real end user, never logs in, authenticated only by packages/whatsapp webhook signature verification.';
+-- Do not COMMENT ON auth.users: the migration role can insert the governed
+-- system identity but does not own GoTrue's managed table.

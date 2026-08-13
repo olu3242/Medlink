@@ -28,13 +28,10 @@ async function result<T>(
 }
 
 // packages/prescription's PrescriptionRecord.status vocabulary
-// (uploaded/processing/needs_review/validated/rejected) predates and does
-// not match the prescriptions.status DB enum (received/extracting/
-// needs_review/validated/rejected); translate on read rather than reconcile
-// the two, since changing either is a larger migration/package change.
+// Keep the persisted enum vocabulary explicit at this boundary.
 const statusFromDatabase: Readonly<Record<string, PrescriptionRecord["status"]>> = {
-  received: "uploaded",
-  extracting: "processing",
+  received: "received",
+  extracting: "extracting",
   needs_review: "needs_review",
   validated: "validated",
   rejected: "rejected",

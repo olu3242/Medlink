@@ -2,6 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { RuntimeError, type RuntimeContext } from "@medlink/runtime";
 import {
   CatalogEquivalencyService,
+  CanonicalMedicineCatalog,
+  SupabaseCanonicalMedicineRepository,
+  type CanonicalMedicineRepository,
   type MedicineCatalogReader,
 } from "@medlink/medicine";
 import {
@@ -12,16 +15,12 @@ import {
   type ClinicalValidationInput,
 } from "@medlink/clinical";
 import { PrescriptionParser } from "@medlink/prescription";
-import { SupabaseMedicineSearchIndex, type SearchIndexHit } from "@medlink/search";
 import {
   LoggingPrescriptionAuditPort,
   PendingOcrPrescriptionReader,
   SupabasePrescriptionRepository,
 } from "./prescription-extraction";
 
-// assertReviewed() is a pure guard over its argument; it never calls the
-// catalog reader, so an empty reader is sufficient here (the same pattern
-// packages/medicine/src/equivalency.test.ts uses for the same reason).
 const unusedCatalogReader: MedicineCatalogReader = {
   findBrandById: async () => null,
   findGenericById: async () => null,
@@ -59,12 +58,6 @@ export interface MedicineRow {
   updated_at?: string;
 }
 
-// apps/admin/lib/api.ts's MedicineSummary/MedicineDetail (consumed by
-// medicine-table.tsx and medicine-form.tsx) are camelCase; the medicines
-// table columns are snake_case. Routes previously returned raw rows
-// straight through, so the catalog table rendered blank for every column
-// except id and status. Centralizing the mapping here keeps list/get/
-// create/update consistent in one place.
 export function toMedicineSummary(row: MedicineRow) {
   return {
     id: row.id,
@@ -87,7 +80,13 @@ export function toMedicineDetail(row: MedicineRow) {
 }
 
 export class CatalogApplication {
-  constructor(private readonly database: SupabaseClient) {}
+  private readonly catalog: CanonicalMedicineCatalog;
+
+  constructor(private readonly database: SupabaseClient) {
+    this.catalog = new CanonicalMedicineCatalog(
+      new SupabaseCanonicalMedicineRepository(database),
+    );
+  }
 
   async brands() {
     const rows = await result(this.database.from("medicines")
@@ -104,10 +103,7 @@ export class CatalogApplication {
   }
 
   async equivalents(medicineId: string) {
-    return (await result(this.database.from("medicine_equivalences")
-      .select("*, equivalent:medicines!equivalent_medicine_id(*)")
-      .eq("source_medicine_id", medicineId).eq("status", "active")
-      .eq("requires_pharmacist_review", true).is("deleted_at", null))) ?? [];
+    return this.catalog.alternatives(medicineId);
   }
 
   async reviewEquivalence(
@@ -139,28 +135,22 @@ export class CatalogApplication {
     }));
   }
 
-  async list(input: { query?: string | undefined; status?: string | undefined }) {
-    let statement = this.database.from("medicines")
-      .select("*", { count: "exact" }).is("deleted_at", null)
-      .order("brand_name").limit(100);
-    if (input.query) {
-      const escaped = input.query.replaceAll(",", "").replaceAll("%", "");
-      statement = statement.or(
-        `brand_name.ilike.%${escaped}%,generic_name.ilike.%${escaped}%`,
-      );
-    }
-    if (input.status) statement = statement.eq("status", input.status);
-    const { data, error, count } = await statement;
-    if (error) {
-      throw new RuntimeError(
-        "infrastructure",
-        "medicine_list_failed",
-        "Medicines could not be loaded",
-        503,
-        true,
-      );
-    }
-    return { items: (data ?? []).map(toMedicineSummary), total: count ?? 0 };
+  ingredients() {
+    return this.catalog.listIngredients();
+  }
+
+  createIngredient(
+    input: Parameters<CanonicalMedicineCatalog["createIngredient"]>[0],
+  ) {
+    return this.catalog.createIngredient(input);
+  }
+
+  list(input: {
+    query?: string | undefined;
+    status?: Parameters<CanonicalMedicineRepository["list"]>[0]["status"];
+    limit?: number | undefined;
+  }) {
+    return this.catalog.list(input);
   }
 
   async search(input: {
@@ -168,96 +158,33 @@ export class CatalogApplication {
     limit?: number | undefined;
     cursor?: string | undefined;
   }) {
-    const index = new SupabaseMedicineSearchIndex(this.database);
-    const page = await index.search({
-      normalizedTerm: input.term.trim().toLocaleLowerCase("en"),
-      types: ["brand", "generic"],
+    return this.catalog.search({
+      query: input.term,
       limit: input.limit ?? 20,
-      ...(input.cursor ? { cursor: input.cursor } : {}),
+      offset: input.cursor ? Number(input.cursor) : 0,
     });
-    const ids = [...new Set(page.hits.map((hit: SearchIndexHit) => hit.id))];
-    const rows = ids.length === 0
-      ? []
-      : await result(this.database.from("medicines").select("*").in("id", ids));
-    const byId = new Map((rows ?? []).map((row) => [row.id, row]));
-    return {
-      matches: page.hits.flatMap((hit: SearchIndexHit) => {
-        const medicine = byId.get(hit.id);
-        return medicine ? [{ ...hit, medicine }] : [];
-      }),
-      nextCursor: page.nextCursor,
-    };
   }
 
   async get(id: string) {
-    const row = await result(this.database.from("medicines").select("*").eq("id", id)
-      .is("deleted_at", null).single());
-    return toMedicineDetail(row as MedicineRow);
+    return this.catalog.find(id);
   }
 
-  async create(
-    context: RuntimeContext,
-    idempotencyKey: string,
-    input: {
-      brandName: string;
-      genericName: string;
-      dosageForm: string;
-      route: string;
-      strength: string;
-      manufacturer?: string | undefined;
-      controlled?: boolean | undefined;
-    },
-  ) {
-    const row = await result(this.database.rpc("create_medicine_record", {
-      target_organization_id: context.organizationId,
-      target_actor_id: context.userId,
-      target_correlation_id: context.correlationId,
-      target_request_id: context.requestId,
-      target_idempotency_key: idempotencyKey,
-      target_channel: context.channel,
-      target_brand_name: input.brandName,
-      target_generic_name: input.genericName,
-      target_dosage_form: input.dosageForm,
-      target_route: input.route,
-      target_strength_display: input.strength,
-      target_manufacturer_name: input.manufacturer ?? null,
-      target_controlled_substance: input.controlled ?? false,
-    }));
-    return toMedicineDetail(row as MedicineRow);
+  create(input: Parameters<CanonicalMedicineCatalog["create"]>[0]) {
+    return this.catalog.create(input);
   }
 
-  async update(
-    context: RuntimeContext,
-    idempotencyKey: string,
-    id: string,
-    input: Record<string, unknown>,
+  update(input: Parameters<CanonicalMedicineCatalog["update"]>[0]) {
+    return this.catalog.update(input);
+  }
+
+  merge(input: Parameters<CanonicalMedicineCatalog["merge"]>[0]) {
+    return this.catalog.merge(input);
+  }
+
+  createAlternative(
+    input: Parameters<CanonicalMedicineCatalog["createAlternative"]>[0],
   ) {
-    const mapping: Readonly<Record<string, string>> = {
-      brandName: "brand_name",
-      genericName: "generic_name",
-      dosageForm: "dosage_form",
-      route: "route",
-      strength: "strength_display",
-      manufacturer: "manufacturer_name",
-      controlled: "controlled_substance",
-      status: "status",
-    };
-    const changes = Object.fromEntries(
-      Object.entries(input)
-        .filter(([, value]) => value !== undefined)
-        .map(([key, value]) => [mapping[key] ?? key, value]),
-    );
-    const row = await result(this.database.rpc("update_medicine_record", {
-      target_organization_id: context.organizationId,
-      target_actor_id: context.userId,
-      target_correlation_id: context.correlationId,
-      target_request_id: context.requestId,
-      target_idempotency_key: idempotencyKey,
-      target_channel: context.channel,
-      target_medicine_id: id,
-      target_changes: changes,
-    }));
-    return toMedicineDetail(row as MedicineRow);
+    return this.catalog.createAlternative(input);
   }
 }
 
@@ -306,10 +233,7 @@ export class PrescriptionApplication {
       new PendingOcrPrescriptionReader(),
       new LoggingPrescriptionAuditPort(context),
     );
-    return parser.parse({
-      tenantId: context.organizationId,
-      prescriptionId,
-    });
+    return parser.parse({ tenantId: context.organizationId, prescriptionId });
   }
 
   async runClinicalValidation(
@@ -330,18 +254,14 @@ export class PrescriptionApplication {
       activeIngredientIds: input.activeIngredientIds ?? [],
       currentMedicineIds: input.currentMedicineIds ?? [],
     };
-    const clinicalRules = [
+    const { findings, hasHardStop } = new ClinicalValidationService([
       new DuplicateTherapyRule(),
       new PatientAllergyRule(),
       new PolypharmacyRiskRule(),
-    ];
-    const { findings, hasHardStop } = new ClinicalValidationService(clinicalRules)
-      .validate(validationInput);
-    const summary = input.summary ?? (
-      findings.length === 0
-        ? "No automated clinical findings; pharmacist review still required."
-        : `${findings.length} automated finding(s)${hasHardStop ? " including a hard stop" : ""}; pharmacist review required.`
-    );
+    ]).validate(validationInput);
+    const summary = input.summary ?? (findings.length === 0
+      ? "No automated clinical findings; pharmacist review still required."
+      : `${findings.length} automated finding(s)${hasHardStop ? " including a hard stop" : ""}; pharmacist review required.`);
     return result(this.database.rpc("record_clinical_validation", {
       target_organization_id: context.organizationId,
       target_actor_id: context.userId,

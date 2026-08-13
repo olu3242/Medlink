@@ -1,2 +1,108 @@
-import{notFound}from"next/navigation";import{review}from"../../../lib/api";import{DecisionForm}from"../../../components/decision-form";
-export default async function Page({params}:{params:Promise<{id:string}>}){const{id}=await params;let item;try{item=await review(id)}catch{notFound()}return <><header className="head"><div><div className="eyebrow">Decision workspace</div><h1>{item.medicineName}</h1><p className="muted">Patient reference: {item.patientReference}</p></div></header><div className="grid"><section className="card"><h2>Prescription</h2><p>{item.prescriptionText}</p><dl className="facts"><div><dt>Allergies</dt><dd>{item.allergies.join(", ")||"None recorded"}</dd></div><div><dt>Current medicines</dt><dd>{item.currentMedicines.join(", ")||"None recorded"}</dd></div></dl></section><section className="card risk"><h2>Clinical flags</h2>{item.clinicalFlags.length?<ul>{item.clinicalFlags.map(x=><li key={x}>{x}</li>)}</ul>:<p>No automated flags. Independent clinical review is still required.</p>}</section><section className="card"><h2>Equivalent candidates</h2>{item.equivalents.map(x=><div key={x.id}><strong>{x.name}</strong><p className="muted">{x.rationale}</p></div>)}</section><section className="card"><h2>Record decision</h2><DecisionForm reviewId={id}/></section></div></>}
+import { notFound } from "next/navigation";
+import { DecisionForm } from "../../../components/decision-form";
+import { review } from "../../../lib/api";
+
+export const dynamic = "force-dynamic";
+
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  let item;
+  try {
+    item = await review(id);
+  } catch {
+    notFound();
+  }
+  return (
+    <>
+      <header className="head">
+        <div>
+          <div className="eyebrow">Decision workspace</div>
+          <h1>{item.medicineNames.join(", ") || "Prescription review"}</h1>
+          <p className="muted">{item.patientReference}</p>
+        </div>
+      </header>
+      <div className="grid">
+        <section className="card">
+          <h2>Original prescription</h2>
+          {item.sourceDocument
+            ? (
+              <object
+                className="source-document"
+                data={item.sourceDocument.signedUrl}
+                type={item.sourceDocument.mediaType}
+              >
+                <a href={item.sourceDocument.signedUrl} target="_blank" rel="noreferrer">
+                  Open the signed prescription source
+                </a>
+              </object>
+            )
+            : <p className="muted">This manual prescription has no source file.</p>}
+          <h3>OCR source text</h3>
+          <pre className="source-text">{item.prescriptionText}</pre>
+          <p className="muted">Evidence SHA-256: {item.evidenceHash}</p>
+        </section>
+        <section className="card">
+          <h2>Structured extraction</h2>
+          {item.extractedItems.map((entry, index) => (
+            <article key={`${entry.medicineName}-${index}`}>
+              <strong>{entry.medicineName}</strong>
+              <p>{entry.strength} / {entry.dosage}</p>
+              <p className="muted">
+                {entry.canonicalMedicine
+                  ? `Current canonical link: ${entry.canonicalMedicine.brandName} — ${entry.canonicalMedicine.strength}`
+                  : "Unresolved: pharmacist must select a canonical medicine before approval."}
+              </p>
+            </article>
+          ))}
+        </section>
+        <section className="card risk">
+          <h2>Clinical intake flags</h2>
+          {item.clinicalFlags.length
+            ? (
+              <ul>
+                {item.clinicalFlags.map((flag) => (
+                  <li key={flag.id}>
+                    <strong>{flag.title}</strong>
+                    {" "}({flag.severity}): {flag.detail}
+                  </li>
+                ))}
+              </ul>
+            )
+            : <p>No automated flags. Independent review is still required.</p>}
+        </section>
+        {item.patientClarification ? (
+          <section className="card clarification">
+            <h2>Patient clarification</h2>
+            <p><strong>Requested:</strong> {item.patientClarification.request}</p>
+            <p><strong>Patient response:</strong> {item.patientClarification.response}</p>
+            <p className="muted">
+              Received {new Date(item.patientClarification.respondedAt).toLocaleString()}
+            </p>
+          </section>
+        ) : null}
+        <section className="card">
+          <h2>Record decision</h2>
+          {item.status === "pending"
+            ? (
+              <DecisionForm
+                reviewId={id}
+                findings={item.clinicalFlags.filter(
+                  ({ requiresAcknowledgement }) => requiresAcknowledgement,
+                )}
+                items={item.extractedItems}
+              />
+            )
+            : (
+              <p className="status">
+                Review completed: {item.status.replace("_", " ")}
+              </p>
+            )}
+        </section>
+      </div>
+    </>
+  );
+}

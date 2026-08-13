@@ -12,4 +12,9 @@ describe("role authorization", () => {
       AuthorizationError,
     );
   });
+
+  it("allows patients to manage their own profile capability", () => {
+    expect(can("patient", "patient:read")).toBe(true);
+    expect(can("patient", "patient:manage")).toBe(true);
+  });
 });

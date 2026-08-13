@@ -1,9 +1,13 @@
 import { z } from "zod";
 
-export const prescriptionSourceSchema = z.enum(["upload", "electronic"]);
+export const prescriptionSourceSchema = z.enum([
+  "upload",
+  "electronic",
+  "manual",
+]);
 export const prescriptionStatusSchema = z.enum([
-  "uploaded",
-  "processing",
+  "received",
+  "extracting",
   "needs_review",
   "validated",
   "rejected",
@@ -12,9 +16,9 @@ export const prescriptionStatusSchema = z.enum([
 const confidenceSchema = z.number().min(0).max(1);
 
 export const extractedFieldSchema = z.object({
-  value: z.string().trim().min(1),
+  value: z.string().trim().min(1).max(2_000),
   confidence: confidenceSchema,
-});
+}).strict();
 
 export const prescriptionExtractionSchema = z.object({
   patientName: extractedFieldSchema.optional(),
@@ -25,7 +29,26 @@ export const prescriptionExtractionSchema = z.object({
   quantity: extractedFieldSchema.optional(),
   refills: extractedFieldSchema.optional(),
   overallConfidence: confidenceSchema,
-});
+}).strict();
+
+export const structuredPrescriptionItemSchema = z.object({
+  medicineName: extractedFieldSchema,
+  strength: extractedFieldSchema,
+  dosage: extractedFieldSchema,
+  quantity: extractedFieldSchema.optional(),
+  refills: extractedFieldSchema.optional(),
+}).strict();
+
+export const structuredPrescriptionSchema = z.object({
+  patientName: extractedFieldSchema.optional(),
+  prescriberName: extractedFieldSchema.optional(),
+  items: z.array(structuredPrescriptionItemSchema).min(1).max(30),
+  overallConfidence: confidenceSchema,
+}).strict();
+
+export type StructuredPrescription = z.infer<
+  typeof structuredPrescriptionSchema
+>;
 
 export type PrescriptionExtraction = z.infer<
   typeof prescriptionExtractionSchema

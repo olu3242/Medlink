@@ -1,18 +1,9 @@
 import { z } from "zod";
+import { updateCatalogMedicineSchema } from "@medlink/medicine";
 import { CatalogApplication } from "../../../../../lib/application";
 import { runApi } from "../../../../../lib/api-server";
 
 const idSchema = z.string().uuid();
-const updateSchema = z.object({
-  brandName: z.string().trim().min(2).max(200).optional(),
-  genericName: z.string().trim().min(2).max(300).optional(),
-  dosageForm: z.string().trim().min(2).max(100).optional(),
-  route: z.string().trim().min(2).max(100).optional(),
-  strength: z.string().trim().min(1).max(100).optional(),
-  manufacturer: z.string().trim().max(200).nullable().optional(),
-  controlled: z.boolean().optional(),
-  status: z.enum(["draft", "active", "inactive"]).optional(),
-}).refine((value) => Object.keys(value).length > 0);
 type Context = { params: Promise<{ id: string }> };
 
 export const GET = async (request: Request, route: Context) => {
@@ -32,14 +23,18 @@ export const PATCH = async (request: Request, route: Context) => {
   return runApi(request, {
     name: "catalog.medicines.update",
     permission: "medicine:manage",
-    schema: z.object({ id: idSchema, changes: updateSchema }),
-    input: async (value) => ({ id, changes: await value.json() }),
+    schema: z.object({ id: idSchema, value: updateCatalogMedicineSchema }),
+    input: async (value) => ({ id, value: await value.json() }),
     execute: async (input, context, database) =>
-      new CatalogApplication(database).update(
-        context,
-        request.headers.get("idempotency-key") ?? context.requestId,
-        input.id,
-        input.changes,
-      ),
+      new CatalogApplication(database).update({
+        organizationId: context.organizationId,
+        actorId: context.userId,
+        medicineId: input.id,
+        value: input.value,
+        idempotencyKey:
+          request.headers.get("idempotency-key") ?? context.requestId,
+        correlationId: context.correlationId,
+        requestId: context.requestId,
+      }),
   });
 };
