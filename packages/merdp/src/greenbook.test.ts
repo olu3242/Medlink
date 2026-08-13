@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
-import { GreenbookManufacturerAdapter, GreenbookProductAdapter, normalizeStrength } from "./greenbook";
+import { GreenbookManufacturerAdapter, GreenbookManufacturerProductAdapter, GreenbookProductAdapter, normalizeStrength } from "./greenbook";
 import { ingest, resolveProducts } from "./pipeline";
 const pp="C:/CDEV/NAFDAC-Greenbook/nafdac_greenbook_full.csv", mp="C:/CDEV/NAFDAC-Greenbook/nafdac_greenbook_manufacturers_full.csv";
 const ph="463247bd01cac1778fa887ce3854fdae713d91e59b0929eb1beb545e08b83d5c", mh="4167ce0bfa4d0d1c496b3705c8f445b599d25dc924f5a0b25785b8bd7cc4c857";
@@ -11,3 +11,4 @@ it("preserves missing manufacturer 1161",()=>{const r=resolveProducts(pr.records
 it("keeps same-name source identities distinct",()=>{const r=resolveProducts(pr.records.map(x=>x.raw),mr.records.map(x=>x.raw));expect(r.sameNameManufacturerGroups).toContainEqual(expect.arrayContaining(["370","718"]));});
 it("guards NRN and strength identity",()=>{const r=resolveProducts(pr.records.map(x=>x.raw),mr.records.map(x=>x.raw));expect(r.nrnCollisionGroups).toBe(258);expect(r.ingredientConflictGroups).toBe(55);expect(normalizeStrength("8 mg/5 mL")).not.toBe(normalizeStrength("8 mg/10 mL"));});
 it("replays deterministically",()=>{const replay=ingest({adapter:new GreenbookProductAdapter(),content:readFileSync(pp,"utf8"),filePath:pp,authority:"NAFDAC Greenbook",expectedSha256:ph});expect(replay.records.map(x=>x.sourceRecordId)).toEqual(pr.records.map(x=>x.sourceRecordId));},15000);});
+it("validates manufacturer product evidence",()=>{const adapter=new GreenbookManufacturerProductAdapter();const csv="manufacturer_source_id,manufacturer_source_name,product_id,product_name,nrn,composition,detail_source_url,retrieved_at\n370,GlaxoSmithKline LLC.,2087,Seretide,B4-9735,Fluticasone,https://greenbook.nafdac.gov.ng/manufacturer/products/370,2026-08-13T00:00:00Z\n";const rows=adapter.parse(csv);expect(adapter.sourceRecordId(rows[0]!)).toBe("370:2087");expect(adapter.validate(rows[0]!)).toEqual([]);});

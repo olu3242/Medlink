@@ -12,3 +12,6 @@ supabase/.branches/
 npm-debug.log*
 .codex-run/
 .artifacts/
+*.egg-info/
+__pycache__/
+.pytest_cache/
