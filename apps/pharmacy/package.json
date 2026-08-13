@@ -1,1 +1,22 @@
-{"name":"@medlink/pharmacy-app","version":"0.1.0","private":true,"scripts":{"dev":"next dev","build":"next build","start":"next start","typecheck":"tsc --noEmit"},"dependencies":{"@medlink/ui":"*"}}
+{
+  "name": "@medlink/pharmacy-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@medlink/api": "*",
+    "@medlink/inventory": "*",
+    "@medlink/medicine": "*",
+    "@medlink/observability": "*",
+    "@medlink/pharmacy": "*",
+    "@medlink/platform": "*",
+    "@medlink/runtime": "*",
+    "@supabase/supabase-js": "^2.52.0",
+    "zod": "^3.25.0"
+  }
+}

@@ -11,7 +11,8 @@
 -- findByKey before create) rather than starting a second, divergent run of
 -- the same logical workflow.
 
-create type public.workflow_run_status as enum ('running', 'completed', 'failed');
+-- workflow_run_status is established by enterprise_governance with the
+-- required running/completed/failed values plus queued/waiting/cancelled.
 
 create table public.workflow_instances (
   id uuid primary key default gen_random_uuid(),

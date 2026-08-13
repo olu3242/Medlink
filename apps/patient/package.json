@@ -14,7 +14,11 @@
     "@medlink/platform": "*",
     "@medlink/runtime": "*",
     "@medlink/observability": "*",
+    "@medlink/patients": "*",
     "@medlink/prescription": "*",
+    "@medlink/agent-runtime": "*",
+    "@medlink/clinical": "*",
+    "@medlink/medicine": "*",
     "@supabase/supabase-js": "^2.52.0",
     "zod": "^3.25.0"
   }

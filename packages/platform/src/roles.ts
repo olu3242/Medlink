@@ -15,6 +15,8 @@ export const permissions = [
   "organization:read",
   "organization:manage",
   "member:manage",
+  "patient:read",
+  "patient:manage",
   "clinical:review",
   "medicine:read",
   "medicine:manage",

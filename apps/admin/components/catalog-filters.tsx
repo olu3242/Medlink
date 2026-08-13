@@ -20,8 +20,9 @@ export function CatalogFilters({ query = "", status = "" }: CatalogFiltersProps)
         <label htmlFor="status-filter">Status</label>
         <select defaultValue={status} id="status-filter" name="status">
           <option value="">All statuses</option>
+          <option value="draft">Draft</option>
           <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
+          <option value="retired">Retired</option>
         </select>
       </div>
       <div className="field">

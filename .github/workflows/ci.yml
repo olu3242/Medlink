@@ -76,7 +76,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run test:live
-        env:
-          MEDLINK_LIVE_SUPABASE_URL: ${{ secrets.MEDLINK_LIVE_SUPABASE_URL }}
-          MEDLINK_LIVE_SUPABASE_ANON_KEY: ${{ secrets.MEDLINK_LIVE_SUPABASE_ANON_KEY }}
+      - run: npx supabase start
+      - run: npx supabase db reset
+      - name: Run live database tests against the PR schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "$(npx supabase status -o env)"
+          MEDLINK_LIVE_SUPABASE_URL="$API_URL" \
+          MEDLINK_LIVE_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
+          npm run test:live
+      - if: always()
+        run: npx supabase stop

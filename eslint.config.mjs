@@ -10,6 +10,8 @@ const config = [
       "**/.next/**",
       "**/node_modules/**",
       "**/coverage/**",
+      "**/supabase/.temp/**",
+      "**/supabase/.branches/**",
       "**/next-env.d.ts",
     ],
   },

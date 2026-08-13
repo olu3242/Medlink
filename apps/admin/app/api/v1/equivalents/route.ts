@@ -15,6 +15,10 @@ export const GET = (request: Request) => runApi(request, {
     new CatalogApplication(database).equivalents(input.medicineId),
   success: (data) => Response.json({
     data,
-    meta: { requiresPharmacistReview: true, mayAutoSubstitute: false },
+    meta: {
+      requiresPharmacistReview: true,
+      mayAutoSubstitute: false,
+      warning: "Alternatives require an independent pharmacist decision.",
+    },
   }),
 });

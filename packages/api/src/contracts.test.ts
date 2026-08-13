@@ -24,4 +24,21 @@ describe("versioned API and event contracts", () => {
       sessionId: "session-1",
     })).toBe(false);
   });
+
+  it("rejects PHI in prescription event payloads", () => {
+    const contract = eventContracts.find(({ type }) =>
+      type === "prescription.ocr.completed.v1");
+    expect(contract).toBeDefined();
+    expect(validateEvent(contract!, {
+      tenantId: "tenant-1",
+      prescriptionId: "prescription-1",
+      extractionId: "extraction-1",
+      pipelineId: "pipeline-1",
+      workflowId: "workflow-1",
+      ocrResultId: "ocr-1",
+      resultSha256: "a".repeat(64),
+      confidence: 0.9,
+      evidence: { text: "must not leave the clinical store" },
+    })).toBe(false);
+  });
 });

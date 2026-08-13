@@ -163,5 +163,7 @@ grant execute on function public.reserve_inventory(
   uuid, uuid, text, text, text, text, uuid, uuid, uuid, integer, timestamptz
 ) to authenticated;
 
-comment on function public.reserve_inventory is
+comment on function public.reserve_inventory(
+  uuid, uuid, text, text, text, text, uuid, uuid, uuid, integer, timestamptz
+) is
   'Atomic reservation creation: authorization, reservation row, inventory lock (enforced by sync_inventory_lock_quantity), MAR matched->reserved transition, and runtime evidence all commit or roll back together. Idempotent on (organization_id, idempotency_key), validating the replay payload matches the original reservation rather than trusting the key alone.';

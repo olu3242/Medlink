@@ -1,1 +1,5 @@
-import{inventory,type Stock}from"../lib/api";export default async function Page(){let rows:Stock[]=[];let failed=false;try{rows=await inventory()}catch{failed=true}return <><header className="head"><div><div className="eyebrow">Stock operations</div><h1>Inventory</h1><p className="muted">Review current quantities and report stock updates.</p></div></header>{failed?<p className="error" role="alert">Inventory is unavailable.</p>:<section className="card table"><table><caption className="skip">Current inventory</caption><thead><tr><th>Medicine</th><th>Strength</th><th>Available</th><th>Last updated</th></tr></thead><tbody>{rows.map(x=><tr key={x.inventoryId}><td>{x.medicineName}</td><td>{x.strength}</td><td>{x.quantity}</td><td>{new Date(x.updatedAt).toLocaleString()}</td></tr>)}</tbody></table>{!rows.length?<p className="muted">No inventory records are available.</p>:null}</section>}</>}
+import { InventoryDashboard } from "../components/inventory-dashboard";
+
+export default function Page() {
+  return <InventoryDashboard />;
+}
