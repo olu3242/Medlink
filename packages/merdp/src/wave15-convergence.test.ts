@@ -2,13 +2,20 @@ import { readFileSync } from "node:fs";
 import { describe,expect,it } from "vitest";
 
 const sql=readFileSync("supabase/migrations/202608130027_merdp_wave15_manufacturer_convergence.sql","utf8");
+const lineEndingVariants=[sql.replace(/\r\n/g,"\n"),sql.replace(/\r?\n/g,"\r\n")];
 
 describe("MERDP Wave 1.5 governed manufacturer convergence",()=>{
   it("uses source identity, never names, for deterministic organization identity",()=>{
-    expect(sql).toContain("'NAFDAC_GREENBOOK_MANUFACTURERS:manufacturer:' || r.source_record_id");
-    const identityExpression=sql.slice(sql.indexOf("extensions.uuid_generate_v5("),sql.indexOf("),\n    r.raw_payload->>'manufacturer_name'"));
-    expect(identityExpression).toContain("r.source_record_id");
-    expect(identityExpression).not.toContain("manufacturer_name");
+    for(const variant of lineEndingVariants){
+      const normalized=variant.replace(/\r\n/g,"\n");
+      const start=normalized.indexOf("extensions.uuid_generate_v5(");
+      const end=normalized.indexOf("),\n    r.raw_payload->>'manufacturer_name'",start);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThan(start);
+      const identityExpression=normalized.slice(start,end);
+      expect(identityExpression).toContain("'NAFDAC_GREENBOOK_MANUFACTURERS:manufacturer:' || r.source_record_id");
+      expect(identityExpression).not.toContain("manufacturer_name");
+    }
     expect(sql).toContain("adoptedWave1Mapping");
   });
   it("preserves unknown products as evidence without canonical medicines",()=>{
