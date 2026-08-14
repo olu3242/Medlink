@@ -1,5 +1,6 @@
 import { Client } from "pg";
-import { createHash } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdirSync,writeFileSync } from "node:fs";
 
@@ -75,6 +76,32 @@ try {
       'unsafeNrnMerges',(select count(*) from medicine_registrations mr join (select regulatory_identifier from merdp_source_mappings where regulatory_identifier is not null group by regulatory_identifier having count(*)>1) c on c.regulatory_identifier=mr.registration_number)) result`)).rows[0].result;
     const payload={version:"merdp-nafdac-continuous-pipeline-v1",generatedAt:new Date().toISOString(),commit:execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),sourceHierarchy:{productAuthority:9008,manufacturerAuthority:1389,relationshipEvidence:11707},inputHashes:{wave2aCandidates:"f3b299dae6663e346632a04b3d736c8299e7200a013a3acbcc978f9fe8232173",wave2aDrift:"072dace7c840f24cb74ecdc617eaecf140a6de101c9e2385f355be22572edc10"},baseline,state,certification:{continuousDiff:"PASS",incrementalFixtures:"PASS",rollback:"PASS",replay:"PASS",publicationBoundary:"PASS",canonicalMutationDelta:0}};
     mkdirSync(".artifacts/certification",{recursive:true});const content=`${JSON.stringify(payload,null,2)}\n`,path=".artifacts/certification/merdp-nafdac-continuous-pipeline.json";writeFileSync(path,content);console.log(JSON.stringify({path,sha256:createHash("sha256").update(content).digest("hex"),state}));
+  } else if(operation==="medication-access") {
+    const fixture=`golden-${Date.now()}`;
+    const apiUrl=process.env.MEDLINK_LIVE_SUPABASE_URL;
+    const serviceKey=process.env.MEDLINK_LIVE_SUPABASE_SERVICE_KEY;
+    if(!apiUrl||!serviceKey) throw new Error("Local Supabase API and service key are required");
+    const admin=createClient(apiUrl,serviceKey,{auth:{persistSession:false}});
+    const actor=async(label)=>{
+      const created=await admin.auth.admin.createUser({email:`${fixture}-${label}@medlink.test`,password:`Golden-${randomUUID()}!`,email_confirm:true});
+      if(created.error||!created.data.user) throw created.error??new Error("Certification actor was not created");
+      return created.data.user.id;
+    };
+    const actors=await Promise.all([actor("patient"),actor("pharmacist"),actor("inventory")]);
+    const started=Date.now();
+    const {rows}=await client.query(
+      "select public.certify_medication_access_golden_path($1,$2,$3,$4) result",
+      [...actors,fixture],
+    );
+    const result=rows[0].result;
+    const baseline=(await client.query(`select jsonb_build_object(
+      'products',(select count(*) from etl_source_records r join etl_sources s on s.id=r.source_id where s.source_code='NAFDAC_GREENBOOK'),
+      'medicines',(select count(*) from medicines),'certified',(select count(*) from merdp_certifications where status='certified'),
+      'published',(select count(*) from merdp_publications),'manufacturers',(select count(*) from merdp_manufacturer_identities where source_manufacturer_id~'^[0-9]+$'),
+      'relationships',(select count(*) from merdp_manufacturer_product_relationships),'offList',(select count(*) from merdp_manufacturer_product_relationships where current_listing_membership=false),
+      'unsafeNrnMerges',(select count(*) from medicine_registrations mr join (select regulatory_identifier from merdp_source_mappings where regulatory_identifier is not null group by regulatory_identifier having count(*)>1) c on c.regulatory_identifier=mr.registration_number)) result`)).rows[0].result;
+    const payload={version:"medlink-medication-access-golden-path-v1",generatedAt:new Date().toISOString(),commit:execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),elapsedMs:Date.now()-started,baseline,lineage:result,certification:{database:"PASS",serviceApi:"PARTIAL",ui:"PARTIAL",reservation:"MVP_GAP"}};
+    mkdirSync(".artifacts/certification",{recursive:true});const content=`${JSON.stringify(payload,null,2)}\n`,path=".artifacts/certification/medlink-medication-access-golden-path.json";writeFileSync(path,content);console.log(JSON.stringify({path,sha256:createHash("sha256").update(content).digest("hex"),result,baseline}));
   } else if(operation==="artifacts") {
     const query=async(sql,parameters=[])=>(await client.query(sql,parameters)).rows;
     const existing=(await query(`select i.source_manufacturer_id "sourceId",i.canonical_organization_id "organizationId",l.id "mappingId",r.product_source_id "productSourceId",r.canonical_product_id "medicineId",r.source_record_id "relationshipSourceRecordId",i.latest_source_record_id "manufacturerSourceRecordId",(select count(*)::int from merdp_provenance p where p.canonical_product_id=r.canonical_product_id and p.winning_source_record_id=r.source_record_id) "relationshipProvenanceCount" from merdp_manufacturer_identities i join merdp_manufacturer_source_links l on l.source_record_id=i.latest_source_record_id join merdp_manufacturer_product_relationships r on r.manufacturer_identity_id=i.id and r.resolution='known_wave1_product' where i.source_manufacturer_id='718' order by r.product_source_id limit 1`))[0];
