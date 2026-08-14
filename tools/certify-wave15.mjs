@@ -12,7 +12,11 @@ const client=new Client({connectionString});
 await client.connect();
 try {
   const operation=process.argv[2];
-  if(operation==="wave1-state") {
+  if(operation==="wave1") {
+    const started=Date.now();
+    const {rows}=await client.query("select public.run_merdp_wave1_convergence($1) result",[process.argv[3]??null]);
+    console.log(JSON.stringify({elapsedMs:Date.now()-started,result:rows[0].result}));
+  } else if(operation==="wave1-state") {
     const {rows}=await client.query(`select
       (select count(*)::int from etl_source_records r join etl_sources s on s.id=r.source_id where s.source_code='NAFDAC_GREENBOOK') products,
       (select count(*)::int from medicines) medicines,
@@ -48,6 +52,13 @@ try {
       'inventoryRows',(select count(*) from inventory_batches)
     ) result`);
     console.log(JSON.stringify(rows[0].result));
+  } else if(operation==="manufacturer-mappings") {
+    const {rows}=await client.query("select source_manufacturer_id,canonical_organization_id from merdp_manufacturer_identities where canonical_organization_id is not null order by source_manufacturer_id");
+    const payload=Object.fromEntries(rows.map(row=>[row.source_manufacturer_id,row.canonical_organization_id]));
+    mkdirSync(".artifacts/certification",{recursive:true});
+    const content=`${JSON.stringify(payload,null,2)}\n`,path=".artifacts/certification/merdp-wave2a-manufacturer-mappings.json";
+    writeFileSync(path,content);
+    console.log(JSON.stringify({path,count:rows.length,sha256:createHash("sha256").update(content).digest("hex")}));
   } else if(operation==="artifacts") {
     const query=async(sql,parameters=[])=>(await client.query(sql,parameters)).rows;
     const existing=(await query(`select i.source_manufacturer_id "sourceId",i.canonical_organization_id "organizationId",l.id "mappingId",r.product_source_id "productSourceId",r.canonical_product_id "medicineId",r.source_record_id "relationshipSourceRecordId",i.latest_source_record_id "manufacturerSourceRecordId",(select count(*)::int from merdp_provenance p where p.canonical_product_id=r.canonical_product_id and p.winning_source_record_id=r.source_record_id) "relationshipProvenanceCount" from merdp_manufacturer_identities i join merdp_manufacturer_source_links l on l.source_record_id=i.latest_source_record_id join merdp_manufacturer_product_relationships r on r.manufacturer_identity_id=i.id and r.resolution='known_wave1_product' where i.source_manufacturer_id='718' order by r.product_source_id limit 1`))[0];
