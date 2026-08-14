@@ -756,3 +756,63 @@ describe("prescription file storage migration (G05, Engine 26)", () => {
     expect(sql).not.toContain("commit;");
   });
 });
+
+describe("reservation decision migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202608150030_reservation_decision.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("adds an optional, meaningful-if-present reason column to fulfillment_transitions rather than a second table", () => {
+    expect(sql).toContain("alter table public.fulfillment_transitions");
+    expect(sql).toContain("add column reason text");
+    expect(sql).toContain("check (reason is null or char_length(btrim(reason)) >= 3)");
+  });
+
+  it("commits the reservation decision and its runtime evidence in one function", () => {
+    expect(sql).toContain("function public.decide_reservation");
+    expect(sql).toContain("update public.reservations set");
+    expect(sql).toContain("insert into public.fulfillment_transitions");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("requires a meaningful reason to cancel but never synthesizes one, and allows confirm without a reason", () => {
+    expect(sql).toContain("normalized_reason := nullif(btrim(coalesce(target_reason, '')), '');");
+    expect(sql).toContain("if target_status = 'cancelled' and (normalized_reason is null or char_length(normalized_reason) < 3) then");
+    expect(sql).toContain("raise exception 'a meaningful reason is required to cancel a reservation';");
+    expect(sql).not.toMatch(/no reason provided|'n\/a'/);
+  });
+
+  it("only requires a pending reservation, rejecting any other current status including the opposite terminal state", () => {
+    expect(sql).toContain("if current_reservation.status <> 'pending' then");
+    expect(sql).toContain("raise exception 'only a pending reservation may receive a pharmacy decision';");
+  });
+
+  it("replays idempotently on the same key and decision, and rejects a conflicting replay", () => {
+    expect(sql).toContain("where organization_id = target_organization_id");
+    expect(sql).toContain("and idempotency_key = target_idempotency_key");
+    expect(sql).toContain("if prior_transition.reservation_id <> target_reservation_id");
+    expect(sql).toContain("or prior_transition.to_state <> target_status then");
+    expect(sql).toContain("raise exception 'idempotency key was already used for a different reservation decision';");
+  });
+
+  it("releases the inventory lock only on cancellation, leaving a confirmed reservation's lock active", () => {
+    const cancelBlockStart = sql.indexOf("if target_status = 'cancelled' then\n    update public.inventory_locks");
+    expect(cancelBlockStart).toBeGreaterThan(-1);
+    expect(sql).toContain("set status = 'released', released_at = now()");
+    expect(sql).toContain("and status = 'active';");
+  });
+
+  it("re-enforces the pharmacist/pharmacy_staff role rule already established by reservations_manage RLS", () => {
+    expect(sql).toContain("public.is_organization_member(target_organization_id)");
+    expect(sql).toContain("array['pharmacist', 'pharmacy_staff']::public.member_role[]");
+  });
+
+  it("grants execute to authenticated, matching every other actor-invoked decision RPC", () => {
+    expect(sql).toContain("revoke all on function public.decide_reservation(");
+    expect(sql).toContain("from public;");
+    expect(sql).toContain("grant execute on function public.decide_reservation(");
+    expect(sql).toContain("to authenticated;");
+  });
+});
