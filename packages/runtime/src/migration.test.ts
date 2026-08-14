@@ -816,3 +816,65 @@ describe("reservation decision migration", () => {
     expect(sql).toContain("to authenticated;");
   });
 });
+
+describe("reservation fulfillment migration (F2/F3)", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202608150031_reservation_fulfillment.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("only accepts a pre-hashed pickup credential -- never a plaintext parameter", () => {
+    expect(sql).toContain("target_pickup_code_hash text");
+    expect(sql).not.toContain("target_pickup_code text");
+  });
+
+  it("strips pickup_code_hash from every jsonb value either function returns", () => {
+    const occurrences = sql.split("- 'pickup_code_hash'").length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(4);
+  });
+
+  it("mark_reservation_ready only transitions a confirmed reservation, storing the hash without touching the inventory lock", () => {
+    expect(sql).toContain("function public.mark_reservation_ready");
+    expect(sql).toContain("if current_reservation.status <> 'confirmed' then");
+    expect(sql).toContain("status = 'ready',");
+    expect(sql).toContain("pickup_code_hash = target_pickup_code_hash");
+    const readyFnStart = sql.indexOf("create or replace function public.mark_reservation_ready");
+    const collectFnStart = sql.indexOf("create or replace function public.collect_reservation");
+    expect(readyFnStart).toBeGreaterThan(-1);
+    expect(collectFnStart).toBeGreaterThan(readyFnStart);
+    expect(sql.slice(readyFnStart, collectFnStart)).not.toContain("inventory_locks");
+  });
+
+  it("replaying mark_reservation_ready never rotates the credential and reports isNewTransition accordingly", () => {
+    expect(sql).toContain("jsonb_build_object('isnewtransition', false)");
+    expect(sql).toContain("jsonb_build_object('isnewtransition', true)");
+  });
+
+  it("collect_reservation only transitions a ready reservation whose hash matches, consuming the lock atomically", () => {
+    expect(sql).toContain("function public.collect_reservation");
+    expect(sql).toContain("if current_reservation.status <> 'ready' then");
+    expect(sql).toContain("if current_reservation.pickup_code_hash is distinct from target_pickup_code_hash then");
+    expect(sql).toContain("raise exception 'pickup credential is invalid';");
+    expect(sql).toContain("status = 'consumed', consumed_at = now()");
+    expect(sql).toContain("and status = 'active';");
+  });
+
+  it("clears the stored hash on collection so a reused credential cannot collect twice", () => {
+    expect(sql).toContain("status = 'collected',");
+    expect(sql).toContain("pickup_code_hash = null");
+  });
+
+  it("re-enforces the pharmacist/pharmacy_staff role rule on both functions", () => {
+    const occurrences = sql.split("array['pharmacist', 'pharmacy_staff']::public.member_role[]").length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(2);
+  });
+
+  it("records runtime evidence for both transitions, with a payload that never includes the credential", () => {
+    expect(sql).toContain("'reservation.ready.v1'");
+    expect(sql).toContain("'reservation.collected.v1'");
+    const readyEvidenceStart = sql.indexOf("perform public.record_runtime_evidence(\n    target_organization_id, target_actor_id, 'reservations.ready'");
+    const readyEvidenceEnd = sql.indexOf(");", readyEvidenceStart);
+    expect(readyEvidenceStart).toBeGreaterThan(-1);
+    expect(sql.slice(readyEvidenceStart, readyEvidenceEnd)).not.toContain("pickup_code");
+  });
+});
