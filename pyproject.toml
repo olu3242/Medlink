@@ -15,5 +15,5 @@ include = ["tools*"]
 exclude = ["tools.nafdac_manufacturers.tests*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tools/nafdac_manufacturers/tests"]
+testpaths = ["tools/nafdac_manufacturers/tests", "tools/nafdac_products/tests"]
 addopts = "-q -p no:cacheprovider --basetemp=../medlink-pytest-temp"

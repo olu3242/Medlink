@@ -1,4 +1,5 @@
 import logging
+import json
 import random
 import time
 from dataclasses import dataclass
@@ -54,6 +55,29 @@ class GreenbookClient:
                 delay = self._retry_delay(attempt, retry_after)
                 self.log.warning("retrying NAFDAC request", extra={"url": url, "attempt": attempt, "delay_seconds": delay})
                 self._sleep(delay)
+        raise AssertionError("unreachable")
+
+    def get_json(self, url: str) -> tuple[int, object, str]:
+        """Fetch an authoritative JSON response with the same bounded policy."""
+        for attempt in range(1, self.policy.max_attempts + 1):
+            self._wait_for_rate_limit()
+            self._last_request = self._clock()
+            try:
+                request = Request(url, headers={"User-Agent": "Medlink-MERDP-source-contract/1.0 (+https://github.com/olu3242/Medlink)", "Accept": "application/json", "X-Requested-With": "XMLHttpRequest"})
+                with self._opener(request, timeout=self.policy.timeout_seconds) as response:
+                    status = int(response.status)
+                    content_type = response.headers.get("Content-Type", "")
+                    if status != 200 or "json" not in content_type.lower():
+                        raise SourceContractError(f"unexpected response: {status} {content_type}")
+                    try:
+                        return status, json.loads(response.read().decode("utf-8")), response.geturl()
+                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                        raise SourceContractError("SOURCE_SCHEMA_MISMATCH: malformed JSON") from error
+            except (HTTPError, URLError, TimeoutError) as error:
+                retryable = not isinstance(error, HTTPError) or error.code in {429, 500, 502, 503, 504}
+                if not retryable or attempt == self.policy.max_attempts:
+                    raise RuntimeError(f"NAFDAC request failed after {attempt} attempt(s): {url}") from error
+                self._sleep(self._retry_delay(attempt, error.headers.get("Retry-After") if isinstance(error, HTTPError) else None))
         raise AssertionError("unreachable")
 
     def _retry_delay(self, attempt: int, retry_after: str | None) -> float:
