@@ -1106,3 +1106,37 @@ describe("pickup credential authority migration", () => {
     expect(sql).toContain("'reservation.credential_issued.v1'");
   });
 });
+
+describe("reservation expiry audit trail migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608160037_reservation_expiry_audit_trail.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("captures the reservation's prior status before the update overwrites it", () => {
+    expect(sql).toContain("reservation.status as reservation_status");
+  });
+
+  it("writes a fulfillment_transitions row for every expired reservation, idempotently", () => {
+    expect(sql).toContain("insert into public.fulfillment_transitions (");
+    expect(sql).toContain(
+      "lock_row.organization_id, lock_row.reservation_id,\n      lock_row.reservation_status, 'expired', 'system.expired',\n      operation_key, gen_random_uuid()",
+    );
+    expect(sql).toContain("on conflict (organization_id, idempotency_key) do nothing;");
+  });
+
+  it("still requires service_role and a bounded limit -- the authorization check is untouched", () => {
+    expect(sql).toContain("inventory expiry worker is not authorized");
+    expect(sql).toContain("coalesce(auth.role(), '') <> 'service_role'");
+  });
+
+  it("leaves the batch shelf-life expiry loop untouched", () => {
+    expect(sql).toContain("expired_batches := expired_batches + 1;");
+    expect(sql).toContain("_record_inventory_transaction(");
+  });
+});
