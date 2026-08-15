@@ -190,23 +190,32 @@ function fakeRpcOnlyDatabase(rpcResult: { data: unknown; error: unknown }) {
 }
 
 describe("markReservationReady", () => {
-  it("sends only a 64-hex-char hash to the RPC, never the generated plaintext", async () => {
+  it("calls the RPC with exactly the 7 transition args and no credential field at all", async () => {
     const { database, rpcCalls } = fakeRpcOnlyDatabase({
-      data: { id: reservationId, status: "ready", isNewTransition: true }, error: null,
+      data: { id: reservationId, status: "ready" }, error: null,
     });
-    const result = await markReservationReady(context, database, reservationId);
-    const sentHash = rpcCalls[0]?.args.target_pickup_code_hash as string;
-    expect(sentHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(result.pickupCode).toBeDefined();
-    expect(result.pickupCode).not.toBe(sentHash);
+    await markReservationReady(context, database, reservationId);
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0]?.fn).toBe("mark_reservation_ready");
+    expect(rpcCalls[0]?.args).toEqual({
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: `${reservationId}:ready`,
+      target_channel: context.channel,
+      target_reservation_id: reservationId,
+    });
+    expect(rpcCalls[0]?.args).not.toHaveProperty("target_pickup_code_hash");
   });
 
-  it("omits pickupCode from the result when the RPC reports a replay (isNewTransition: false)", async () => {
+  it("returns exactly the reservation from the RPC, with no pickupCode field -- issuance is a separate, patient-owned action", async () => {
     const { database } = fakeRpcOnlyDatabase({
-      data: { id: reservationId, status: "ready", isNewTransition: false }, error: null,
+      data: { id: reservationId, status: "ready" }, error: null,
     });
     const result = await markReservationReady(context, database, reservationId);
-    expect(result.pickupCode).toBeUndefined();
+    expect(result).toEqual({ reservation: { id: reservationId, status: "ready" } });
+    expect(result).not.toHaveProperty("pickupCode");
   });
 });
 

@@ -160,6 +160,24 @@ describe("buildReservationNotificationDispatcher", () => {
     expect(published?.payload).toMatchObject({ status: "published" });
   });
 
+  it("ignores reservation.credential_issued.v1 -- pickup credential issuance never dispatches a WhatsApp message", async () => {
+    const { database, updates } = fakeDatabase({
+      claimed: [reservationLifecycleEvent("reservation.credential_issued.v1")],
+      reservationPatientId: patientId,
+    });
+    const dispatcher = buildReservationNotificationDispatcher(database, "whatsapp-token", fakeSender);
+    await dispatcher.dispatch("test-worker", 5);
+
+    // No consumer is registered for this event type at all -- unlike the
+    // generic runtime.operation.completed events below (which
+    // ReservationCreatedNotificationConsumer always claims and filters
+    // internally), this one is dead-lettered by the dispatcher itself
+    // before any consumer runs, so no notification is ever attempted.
+    expect(updates.find((u) => u.table === "notifications")).toBeUndefined();
+    const deadLettered = updates.find((u) => u.table === "runtime_outbox_events");
+    expect(deadLettered?.payload).toMatchObject({ status: "dead_letter", last_error_code: "consumer_missing" });
+  });
+
   it("ignores every generic runtime.operation.completed event except reservations.create", async () => {
     const event: OutboxEvent = {
       id: "event-2",

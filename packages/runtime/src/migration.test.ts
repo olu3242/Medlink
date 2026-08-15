@@ -1007,3 +1007,75 @@ describe("outbox dispatch worker migration (G09 minimum slice)", () => {
     expect(sql).toContain("if target_limit is null or target_limit < 1 or target_limit > 200 then");
   });
 });
+
+describe("pickup credential authority migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608160035_pickup_credential_authority.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("drops the old mark_reservation_ready overload that accepted a credential hash", () => {
+    expect(sql).toContain(
+      "drop function if exists public.mark_reservation_ready(\n  uuid, uuid, text, text, text, text, uuid, text\n);",
+    );
+  });
+
+  it("redefines mark_reservation_ready with no credential parameter and no credential-bearing state change", () => {
+    const signature =
+      "create or replace function public.mark_reservation_ready(\n  target_organization_id uuid,\n  target_actor_id uuid,\n  target_correlation_id text,\n  target_request_id text,\n  target_idempotency_key text,\n  target_channel text,\n  target_reservation_id uuid\n)";
+    expect(sql).toContain(signature);
+    const bodyStart = sql.indexOf(signature);
+    const bodyEnd = sql.indexOf("create or replace function public.issue_pickup_credential(");
+    const body = sql.slice(bodyStart, bodyEnd);
+    expect(body).not.toContain("target_pickup_code_hash");
+    expect(body).toContain("update public.reservations set status = 'ready'");
+  });
+
+  it("still requires pharmacy staff or pharmacist role, and preserves the confirmed precondition", () => {
+    expect(sql).toContain("marking a reservation ready requires pharmacy staff or pharmacist role");
+    expect(sql).toContain("only a confirmed reservation may be marked ready");
+  });
+
+  it("strips pickup_code_hash from every return path of mark_reservation_ready", () => {
+    const matches = sql.match(/return to_jsonb\(current_reservation\) - 'pickup_code_hash';/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("defines issue_pickup_credential as a patient-only, ready-gated, non-rotating action", () => {
+    expect(sql).toContain("create or replace function public.issue_pickup_credential(");
+    expect(sql).toContain(
+      "only the reservation''s own patient may issue a pickup credential",
+    );
+    expect(sql).toContain(
+      "a pickup credential may only be issued once a reservation is ready",
+    );
+    expect(sql).toContain(
+      "a pickup credential has already been issued for this reservation",
+    );
+    expect(sql).toContain(
+      "idempotency key was already used to issue a different pickup credential",
+    );
+  });
+
+  it("issue_pickup_credential never returns the hash it just stored, and is authenticated-only", () => {
+    expect(sql).toContain("returns jsonb");
+    expect(sql).toContain(
+      "revoke all on function public.issue_pickup_credential(\n  uuid, uuid, text, text, text, text, uuid, text\n) from public;",
+    );
+    expect(sql).toContain(
+      "grant execute on function public.issue_pickup_credential(\n  uuid, uuid, text, text, text, text, uuid, text\n) to authenticated;",
+    );
+  });
+
+  it("records fulfillment_transitions and runtime evidence for both ready and credential issuance", () => {
+    expect(sql).toContain("'confirmed', 'ready', 'pharmacy.ready'");
+    expect(sql).toContain("'ready', 'ready', 'patient.credential_issued'");
+    expect(sql).toContain("'reservation.ready.v1'");
+    expect(sql).toContain("'reservation.credential_issued.v1'");
+  });
+});

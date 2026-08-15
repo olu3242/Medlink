@@ -118,6 +118,18 @@ export const eventContracts: readonly VersionedEventContract[] = [
     required: ["tenantId", "reservationId"],
   },
   {
+    type: "reservation.credential_issued.v1",
+    version: 1,
+    aggregate: "reservation",
+    required: ["tenantId", "reservationId"],
+    // The patient-generated pickup credential is never part of this event
+    // -- only the reservations table stores its hash, and this event
+    // carries no field for it at all (see
+    // packages/notifications/src/reservation-outbox.ts, which registers
+    // no consumer for this event type: it never reaches WhatsApp).
+    prohibited: ["pickupCode", "pickupCodeHash", "credential"],
+  },
+  {
     type: "payment.authorized.v1",
     version: 1,
     aggregate: "payment",

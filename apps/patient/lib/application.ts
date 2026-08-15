@@ -233,4 +233,30 @@ export class AccessApplication {
       target_expires_at: input.expiresAt,
     }));
   }
+
+  // Patient-owned pickup credential issuance. The plaintext code is
+  // generated and hashed entirely in the browser
+  // (apps/patient/lib/pickup-credential.ts) -- this method, like
+  // issue_pickup_credential itself, only ever receives/stores the hash.
+  // The idempotency key is derived the same way decideReservation/
+  // markReservationReady derive theirs (reservationId + step), which is
+  // what makes issue_pickup_credential's "no silent rotation" guarantee
+  // work: a second issuance attempt for the same reservation always
+  // collides with the first one's key rather than minting a new one.
+  async issueCredential(
+    context: RuntimeContext,
+    reservationId: string,
+    pickupCodeHash: string,
+  ) {
+    return result(this.database.rpc("issue_pickup_credential", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: `${reservationId}:credential_issued`,
+      target_channel: context.channel,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: pickupCodeHash,
+    }));
+  }
 }

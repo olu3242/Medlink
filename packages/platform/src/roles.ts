@@ -27,6 +27,7 @@ export const permissions = [
   "reservation:read",
   "reservation:create",
   "reservation:manage",
+  "reservation:credential",
   "mar:read",
   "mar:create",
   "mar:transition",
