@@ -976,6 +976,33 @@ describe("reservation fulfillment read grants migration", () => {
   });
 });
 
+describe("outbox/audit read grants migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608160036_outbox_audit_read_grants.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("grants runtime_outbox_events select to service_role only -- it has no RLS policies for authenticated to reach", () => {
+    expect(sql).toContain("grant select on public.runtime_outbox_events to service_role;");
+    expect(sql).not.toContain("grant select on public.runtime_outbox_events to authenticated");
+  });
+
+  it("grants governance_audit_events select to both authenticated and service_role, making its admin-read policy reachable", () => {
+    expect(sql).toContain("grant select on public.governance_audit_events to authenticated, service_role;");
+  });
+
+  it("does not touch RLS policies -- same gap class as the fulfillment read grants migration", () => {
+    expect(sql).not.toContain("create policy");
+    expect(sql).not.toContain("alter table");
+    expect(sql).not.toContain("enable row level security");
+  });
+});
+
 describe("outbox dispatch worker migration (G09 minimum slice)", () => {
   const sql = readFileSync(
     join(
