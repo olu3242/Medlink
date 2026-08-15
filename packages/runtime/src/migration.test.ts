@@ -878,3 +878,53 @@ describe("reservation fulfillment migration (F2/F3)", () => {
     expect(sql.slice(readyEvidenceStart, readyEvidenceEnd)).not.toContain("pickup_code");
   });
 });
+
+describe("reservation fulfillment live-certification fixture migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608150032_reservation_fulfillment_live_fixture.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("is restricted to service_role, matching the existing certify_merdp_wave1_golden_lineage guard pattern", () => {
+    expect(sql).toContain("if auth.role() <> 'service_role'");
+    expect(sql).toContain("grant execute on function public.certify_reservation_fulfillment_fixture(");
+    expect(sql).toContain("to service_role;");
+    expect(sql).not.toContain("to authenticated;");
+  });
+
+  it("walks the real MAR state machine transition by transition rather than inserting a terminal state directly", () => {
+    const validatedIndex = sql.indexOf("state = 'validated'");
+    const reviewedIndex = sql.indexOf("state = 'reviewed'");
+    const searchingIndex = sql.indexOf("state = 'searching'");
+    const matchedIndex = sql.indexOf("state = 'matched'");
+    expect(validatedIndex).toBeGreaterThan(-1);
+    expect(reviewedIndex).toBeGreaterThan(validatedIndex);
+    expect(searchingIndex).toBeGreaterThan(reviewedIndex);
+    expect(matchedIndex).toBeGreaterThan(searchingIndex);
+  });
+
+  it("only marks a MAR reviewed after inserting an approved clinical review, matching the trigger's own requirement", () => {
+    const reviewInsertIndex = sql.indexOf("insert into public.clinical_reviews");
+    const reviewedStateIndex = sql.indexOf("state = 'reviewed'");
+    expect(reviewInsertIndex).toBeGreaterThan(-1);
+    expect(reviewedStateIndex).toBeGreaterThan(reviewInsertIndex);
+    expect(sql).toContain("'approved', pharmacist_id, now()");
+  });
+
+  it("seeds every reservation directly at pending status with a matching active inventory lock, one MAR per reservation", () => {
+    expect(sql).toContain("foreach reservation_key in array reservation_keys loop");
+    expect(sql).toContain("'pending',");
+    expect(sql).toContain("'active',");
+    expect(sql).toContain("insert into public.inventory_locks(");
+  });
+
+  it("seeds a second, unrelated organization for cross-tenant isolation tests", () => {
+    expect(sql).toContain("other_organization_id uuid := gen_random_uuid();");
+    expect(sql).toContain("insert into public.organizations(id, name, slug, type) values");
+  });
+});

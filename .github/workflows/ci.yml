@@ -90,6 +90,7 @@ jobs:
           eval "$(npx supabase status -o env)"
           MEDLINK_LIVE_SUPABASE_URL="$API_URL" \
           MEDLINK_LIVE_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
+          MEDLINK_LIVE_SUPABASE_SERVICE_KEY="$SECRET_KEY" \
           npm run test:live
       - if: always()
         run: npx supabase stop
