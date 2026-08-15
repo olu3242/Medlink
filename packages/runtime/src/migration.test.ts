@@ -756,3 +756,222 @@ describe("prescription file storage migration (G05, Engine 26)", () => {
     expect(sql).not.toContain("commit;");
   });
 });
+
+describe("reservation decision migration", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202608150030_reservation_decision.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("adds an optional, meaningful-if-present reason column to fulfillment_transitions rather than a second table", () => {
+    expect(sql).toContain("alter table public.fulfillment_transitions");
+    expect(sql).toContain("add column reason text");
+    expect(sql).toContain("check (reason is null or char_length(btrim(reason)) >= 3)");
+  });
+
+  it("commits the reservation decision and its runtime evidence in one function", () => {
+    expect(sql).toContain("function public.decide_reservation");
+    expect(sql).toContain("update public.reservations set");
+    expect(sql).toContain("insert into public.fulfillment_transitions");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("requires a meaningful reason to cancel but never synthesizes one, and allows confirm without a reason", () => {
+    expect(sql).toContain("normalized_reason := nullif(btrim(coalesce(target_reason, '')), '');");
+    expect(sql).toContain("if target_status = 'cancelled' and (normalized_reason is null or char_length(normalized_reason) < 3) then");
+    expect(sql).toContain("raise exception 'a meaningful reason is required to cancel a reservation';");
+    expect(sql).not.toMatch(/no reason provided|'n\/a'/);
+  });
+
+  it("only requires a pending reservation, rejecting any other current status including the opposite terminal state", () => {
+    expect(sql).toContain("if current_reservation.status <> 'pending' then");
+    expect(sql).toContain("raise exception 'only a pending reservation may receive a pharmacy decision';");
+  });
+
+  it("replays idempotently on the same key and decision, and rejects a conflicting replay", () => {
+    expect(sql).toContain("where organization_id = target_organization_id");
+    expect(sql).toContain("and idempotency_key = target_idempotency_key");
+    expect(sql).toContain("if prior_transition.reservation_id <> target_reservation_id");
+    expect(sql).toContain("or prior_transition.to_state <> target_status then");
+    expect(sql).toContain("raise exception 'idempotency key was already used for a different reservation decision';");
+  });
+
+  it("releases the inventory lock only on cancellation, leaving a confirmed reservation's lock active", () => {
+    const cancelBlockStart = sql.indexOf("if target_status = 'cancelled' then\n    update public.inventory_locks");
+    expect(cancelBlockStart).toBeGreaterThan(-1);
+    expect(sql).toContain("set status = 'released', released_at = now()");
+    expect(sql).toContain("and status = 'active';");
+  });
+
+  it("re-enforces the pharmacist/pharmacy_staff role rule already established by reservations_manage RLS", () => {
+    expect(sql).toContain("public.is_organization_member(target_organization_id)");
+    expect(sql).toContain("array['pharmacist', 'pharmacy_staff']::public.member_role[]");
+  });
+
+  it("grants execute to authenticated, matching every other actor-invoked decision RPC", () => {
+    expect(sql).toContain("revoke all on function public.decide_reservation(");
+    expect(sql).toContain("from public;");
+    expect(sql).toContain("grant execute on function public.decide_reservation(");
+    expect(sql).toContain("to authenticated;");
+  });
+});
+
+describe("reservation fulfillment migration (F2/F3)", () => {
+  const sql = readFileSync(
+    join(process.cwd(), "supabase", "migrations", "202608150031_reservation_fulfillment.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("only accepts a pre-hashed pickup credential -- never a plaintext parameter", () => {
+    expect(sql).toContain("target_pickup_code_hash text");
+    expect(sql).not.toContain("target_pickup_code text");
+  });
+
+  it("strips pickup_code_hash from every jsonb value either function returns", () => {
+    const occurrences = sql.split("- 'pickup_code_hash'").length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(4);
+  });
+
+  it("mark_reservation_ready only transitions a confirmed reservation, storing the hash without touching the inventory lock", () => {
+    expect(sql).toContain("function public.mark_reservation_ready");
+    expect(sql).toContain("if current_reservation.status <> 'confirmed' then");
+    expect(sql).toContain("status = 'ready',");
+    expect(sql).toContain("pickup_code_hash = target_pickup_code_hash");
+    const readyFnStart = sql.indexOf("create or replace function public.mark_reservation_ready");
+    const collectFnStart = sql.indexOf("create or replace function public.collect_reservation");
+    expect(readyFnStart).toBeGreaterThan(-1);
+    expect(collectFnStart).toBeGreaterThan(readyFnStart);
+    expect(sql.slice(readyFnStart, collectFnStart)).not.toContain("inventory_locks");
+  });
+
+  it("replaying mark_reservation_ready never rotates the credential and reports isNewTransition accordingly", () => {
+    expect(sql).toContain("jsonb_build_object('isnewtransition', false)");
+    expect(sql).toContain("jsonb_build_object('isnewtransition', true)");
+  });
+
+  it("collect_reservation only transitions a ready reservation whose hash matches, consuming the lock atomically", () => {
+    expect(sql).toContain("function public.collect_reservation");
+    expect(sql).toContain("if current_reservation.status <> 'ready' then");
+    expect(sql).toContain("if current_reservation.pickup_code_hash is distinct from target_pickup_code_hash then");
+    expect(sql).toContain("raise exception 'pickup credential is invalid';");
+    expect(sql).toContain("status = 'consumed', consumed_at = now()");
+    expect(sql).toContain("and status = 'active';");
+  });
+
+  it("clears the stored hash on collection so a reused credential cannot collect twice", () => {
+    expect(sql).toContain("status = 'collected',");
+    expect(sql).toContain("pickup_code_hash = null");
+  });
+
+  it("re-enforces the pharmacist/pharmacy_staff role rule on both functions", () => {
+    const occurrences = sql.split("array['pharmacist', 'pharmacy_staff']::public.member_role[]").length - 1;
+    expect(occurrences).toBeGreaterThanOrEqual(2);
+  });
+
+  it("records runtime evidence for both transitions, with a payload that never includes the credential", () => {
+    expect(sql).toContain("'reservation.ready.v1'");
+    expect(sql).toContain("'reservation.collected.v1'");
+    const readyEvidenceStart = sql.indexOf("perform public.record_runtime_evidence(\n    target_organization_id, target_actor_id, 'reservations.ready'");
+    const readyEvidenceEnd = sql.indexOf(");", readyEvidenceStart);
+    expect(readyEvidenceStart).toBeGreaterThan(-1);
+    expect(sql.slice(readyEvidenceStart, readyEvidenceEnd)).not.toContain("pickup_code");
+  });
+});
+
+describe("reservation fulfillment live-certification fixture migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608150032_reservation_fulfillment_live_fixture.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("is restricted to service_role, matching the existing certify_merdp_wave1_golden_lineage guard pattern", () => {
+    expect(sql).toContain("if auth.role() <> 'service_role'");
+    expect(sql).toContain("grant execute on function public.certify_reservation_fulfillment_fixture(");
+    expect(sql).toContain("to service_role;");
+    expect(sql).not.toContain("to authenticated;");
+  });
+
+  it("walks the real MAR state machine transition by transition rather than inserting a terminal state directly", () => {
+    const validatedIndex = sql.indexOf("state = 'validated'");
+    const reviewedIndex = sql.indexOf("state = 'reviewed'");
+    const searchingIndex = sql.indexOf("state = 'searching'");
+    const matchedIndex = sql.indexOf("state = 'matched'");
+    expect(validatedIndex).toBeGreaterThan(-1);
+    expect(reviewedIndex).toBeGreaterThan(validatedIndex);
+    expect(searchingIndex).toBeGreaterThan(reviewedIndex);
+    expect(matchedIndex).toBeGreaterThan(searchingIndex);
+  });
+
+  it("only marks a MAR reviewed after inserting an approved clinical review, matching the trigger's own requirement", () => {
+    const reviewInsertIndex = sql.indexOf("insert into public.clinical_reviews");
+    const reviewedStateIndex = sql.indexOf("state = 'reviewed'");
+    expect(reviewInsertIndex).toBeGreaterThan(-1);
+    expect(reviewedStateIndex).toBeGreaterThan(reviewInsertIndex);
+    expect(sql).toContain("'approved', pharmacist_id, now()");
+  });
+
+  it("seeds every reservation directly at pending status with a matching active inventory lock, one MAR per reservation", () => {
+    expect(sql).toContain("foreach reservation_key in array reservation_keys loop");
+    expect(sql).toContain("'pending',");
+    expect(sql).toContain("'active',");
+    expect(sql).toContain("insert into public.inventory_locks(");
+  });
+
+  it("seeds a second, unrelated organization for cross-tenant isolation tests", () => {
+    expect(sql).toContain("other_organization_id uuid := gen_random_uuid();");
+    expect(sql).toContain("insert into public.organizations(id, name, slug, type) values");
+  });
+
+  it("inserts its own medicine rather than depending on MERDP catalog data existing after a plain db reset", () => {
+    expect(sql).toContain("insert into public.medicines(");
+    expect(sql).not.toContain("where m.status = 'active'");
+    expect(sql).not.toContain("no active medicine available");
+  });
+
+  it("seeds a single-unit scarce batch with two matched-but-unreserved MARs for a real reserve_inventory concurrency race", () => {
+    expect(sql).toContain("scarce_batch_id, organization_id, location_id, medicine_id, 'scarce-' || fixture_key, '2099-12-31',\n    1, 'tablet', 'available', pharmacist_id");
+    expect(sql).toContain("'scarceinventorybatchid', scarce_batch_id");
+    expect(sql).toContain("'scarcemarids', jsonb_build_array(scarce_mar_id_a, scarce_mar_id_b)");
+    const scarceMarBlockStart = sql.indexOf("scarce_batch_id, organization_id, location_id, medicine_id");
+    const loopStart = sql.indexOf("foreach reservation_key in array reservation_keys loop");
+    expect(scarceMarBlockStart).toBeGreaterThan(-1);
+    expect(loopStart).toBeGreaterThan(scarceMarBlockStart);
+    expect(sql.slice(scarceMarBlockStart, loopStart)).not.toContain("insert into public.reservations(");
+  });
+});
+
+describe("reservation fulfillment read grants migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608150033_reservation_fulfillment_read_grants.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("grants select on all five fulfillment tables to both authenticated and service_role", () => {
+    for (const table of [
+      "reservations",
+      "inventory_locks",
+      "fulfillment_transitions",
+      "medication_access_requests",
+      "inventory_batches",
+    ]) {
+      expect(sql).toContain(`grant select on public.${table} to authenticated, service_role;`);
+    }
+  });
+
+  it("does not touch RLS policies -- the gap was the table-level grant, not row-level authorization", () => {
+    expect(sql).not.toContain("create policy");
+    expect(sql).not.toContain("alter table");
+    expect(sql).not.toContain("enable row level security");
+  });
+});
