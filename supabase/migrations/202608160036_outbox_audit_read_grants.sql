@@ -1,0 +1,22 @@
+-- Same gap, same fix as 202608150033_reservation_fulfillment_read_grants.sql:
+-- the local Supabase CLI's minimal roles.sql does not give service_role
+-- broad table access the way the hosted platform's default project
+-- bootstrap does, so every table needs an explicit grant before
+-- PostgREST/postgrest-js (including a service_role client, which bypasses
+-- RLS but not table-level GRANT/REVOKE) can query it at all. No test had
+-- ever read runtime_outbox_events or governance_audit_events directly
+-- until the new pickup-credential privacy-proof test, which surfaced this
+-- as "42501: permission denied for table runtime_outbox_events" in CI.
+--
+-- runtime_outbox_events has no RLS policies at all (worker-only access via
+-- the SECURITY DEFINER claim_runtime_outbox_events RPC), so granting
+-- select only to service_role is correct -- an authenticated grant would
+-- be reachable by nobody (RLS enabled + zero policies denies all rows to
+-- non-bypassing roles) and would only add an unused grant.
+--
+-- governance_audit_events already has a real RLS policy
+-- (governance_audit_events_admin_read, scoped to platform_admin/
+-- tenant_admin) that has been unreachable dead code for the same reason
+-- reservations/inventory_locks were -- this makes it reachable too.
+grant select on public.runtime_outbox_events to service_role;
+grant select on public.governance_audit_events to authenticated, service_role;

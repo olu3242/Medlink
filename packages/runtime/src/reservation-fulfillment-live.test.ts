@@ -67,6 +67,8 @@ live("live reservation fulfillment lifecycle", () => {
     "ready-replay",
     "invalid-transition",
     "collection-race",
+    "credential-authority",
+    "credential-missing",
   ] as const;
 
   let fixture: {
@@ -338,16 +340,14 @@ live("live reservation fulfillment lifecycle", () => {
     expect(lockAfterConfirmError, JSON.stringify(lockAfterConfirmError)).toBeNull();
     expect(lockAfterConfirm?.status).toBe("active");
 
-    const code = generatePickupCode();
     const ready = await pharmacyStaff.client.rpc("mark_reservation_ready", {
       ...baseArgs(pharmacyStaff.id),
       target_idempotency_key: `${reservationId}:ready`,
       target_reservation_id: reservationId,
-      target_pickup_code_hash: hashPickupCode(code),
     });
     expect(ready.error).toBeNull();
     const readyData = ready.data as ReservationRow;
-    expect(readyData.isNewTransition).toBe(true);
+    expect(readyData.status).toBe("ready");
     expect(readyData.pickup_code_hash).toBeUndefined();
 
     const { data: lockAfterReady, error: lockAfterReadyError } = await service
@@ -357,6 +357,18 @@ live("live reservation fulfillment lifecycle", () => {
       .single();
     expect(lockAfterReadyError, JSON.stringify(lockAfterReadyError)).toBeNull();
     expect(lockAfterReady?.status).toBe("active");
+
+    // Readiness carries no credential -- the patient issues their own,
+    // client-side-generated code once the reservation is ready.
+    const code = generatePickupCode();
+    const issued = await patient.client.rpc("issue_pickup_credential", {
+      ...baseArgs(patient.id),
+      target_idempotency_key: `${reservationId}:credential_issued`,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: hashPickupCode(code),
+    });
+    expect(issued.error).toBeNull();
+    expect((issued.data as ReservationRow).pickup_code_hash).toBeUndefined();
 
     const wrongAttempt = await pharmacyStaff.client.rpc("collect_reservation", {
       ...baseArgs(pharmacyStaff.id),
@@ -395,7 +407,7 @@ live("live reservation fulfillment lifecycle", () => {
     expect(lock?.consumed_at).not.toBeNull();
   });
 
-  it("idempotency: replaying mark_reservation_ready never rotates the stored credential hash", async () => {
+  it("idempotency: replaying mark_reservation_ready is a stable no-op, and re-replaying issue_pickup_credential never rotates the stored hash", async () => {
     const reservationId = fixture.reservations["ready-replay"];
     await pharmacist.client.rpc("decide_reservation", {
       ...baseArgs(pharmacist.id),
@@ -404,25 +416,51 @@ live("live reservation fulfillment lifecycle", () => {
       target_status: "confirmed",
     });
 
-    const originalCode = generatePickupCode();
-    const idempotencyKey = `${reservationId}:ready`;
-    const first = await pharmacyStaff.client.rpc("mark_reservation_ready", {
+    const readyIdempotencyKey = `${reservationId}:ready`;
+    const readyFirst = await pharmacyStaff.client.rpc("mark_reservation_ready", {
       ...baseArgs(pharmacyStaff.id),
-      target_idempotency_key: idempotencyKey,
+      target_idempotency_key: readyIdempotencyKey,
+      target_reservation_id: reservationId,
+    });
+    expect(readyFirst.error).toBeNull();
+    expect((readyFirst.data as ReservationRow).status).toBe("ready");
+    const readyReplay = await pharmacyStaff.client.rpc("mark_reservation_ready", {
+      ...baseArgs(pharmacyStaff.id),
+      target_idempotency_key: readyIdempotencyKey,
+      target_reservation_id: reservationId,
+    });
+    expect(readyReplay.error).toBeNull();
+    expect((readyReplay.data as ReservationRow).status).toBe("ready");
+
+    const originalCode = generatePickupCode();
+    const credentialIdempotencyKey = `${reservationId}:credential_issued`;
+    const first = await patient.client.rpc("issue_pickup_credential", {
+      ...baseArgs(patient.id),
+      target_idempotency_key: credentialIdempotencyKey,
       target_reservation_id: reservationId,
       target_pickup_code_hash: hashPickupCode(originalCode),
     });
-    expect((first.data as ReservationRow).isNewTransition).toBe(true);
+    expect(first.error).toBeNull();
 
+    // Exact replay: identical key, identical hash -> succeeds as a no-op.
+    const exactReplay = await patient.client.rpc("issue_pickup_credential", {
+      ...baseArgs(patient.id),
+      target_idempotency_key: credentialIdempotencyKey,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: hashPickupCode(originalCode),
+    });
+    expect(exactReplay.error).toBeNull();
+
+    // Conflicting replay: identical key, a different (freshly generated)
+    // hash -> rejected, never silently rotated.
     const discardedReplayCode = generatePickupCode();
-    const replay = await pharmacyStaff.client.rpc("mark_reservation_ready", {
-      ...baseArgs(pharmacyStaff.id),
-      target_idempotency_key: idempotencyKey,
+    const conflictingReplay = await patient.client.rpc("issue_pickup_credential", {
+      ...baseArgs(patient.id),
+      target_idempotency_key: credentialIdempotencyKey,
       target_reservation_id: reservationId,
       target_pickup_code_hash: hashPickupCode(discardedReplayCode),
     });
-    expect(replay.error).toBeNull();
-    expect((replay.data as ReservationRow).isNewTransition).toBe(false);
+    expect(conflictingReplay.error?.message).toMatch(/already used to issue a different pickup credential/i);
 
     // Only the original code -- the one actually persisted -- still collects.
     const collected = await pharmacyStaff.client.rpc("collect_reservation", {
@@ -450,9 +488,18 @@ live("live reservation fulfillment lifecycle", () => {
       ...baseArgs(pharmacyStaff.id),
       target_idempotency_key: `${reservationId}:ready-too-early`,
       target_reservation_id: reservationId,
-      target_pickup_code_hash: hashPickupCode(generatePickupCode()),
     });
     expect(skipToReady.error?.message).toMatch(/only a confirmed reservation/i);
+
+    // A pickup credential cannot be issued before the reservation is ready,
+    // even by the reservation's own patient.
+    const creditBeforeReady = await patient.client.rpc("issue_pickup_credential", {
+      ...baseArgs(patient.id),
+      target_idempotency_key: `${reservationId}:credential-too-early`,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: hashPickupCode(generatePickupCode()),
+    });
+    expect(creditBeforeReady.error?.message).toMatch(/may only be issued once a reservation is ready/i);
 
     const { data: stillPending, error: stillPendingError } = await service
       .from("reservations")
@@ -534,10 +581,15 @@ live("live reservation fulfillment lifecycle", () => {
       target_reservation_id: reservationId,
       target_status: "confirmed",
     });
-    const code = generatePickupCode();
     await pharmacyStaff.client.rpc("mark_reservation_ready", {
       ...baseArgs(pharmacyStaff.id),
       target_idempotency_key: `${reservationId}:ready`,
+      target_reservation_id: reservationId,
+    });
+    const code = generatePickupCode();
+    await patient.client.rpc("issue_pickup_credential", {
+      ...baseArgs(patient.id),
+      target_idempotency_key: `${reservationId}:credential_issued`,
       target_reservation_id: reservationId,
       target_pickup_code_hash: hashPickupCode(code),
     });
@@ -576,5 +628,155 @@ live("live reservation fulfillment lifecycle", () => {
       .single();
     expect(lockError, JSON.stringify(lockError)).toBeNull();
     expect(lock?.status).toBe("consumed");
+  });
+
+  it("isolation: only the reservation's own patient may issue its pickup credential, and the plaintext never appears in the reservation row, the outbox, the audit trail, or the transition log", async () => {
+    const reservationId = fixture.reservations["credential-authority"];
+    await pharmacist.client.rpc("decide_reservation", {
+      ...baseArgs(pharmacist.id),
+      target_idempotency_key: `${reservationId}:confirmed`,
+      target_reservation_id: reservationId,
+      target_status: "confirmed",
+    });
+    await pharmacyStaff.client.rpc("mark_reservation_ready", {
+      ...baseArgs(pharmacyStaff.id),
+      target_idempotency_key: `${reservationId}:ready`,
+      target_reservation_id: reservationId,
+    });
+
+    const attemptHash = hashPickupCode(generatePickupCode());
+
+    const asOtherPatient = await otherTenantPatient.client.rpc("issue_pickup_credential", {
+      ...baseArgs(otherTenantPatient.id),
+      target_idempotency_key: `${reservationId}:credential-by-other-patient`,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: attemptHash,
+    });
+    expect(asOtherPatient.error?.message).toMatch(/only the reservation's own patient/i);
+
+    const asPharmacist = await pharmacist.client.rpc("issue_pickup_credential", {
+      ...baseArgs(pharmacist.id),
+      target_idempotency_key: `${reservationId}:credential-by-pharmacist`,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: attemptHash,
+    });
+    expect(asPharmacist.error?.message).toMatch(/only the reservation's own patient/i);
+
+    const asPharmacyStaff = await pharmacyStaff.client.rpc("issue_pickup_credential", {
+      ...baseArgs(pharmacyStaff.id),
+      target_idempotency_key: `${reservationId}:credential-by-pharmacy-staff`,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: attemptHash,
+    });
+    expect(asPharmacyStaff.error?.message).toMatch(/only the reservation's own patient/i);
+
+    const { data: stillNoCredential, error: stillNoCredentialError } = await service
+      .from("reservations")
+      .select("pickup_code_hash")
+      .eq("id", reservationId)
+      .single();
+    expect(stillNoCredentialError, JSON.stringify(stillNoCredentialError)).toBeNull();
+    expect(stillNoCredential?.pickup_code_hash).toBeNull();
+
+    // A distinguishable plaintext (not just a random code) so it can be
+    // searched for by literal substring below -- proving it was never
+    // persisted anywhere, not merely that a same-shaped value wasn't.
+    const distinguishablePlaintext = `AUDITPROOF${Date.now().toString(36).toUpperCase()}`;
+    const issued = await patient.client.rpc("issue_pickup_credential", {
+      ...baseArgs(patient.id),
+      target_idempotency_key: `${reservationId}:credential_issued`,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: hashPickupCode(distinguishablePlaintext),
+    });
+    expect(issued.error).toBeNull();
+
+    // Checked right after issuance, before collection consumes it: the
+    // stored value is a 64-char hex hash, never the plaintext itself.
+    const { data: issuedRow, error: issuedRowError } = await service
+      .from("reservations")
+      .select("pickup_code_hash")
+      .eq("id", reservationId)
+      .single();
+    expect(issuedRowError, JSON.stringify(issuedRowError)).toBeNull();
+    expect(issuedRow?.pickup_code_hash).not.toContain(distinguishablePlaintext);
+    expect(issuedRow?.pickup_code_hash).toMatch(/^[0-9a-f]{64}$/);
+
+    const collected = await pharmacyStaff.client.rpc("collect_reservation", {
+      ...baseArgs(pharmacyStaff.id),
+      target_idempotency_key: `${reservationId}:collect`,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: hashPickupCode(distinguishablePlaintext),
+    });
+    expect(collected.error).toBeNull();
+    expect((collected.data as ReservationRow).status).toBe("collected");
+
+    // collect_reservation nulls pickup_code_hash on collection -- the
+    // credential is consumed/unusable afterward, not merely matched.
+    const { data: reservationRow, error: reservationRowError } = await service
+      .from("reservations")
+      .select("pickup_code_hash")
+      .eq("id", reservationId)
+      .single();
+    expect(reservationRowError, JSON.stringify(reservationRowError)).toBeNull();
+    expect(reservationRow?.pickup_code_hash).toBeNull();
+
+    const { data: outboxRows, error: outboxError } = await service
+      .from("runtime_outbox_events")
+      .select("payload")
+      .eq("aggregate_id", reservationId);
+    expect(outboxError, JSON.stringify(outboxError)).toBeNull();
+    for (const row of outboxRows ?? []) {
+      expect(JSON.stringify(row.payload)).not.toContain(distinguishablePlaintext);
+    }
+
+    const { data: auditRows, error: auditError } = await service
+      .from("governance_audit_events")
+      .select("previous_state,new_state,metadata")
+      .eq("resource_id", reservationId);
+    expect(auditError, JSON.stringify(auditError)).toBeNull();
+    for (const row of auditRows ?? []) {
+      expect(JSON.stringify(row)).not.toContain(distinguishablePlaintext);
+    }
+
+    const { data: transitionRows, error: transitionError } = await service
+      .from("fulfillment_transitions")
+      .select("*")
+      .eq("reservation_id", reservationId);
+    expect(transitionError, JSON.stringify(transitionError)).toBeNull();
+    for (const row of transitionRows ?? []) {
+      expect(JSON.stringify(row)).not.toContain(distinguishablePlaintext);
+    }
+  });
+
+  it("collection fails closed when no pickup credential has ever been issued, leaving the reservation ready", async () => {
+    const reservationId = fixture.reservations["credential-missing"];
+    await pharmacist.client.rpc("decide_reservation", {
+      ...baseArgs(pharmacist.id),
+      target_idempotency_key: `${reservationId}:confirmed`,
+      target_reservation_id: reservationId,
+      target_status: "confirmed",
+    });
+    await pharmacyStaff.client.rpc("mark_reservation_ready", {
+      ...baseArgs(pharmacyStaff.id),
+      target_idempotency_key: `${reservationId}:ready`,
+      target_reservation_id: reservationId,
+    });
+
+    const attempt = await pharmacyStaff.client.rpc("collect_reservation", {
+      ...baseArgs(pharmacyStaff.id),
+      target_idempotency_key: `${reservationId}:collect-no-credential`,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: hashPickupCode(generatePickupCode()),
+    });
+    expect(attempt.error?.message).toMatch(/pickup credential is invalid/i);
+
+    const { data: stillReady, error: stillReadyError } = await service
+      .from("reservations")
+      .select("status,pickup_code_hash")
+      .eq("id", reservationId)
+      .single();
+    expect(stillReadyError, JSON.stringify(stillReadyError)).toBeNull();
+    expect(stillReady?.status).toBe("ready");
+    expect(stillReady?.pickup_code_hash).toBeNull();
   });
 });

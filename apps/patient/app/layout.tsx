@@ -14,6 +14,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     brand={<a href="/">MedLink Patient</a>}
     navigation={[
       { label: "My requests", href: "/" },
+      { label: "My reservations", href: "/reservations" },
       { label: "Prescriptions", href: "/prescriptions" },
       { label: "Add prescription", href: "/prescriptions/new" },
       { label: "Medicine catalogue", href: "/medicines" },

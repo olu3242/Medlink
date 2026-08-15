@@ -1,4 +1,4 @@
-import { createHash, randomInt } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RuntimeError, type RuntimeContext } from "@medlink/runtime";
 import { z } from "zod";
@@ -162,44 +162,27 @@ export async function listReservations(
   return (rows as unknown as ReservationInboxRow[]).map(toInboxEntry);
 }
 
-// F2/F3 pickup credential. Human-enterable, cryptographically random,
-// generated and hashed here in the application process -- the RPCs below
-// only ever see/store/return the SHA-256 hash, never the plaintext, so it
-// cannot appear in a database row, a runtime-evidence payload, or (as long
-// as nothing here logs `pickupCode` itself) a server log. Alphabet
-// excludes visually ambiguous characters (0/O, 1/I/L); 8 characters over a
-// 32-symbol alphabet is ~40 bits of entropy, sized for a short-lived,
-// single-pharmacy-interaction credential, not a long-term secret.
-const PICKUP_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const PICKUP_CODE_LENGTH = 8;
-
-function generatePickupCode(): string {
-  let code = "";
-  for (let i = 0; i < PICKUP_CODE_LENGTH; i += 1) {
-    code += PICKUP_CODE_ALPHABET[randomInt(PICKUP_CODE_ALPHABET.length)];
-  }
-  return code;
-}
-
+// F3 credential verification. The pharmacy never generates or possesses
+// the plaintext pickup credential -- it is generated and hashed entirely
+// in the patient's own browser (apps/patient/lib/pickup-credential.ts) via
+// issue_pickup_credential, once their reservation is ready. This function
+// only hashes the code the *patient hands to pharmacy staff in person* so
+// it can be compared against the stored hash by collect_reservation --
+// the pharmacy is a verifier here, never an issuer.
 function hashPickupCode(code: string): string {
   return createHash("sha256").update(code.trim().toUpperCase()).digest("hex");
 }
 
-export interface ReadyResult {
-  readonly reservation: unknown;
-  // Present only when this call actually performed the confirmed->ready
-  // transition. A replayed call (same idempotency key) never re-reveals a
-  // plaintext code -- it was never persisted anywhere to recover.
-  readonly pickupCode?: string;
-}
-
+// F2: confirmed -> ready. Carries no credential at all -- see
+// supabase/migrations/202608160035_pickup_credential_authority.sql for why
+// readiness and credential issuance are now separate, independently owned
+// concerns (pharmacy vs. patient).
 export async function markReservationReady(
   context: RuntimeContext,
   database: SupabaseClient,
   reservationId: string,
-): Promise<ReadyResult> {
-  const pickupCode = generatePickupCode();
-  const data = await result(database.rpc("mark_reservation_ready", {
+): Promise<{ readonly reservation: unknown }> {
+  const reservation = await result(database.rpc("mark_reservation_ready", {
     target_organization_id: context.organizationId,
     target_actor_id: context.userId,
     target_correlation_id: context.correlationId,
@@ -207,10 +190,8 @@ export async function markReservationReady(
     target_idempotency_key: `${reservationId}:ready`,
     target_channel: context.channel,
     target_reservation_id: reservationId,
-    target_pickup_code_hash: hashPickupCode(pickupCode),
-  })) as { isNewTransition: boolean } & Record<string, unknown>;
-  const { isNewTransition, ...reservation } = data;
-  return isNewTransition ? { reservation, pickupCode } : { reservation };
+  }));
+  return { reservation };
 }
 
 export const collectReservationSchema = z.object({

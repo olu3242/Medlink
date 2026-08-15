@@ -12,6 +12,7 @@
     "@medlink/api": "*",
     "@medlink/inventory": "*",
     "@medlink/medicine": "*",
+    "@medlink/notifications": "*",
     "@medlink/observability": "*",
     "@medlink/pharmacy": "*",
     "@medlink/platform": "*",

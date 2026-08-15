@@ -1,1 +1,1 @@
-{"name":"@medlink/notifications","version":"0.1.0","private":true,"type":"module","exports":{".":"./src/index.ts"}}
+{"name":"@medlink/notifications","version":"0.1.0","private":true,"type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@medlink/runtime":"0.1.0","@medlink/whatsapp":"0.1.0","@medlink/workflows":"0.1.0","@supabase/supabase-js":"^2.52.0"}}
