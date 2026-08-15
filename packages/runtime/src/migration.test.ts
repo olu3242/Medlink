@@ -934,3 +934,27 @@ describe("reservation fulfillment live-certification fixture migration", () => {
     expect(sql).not.toContain("no active medicine available");
   });
 });
+
+describe("reservation fulfillment read grants migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608150033_reservation_fulfillment_read_grants.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("grants select on all three fulfillment tables to both authenticated and service_role", () => {
+    for (const table of ["reservations", "inventory_locks", "fulfillment_transitions"]) {
+      expect(sql).toContain(`grant select on public.${table} to authenticated, service_role;`);
+    }
+  });
+
+  it("does not touch RLS policies -- the gap was the table-level grant, not row-level authorization", () => {
+    expect(sql).not.toContain("create policy");
+    expect(sql).not.toContain("alter table");
+    expect(sql).not.toContain("enable row level security");
+  });
+});
