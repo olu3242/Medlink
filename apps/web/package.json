@@ -12,6 +12,7 @@
     "@medlink/conversation": "*",
     "@medlink/database": "*",
     "@medlink/inventory": "*",
+    "@medlink/notifications": "*",
     "@medlink/observability": "*",
     "@medlink/platform": "*",
     "@medlink/prescription": "*",
