@@ -66,11 +66,16 @@ live("live reservation fulfillment lifecycle", () => {
     "ready-collect",
     "ready-replay",
     "invalid-transition",
+    "collection-race",
   ] as const;
 
   let fixture: {
     organizationId: string;
+    pharmacyLocationId: string;
+    inventoryBatchId: string;
     reservations: Record<(typeof reservationKeys)[number], string>;
+    scarceInventoryBatchId: string;
+    scarceMarIds: readonly [string, string];
   };
   let patient: Actor;
   let pharmacist: Actor;
@@ -147,8 +152,15 @@ live("live reservation fulfillment lifecycle", () => {
     expect(transitions?.[0]).toMatchObject({ from_state: "pending", to_state: "confirmed", reason: null });
   });
 
-  it("lifecycle: declines with a meaningful reason and releases the inventory lock", async () => {
+  it("lifecycle: declines with a meaningful reason and releases the inventory lock, restoring availability", async () => {
     const reservationId = fixture.reservations["decline-happy"];
+    const { data: before, error: beforeError } = await service
+      .from("inventory_batches")
+      .select("quantity_reserved")
+      .eq("id", fixture.inventoryBatchId)
+      .single();
+    expect(beforeError, JSON.stringify(beforeError)).toBeNull();
+
     const { error, data } = await pharmacyStaff.client.rpc("decide_reservation", {
       ...baseArgs(pharmacyStaff.id),
       target_idempotency_key: `${reservationId}:cancelled`,
@@ -169,6 +181,14 @@ live("live reservation fulfillment lifecycle", () => {
     expect(lockError, JSON.stringify(lockError)).toBeNull();
     expect(lock?.status).toBe("released");
     expect(lock?.released_at).not.toBeNull();
+
+    const { data: after, error: afterError } = await service
+      .from("inventory_batches")
+      .select("quantity_reserved")
+      .eq("id", fixture.inventoryBatchId)
+      .single();
+    expect(afterError, JSON.stringify(afterError)).toBeNull();
+    expect(after?.quantity_reserved).toBe((before?.quantity_reserved ?? 0) - 1);
 
     const { data: transition, error: transitionError } = await service
       .from("fulfillment_transitions")
@@ -302,12 +322,21 @@ live("live reservation fulfillment lifecycle", () => {
 
   it("lifecycle: ready then collect with the correct pickup credential; a wrong credential is rejected first without side effects", async () => {
     const reservationId = fixture.reservations["ready-collect"];
-    await pharmacist.client.rpc("decide_reservation", {
+    const confirmed = await pharmacist.client.rpc("decide_reservation", {
       ...baseArgs(pharmacist.id),
       target_idempotency_key: `${reservationId}:confirmed`,
       target_reservation_id: reservationId,
       target_status: "confirmed",
     });
+    expect(confirmed.error).toBeNull();
+
+    const { data: lockAfterConfirm, error: lockAfterConfirmError } = await service
+      .from("inventory_locks")
+      .select("status")
+      .eq("reservation_id", reservationId)
+      .single();
+    expect(lockAfterConfirmError, JSON.stringify(lockAfterConfirmError)).toBeNull();
+    expect(lockAfterConfirm?.status).toBe("active");
 
     const code = generatePickupCode();
     const ready = await pharmacyStaff.client.rpc("mark_reservation_ready", {
@@ -320,6 +349,14 @@ live("live reservation fulfillment lifecycle", () => {
     const readyData = ready.data as ReservationRow;
     expect(readyData.isNewTransition).toBe(true);
     expect(readyData.pickup_code_hash).toBeUndefined();
+
+    const { data: lockAfterReady, error: lockAfterReadyError } = await service
+      .from("inventory_locks")
+      .select("status")
+      .eq("reservation_id", reservationId)
+      .single();
+    expect(lockAfterReadyError, JSON.stringify(lockAfterReadyError)).toBeNull();
+    expect(lockAfterReady?.status).toBe("active");
 
     const wrongAttempt = await pharmacyStaff.client.rpc("collect_reservation", {
       ...baseArgs(pharmacyStaff.id),
@@ -432,5 +469,112 @@ live("live reservation fulfillment lifecycle", () => {
       target_status: "confirmed",
     });
     expect(confirmed.error).toBeNull();
+  });
+
+  it("concurrency: two competing reservations for the last unit of real stock -- exactly one wins, no oversell", async () => {
+    const [marA, marB] = fixture.scarceMarIds;
+    const reserve = (marId: string) =>
+      pharmacist.client.rpc("reserve_inventory", {
+        ...baseArgs(pharmacist.id),
+        target_idempotency_key: `${marId}:reserve`,
+        target_mar_id: marId,
+        target_pharmacy_location_id: fixture.pharmacyLocationId,
+        target_inventory_batch_id: fixture.scarceInventoryBatchId,
+        target_quantity: 1,
+        target_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+      });
+
+    const settled = await Promise.allSettled([reserve(marA), reserve(marB)]);
+    const outcomes = settled.map((result) =>
+      result.status === "fulfilled" ? result.value : { data: null, error: result.reason as Error },
+    );
+    const successes = outcomes.filter((outcome) => !outcome.error);
+    const failures = outcomes.filter((outcome) => outcome.error);
+
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect(String(failures[0]?.error?.message)).toMatch(/insufficient|unavailable/i);
+
+    const { data: batch, error: batchError } = await service
+      .from("inventory_batches")
+      .select("quantity_on_hand,quantity_reserved")
+      .eq("id", fixture.scarceInventoryBatchId)
+      .single();
+    expect(batchError, JSON.stringify(batchError)).toBeNull();
+    expect(batch?.quantity_reserved).toBe(1);
+    expect(batch?.quantity_reserved).toBeLessThanOrEqual(batch?.quantity_on_hand ?? 0);
+
+    const { data: locks, error: locksError } = await service
+      .from("inventory_locks")
+      .select("id")
+      .eq("inventory_batch_id", fixture.scarceInventoryBatchId)
+      .eq("status", "active");
+    expect(locksError, JSON.stringify(locksError)).toBeNull();
+    expect(locks).toHaveLength(1);
+
+    // The winning reserve_inventory call also transitions the MAR
+    // matched -> reserved, which no other test in this suite exercises
+    // (every other reservation is seeded directly at 'pending' by the
+    // fixture). Exactly one of the two MARs should have made that
+    // transition.
+    const { data: winningMars, error: marsError } = await service
+      .from("medication_access_requests")
+      .select("id,state")
+      .in("id", [marA, marB]);
+    expect(marsError, JSON.stringify(marsError)).toBeNull();
+    expect(winningMars?.filter((mar) => mar.state === "reserved")).toHaveLength(1);
+    expect(winningMars?.filter((mar) => mar.state === "matched")).toHaveLength(1);
+  });
+
+  it("concurrency: two simultaneous collection attempts on the same ready reservation -- exactly one effective collection", async () => {
+    const reservationId = fixture.reservations["collection-race"];
+    await pharmacist.client.rpc("decide_reservation", {
+      ...baseArgs(pharmacist.id),
+      target_idempotency_key: `${reservationId}:confirmed`,
+      target_reservation_id: reservationId,
+      target_status: "confirmed",
+    });
+    const code = generatePickupCode();
+    await pharmacyStaff.client.rpc("mark_reservation_ready", {
+      ...baseArgs(pharmacyStaff.id),
+      target_idempotency_key: `${reservationId}:ready`,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: hashPickupCode(code),
+    });
+
+    const collect = (suffix: string) =>
+      pharmacyStaff.client.rpc("collect_reservation", {
+        ...baseArgs(pharmacyStaff.id),
+        target_idempotency_key: `${reservationId}:collect-${suffix}`,
+        target_reservation_id: reservationId,
+        target_pickup_code_hash: hashPickupCode(code),
+      });
+
+    const settled = await Promise.allSettled([collect("a"), collect("b")]);
+    const outcomes = settled.map((result) =>
+      result.status === "fulfilled" ? result.value : { data: null, error: result.reason as Error },
+    );
+    const successes = outcomes.filter((outcome) => !outcome.error);
+    const failures = outcomes.filter((outcome) => outcome.error);
+
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect(String(failures[0]?.error?.message)).toMatch(/only a reservation marked ready/i);
+
+    const { data: transitions, error: transitionsError } = await service
+      .from("fulfillment_transitions")
+      .select("to_state")
+      .eq("reservation_id", reservationId)
+      .eq("to_state", "collected");
+    expect(transitionsError, JSON.stringify(transitionsError)).toBeNull();
+    expect(transitions).toHaveLength(1);
+
+    const { data: lock, error: lockError } = await service
+      .from("inventory_locks")
+      .select("status")
+      .eq("reservation_id", reservationId)
+      .single();
+    expect(lockError, JSON.stringify(lockError)).toBeNull();
+    expect(lock?.status).toBe("consumed");
   });
 });

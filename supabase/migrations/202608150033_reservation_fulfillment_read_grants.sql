@@ -22,3 +22,9 @@
 grant select on public.reservations to authenticated, service_role;
 grant select on public.inventory_locks to authenticated, service_role;
 grant select on public.fulfillment_transitions to authenticated, service_role;
+
+-- Same gap, same fix: medication_access_requests and inventory_batches
+-- already have real RLS policies scoped "to authenticated" that are
+-- equally unreachable without a table-level grant.
+grant select on public.medication_access_requests to authenticated, service_role;
+grant select on public.inventory_batches to authenticated, service_role;

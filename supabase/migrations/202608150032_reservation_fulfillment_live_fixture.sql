@@ -33,6 +33,9 @@ declare
   location_id uuid := gen_random_uuid();
   batch_id uuid := gen_random_uuid();
   medicine_id uuid := gen_random_uuid();
+  scarce_batch_id uuid := gen_random_uuid();
+  scarce_mar_id_a uuid := gen_random_uuid();
+  scarce_mar_id_b uuid := gen_random_uuid();
   reservation_map jsonb := '{}'::jsonb;
   reservation_key text;
   mar_id uuid;
@@ -90,6 +93,74 @@ begin
     array_length(reservation_keys, 1) + 5, 'tablet', 'available', pharmacist_id
   );
 
+  -- A second batch holding exactly one unit, plus two independent MARs
+  -- already walked to 'matched' but deliberately left un-reserved: the
+  -- live test races two concurrent reserve_inventory calls against this
+  -- single unit through the real RPC (not a fixture shortcut), proving the
+  -- sync_inventory_lock_quantity trigger's oversell guard under genuine
+  -- concurrent Postgres transactions, and exercising the matched->reserved
+  -- MAR transition that the pre-seeded 'pending' reservations below
+  -- otherwise bypass entirely.
+  insert into public.inventory_batches(
+    id, organization_id, pharmacy_location_id, medicine_id, batch_number, expires_on,
+    quantity_on_hand, unit, status, created_by
+  ) values (
+    scarce_batch_id, organization_id, location_id, medicine_id, 'SCARCE-' || fixture_key, '2099-12-31',
+    1, 'tablet', 'available', pharmacist_id
+  );
+
+  insert into public.medication_access_requests(
+    id, organization_id, patient_id, requested_medicine_id, state,
+    transition_idempotency_key, created_by
+  ) values (
+    scarce_mar_id_a, organization_id, patient_id, medicine_id, 'created',
+    'fixture-mar-created-' || fixture_key || '-scarce-a', patient_id
+  );
+  update public.medication_access_requests set state = 'validated',
+    transition_idempotency_key = 'fixture-mar-validated-' || fixture_key || '-scarce-a'
+    where id = scarce_mar_id_a;
+  insert into public.clinical_reviews(
+    organization_id, mar_id, decision, reviewed_by, reviewed_at, idempotency_key
+  ) values (
+    organization_id, scarce_mar_id_a, 'approved', pharmacist_id, now(),
+    'fixture-review-' || fixture_key || '-scarce-a'
+  );
+  update public.medication_access_requests set state = 'reviewed',
+    transition_idempotency_key = 'fixture-mar-reviewed-' || fixture_key || '-scarce-a'
+    where id = scarce_mar_id_a;
+  update public.medication_access_requests set state = 'searching',
+    transition_idempotency_key = 'fixture-mar-searching-' || fixture_key || '-scarce-a'
+    where id = scarce_mar_id_a;
+  update public.medication_access_requests set state = 'matched',
+    transition_idempotency_key = 'fixture-mar-matched-' || fixture_key || '-scarce-a'
+    where id = scarce_mar_id_a;
+
+  insert into public.medication_access_requests(
+    id, organization_id, patient_id, requested_medicine_id, state,
+    transition_idempotency_key, created_by
+  ) values (
+    scarce_mar_id_b, organization_id, patient_id, medicine_id, 'created',
+    'fixture-mar-created-' || fixture_key || '-scarce-b', patient_id
+  );
+  update public.medication_access_requests set state = 'validated',
+    transition_idempotency_key = 'fixture-mar-validated-' || fixture_key || '-scarce-b'
+    where id = scarce_mar_id_b;
+  insert into public.clinical_reviews(
+    organization_id, mar_id, decision, reviewed_by, reviewed_at, idempotency_key
+  ) values (
+    organization_id, scarce_mar_id_b, 'approved', pharmacist_id, now(),
+    'fixture-review-' || fixture_key || '-scarce-b'
+  );
+  update public.medication_access_requests set state = 'reviewed',
+    transition_idempotency_key = 'fixture-mar-reviewed-' || fixture_key || '-scarce-b'
+    where id = scarce_mar_id_b;
+  update public.medication_access_requests set state = 'searching',
+    transition_idempotency_key = 'fixture-mar-searching-' || fixture_key || '-scarce-b'
+    where id = scarce_mar_id_b;
+  update public.medication_access_requests set state = 'matched',
+    transition_idempotency_key = 'fixture-mar-matched-' || fixture_key || '-scarce-b'
+    where id = scarce_mar_id_b;
+
   foreach reservation_key in array reservation_keys loop
     mar_id := gen_random_uuid();
 
@@ -144,7 +215,9 @@ begin
     'otherOrganizationId', other_organization_id,
     'pharmacyLocationId', location_id,
     'inventoryBatchId', batch_id,
-    'reservations', reservation_map
+    'reservations', reservation_map,
+    'scarceInventoryBatchId', scarce_batch_id,
+    'scarceMarIds', jsonb_build_array(scarce_mar_id_a, scarce_mar_id_b)
   );
 end;
 $$;

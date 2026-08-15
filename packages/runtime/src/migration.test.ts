@@ -933,6 +933,17 @@ describe("reservation fulfillment live-certification fixture migration", () => {
     expect(sql).not.toContain("where m.status = 'active'");
     expect(sql).not.toContain("no active medicine available");
   });
+
+  it("seeds a single-unit scarce batch with two matched-but-unreserved MARs for a real reserve_inventory concurrency race", () => {
+    expect(sql).toContain("scarce_batch_id, organization_id, location_id, medicine_id, 'scarce-' || fixture_key, '2099-12-31',\n    1, 'tablet', 'available', pharmacist_id");
+    expect(sql).toContain("'scarceinventorybatchid', scarce_batch_id");
+    expect(sql).toContain("'scarcemarids', jsonb_build_array(scarce_mar_id_a, scarce_mar_id_b)");
+    const scarceMarBlockStart = sql.indexOf("scarce_batch_id, organization_id, location_id, medicine_id");
+    const loopStart = sql.indexOf("foreach reservation_key in array reservation_keys loop");
+    expect(scarceMarBlockStart).toBeGreaterThan(-1);
+    expect(loopStart).toBeGreaterThan(scarceMarBlockStart);
+    expect(sql.slice(scarceMarBlockStart, loopStart)).not.toContain("insert into public.reservations(");
+  });
 });
 
 describe("reservation fulfillment read grants migration", () => {
@@ -946,8 +957,14 @@ describe("reservation fulfillment read grants migration", () => {
     "utf8",
   ).toLowerCase();
 
-  it("grants select on all three fulfillment tables to both authenticated and service_role", () => {
-    for (const table of ["reservations", "inventory_locks", "fulfillment_transitions"]) {
+  it("grants select on all five fulfillment tables to both authenticated and service_role", () => {
+    for (const table of [
+      "reservations",
+      "inventory_locks",
+      "fulfillment_transitions",
+      "medication_access_requests",
+      "inventory_batches",
+    ]) {
       expect(sql).toContain(`grant select on public.${table} to authenticated, service_role;`);
     }
   });
