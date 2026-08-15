@@ -1,0 +1,13 @@
+-- Same gap class as 202608150033/202608160036: 202608150033 granted
+-- service_role SELECT on inventory_locks, but no test had ever needed to
+-- UPDATE the table directly via PostgREST until the reservation-expiry
+-- live test's fixture setup (backdating a lock's expires_at to simulate
+-- time passage ahead of calling release_expired_inventory_holds), which
+-- surfaced "42501: permission denied for table inventory_locks" in CI.
+-- Every production mutation of this table still goes through a
+-- SECURITY DEFINER RPC (reserve_inventory, decide_reservation,
+-- collect_reservation, release_expired_inventory_holds, ...), which runs
+-- as its owner and never needed this grant; this only unblocks
+-- service-role test fixtures, not a new mutation path for
+-- authenticated callers.
+grant update on public.inventory_locks to service_role;

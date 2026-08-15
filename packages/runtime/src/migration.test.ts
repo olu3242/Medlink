@@ -1140,3 +1140,26 @@ describe("reservation expiry audit trail migration", () => {
     expect(sql).toContain("_record_inventory_transaction(");
   });
 });
+
+describe("inventory_locks service_role update grant migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608160038_inventory_locks_service_role_update_grant.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("grants update on inventory_locks to service_role only, not authenticated", () => {
+    expect(sql).toContain("grant update on public.inventory_locks to service_role;");
+    expect(sql).not.toContain("grant update on public.inventory_locks to authenticated");
+  });
+
+  it("does not touch RLS policies", () => {
+    expect(sql).not.toContain("create policy");
+    expect(sql).not.toContain("alter table");
+    expect(sql).not.toContain("enable row level security");
+  });
+});
