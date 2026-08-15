@@ -690,6 +690,17 @@ live("live reservation fulfillment lifecycle", () => {
     });
     expect(issued.error).toBeNull();
 
+    // Checked right after issuance, before collection consumes it: the
+    // stored value is a 64-char hex hash, never the plaintext itself.
+    const { data: issuedRow, error: issuedRowError } = await service
+      .from("reservations")
+      .select("pickup_code_hash")
+      .eq("id", reservationId)
+      .single();
+    expect(issuedRowError, JSON.stringify(issuedRowError)).toBeNull();
+    expect(issuedRow?.pickup_code_hash).not.toContain(distinguishablePlaintext);
+    expect(issuedRow?.pickup_code_hash).toMatch(/^[0-9a-f]{64}$/);
+
     const collected = await pharmacyStaff.client.rpc("collect_reservation", {
       ...baseArgs(pharmacyStaff.id),
       target_idempotency_key: `${reservationId}:collect`,
@@ -699,14 +710,15 @@ live("live reservation fulfillment lifecycle", () => {
     expect(collected.error).toBeNull();
     expect((collected.data as ReservationRow).status).toBe("collected");
 
+    // collect_reservation nulls pickup_code_hash on collection -- the
+    // credential is consumed/unusable afterward, not merely matched.
     const { data: reservationRow, error: reservationRowError } = await service
       .from("reservations")
       .select("pickup_code_hash")
       .eq("id", reservationId)
       .single();
     expect(reservationRowError, JSON.stringify(reservationRowError)).toBeNull();
-    expect(reservationRow?.pickup_code_hash).not.toContain(distinguishablePlaintext);
-    expect(reservationRow?.pickup_code_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(reservationRow?.pickup_code_hash).toBeNull();
 
     const { data: outboxRows, error: outboxError } = await service
       .from("runtime_outbox_events")
