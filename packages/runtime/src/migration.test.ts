@@ -975,3 +975,35 @@ describe("reservation fulfillment read grants migration", () => {
     expect(sql).not.toContain("enable row level security");
   });
 });
+
+describe("outbox dispatch worker migration (G09 minimum slice)", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608160034_outbox_dispatch_worker.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("atomically claims pending/retrying rows with a row lock", () => {
+    expect(sql).toContain("function public.claim_runtime_outbox_events");
+    expect(sql).toContain("where status in ('pending', 'retrying') and available_at <= now()");
+    expect(sql).toContain("for update skip locked");
+    expect(sql).toContain("set status = 'publishing', locked_by = target_worker, locked_at = now()");
+  });
+
+  it("is worker-only -- no authenticated caller may lock outbox rows", () => {
+    expect(sql).toContain("revoke all on function public.claim_runtime_outbox_events(text, integer)");
+    expect(sql).toContain("from public;");
+    expect(sql).toContain("grant execute on function public.claim_runtime_outbox_events(text, integer)");
+    expect(sql).toContain("to service_role;");
+    expect(sql).not.toContain("to authenticated;");
+  });
+
+  it("validates its own inputs rather than trusting the caller", () => {
+    expect(sql).toContain("if target_worker is null or btrim(target_worker) = '' then");
+    expect(sql).toContain("if target_limit is null or target_limit < 1 or target_limit > 200 then");
+  });
+});

@@ -171,6 +171,13 @@ export async function runApi<TInput, TOutput>(
           target_event_payload: {
             operation: entry.operation,
             requestId: entry.context.requestId,
+            // G09 reconciliation: the only consumer this enables so far
+            // (packages/notifications' ReservationCreatedNotificationConsumer)
+            // needs to know who to notify for reservations.create, where the
+            // acting patient *is* the recipient. Generic and
+            // operation-agnostic so any future consumer of this outbox
+            // event can use it too.
+            actorId: entry.context.userId,
           },
         });
         if (error) {
