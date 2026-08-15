@@ -138,10 +138,11 @@ live("live reservation fulfillment lifecycle", () => {
     expect(replay.error).toBeNull();
     expect((replay.data as ReservationRow).status).toBe("confirmed");
 
-    const { data: transitions } = await service
+    const { data: transitions, error: transitionsError } = await service
       .from("fulfillment_transitions")
       .select("from_state,to_state,reason")
       .eq("reservation_id", reservationId);
+    expect(transitionsError, JSON.stringify(transitionsError)).toBeNull();
     expect(transitions).toHaveLength(1);
     expect(transitions?.[0]).toMatchObject({ from_state: "pending", to_state: "confirmed", reason: null });
   });
@@ -160,19 +161,21 @@ live("live reservation fulfillment lifecycle", () => {
     expect(cancelled.status).toBe("cancelled");
     expect(cancelled.cancelled_at).not.toBeNull();
 
-    const { data: lock } = await service
+    const { data: lock, error: lockError } = await service
       .from("inventory_locks")
       .select("status,released_at")
       .eq("reservation_id", reservationId)
       .single();
+    expect(lockError, JSON.stringify(lockError)).toBeNull();
     expect(lock?.status).toBe("released");
     expect(lock?.released_at).not.toBeNull();
 
-    const { data: transition } = await service
+    const { data: transition, error: transitionError } = await service
       .from("fulfillment_transitions")
       .select("reason")
       .eq("reservation_id", reservationId)
       .single();
+    expect(transitionError, JSON.stringify(transitionError)).toBeNull();
     expect(transition?.reason).toBe("Patient no longer needs this medication");
   });
 
@@ -186,11 +189,12 @@ live("live reservation fulfillment lifecycle", () => {
     });
     expect(rejected.error?.message).toMatch(/meaningful reason/i);
 
-    const { data: stillPending } = await service
+    const { data: stillPending, error: stillPendingError } = await service
       .from("reservations")
       .select("status")
       .eq("id", reservationId)
       .single();
+    expect(stillPendingError, JSON.stringify(stillPendingError)).toBeNull();
     expect(stillPending?.status).toBe("pending");
 
     const confirmed = await pharmacist.client.rpc("decide_reservation", {
@@ -222,11 +226,12 @@ live("live reservation fulfillment lifecycle", () => {
     });
     expect(asWrongRole.error?.message).toMatch(/requires pharmacy staff or pharmacist role/i);
 
-    const { data: stillPending } = await service
+    const { data: stillPending, error: stillPendingError } = await service
       .from("reservations")
       .select("status")
       .eq("id", reservationId)
       .single();
+    expect(stillPendingError, JSON.stringify(stillPendingError)).toBeNull();
     expect(stillPending?.status).toBe("pending");
 
     const asPharmacyStaff = await pharmacyStaff.client.rpc("decide_reservation", {
@@ -250,10 +255,11 @@ live("live reservation fulfillment lifecycle", () => {
     });
     expect(asOtherTenant.error?.message).toMatch(/requires pharmacy staff or pharmacist role/i);
 
-    const { data: invisible } = await otherTenantPharmacist.client
+    const { data: invisible, error: invisibleError } = await otherTenantPharmacist.client
       .from("reservations")
       .select("id")
       .eq("id", reservationId);
+    expect(invisibleError, JSON.stringify(invisibleError)).toBeNull();
     expect(invisible).toEqual([]);
 
     const asPharmacist = await pharmacist.client.rpc("decide_reservation", {
@@ -323,11 +329,12 @@ live("live reservation fulfillment lifecycle", () => {
     });
     expect(wrongAttempt.error?.message).toMatch(/pickup credential is invalid/i);
 
-    const { data: stillReady } = await service
+    const { data: stillReady, error: stillReadyError } = await service
       .from("reservations")
       .select("status")
       .eq("id", reservationId)
       .single();
+    expect(stillReadyError, JSON.stringify(stillReadyError)).toBeNull();
     expect(stillReady?.status).toBe("ready");
 
     const collected = await pharmacyStaff.client.rpc("collect_reservation", {
@@ -341,11 +348,12 @@ live("live reservation fulfillment lifecycle", () => {
     expect(collectedData.status).toBe("collected");
     expect(collectedData.pickup_code_hash).toBeUndefined();
 
-    const { data: lock } = await service
+    const { data: lock, error: lockError } = await service
       .from("inventory_locks")
       .select("status,consumed_at")
       .eq("reservation_id", reservationId)
       .single();
+    expect(lockError, JSON.stringify(lockError)).toBeNull();
     expect(lock?.status).toBe("consumed");
     expect(lock?.consumed_at).not.toBeNull();
   });
@@ -409,11 +417,12 @@ live("live reservation fulfillment lifecycle", () => {
     });
     expect(skipToReady.error?.message).toMatch(/only a confirmed reservation/i);
 
-    const { data: stillPending } = await service
+    const { data: stillPending, error: stillPendingError } = await service
       .from("reservations")
       .select("status")
       .eq("id", reservationId)
       .single();
+    expect(stillPendingError, JSON.stringify(stillPendingError)).toBeNull();
     expect(stillPending?.status).toBe("pending");
 
     const confirmed = await pharmacist.client.rpc("decide_reservation", {
