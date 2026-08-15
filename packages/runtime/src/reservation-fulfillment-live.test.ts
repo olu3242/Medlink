@@ -787,7 +787,7 @@ live("live reservation fulfillment lifecycle", () => {
 
     const { data: lockBefore, error: lockBeforeError } = await service
       .from("inventory_locks")
-      .select("id")
+      .select("id,created_at")
       .eq("reservation_id", reservationId)
       .single();
     expect(lockBeforeError, JSON.stringify(lockBeforeError)).toBeNull();
@@ -800,10 +800,16 @@ live("live reservation fulfillment lifecycle", () => {
     expect(batchBeforeError, JSON.stringify(batchBeforeError)).toBeNull();
 
     // Backdate this one lock past its deadline -- fixture setup, not a
-    // substitute for the RPC's own behavior under test.
+    // substitute for the RPC's own behavior under test. Must stay after
+    // the lock's own created_at (inventory_locks_check requires
+    // expires_at > created_at) while still being in the past by the
+    // time the RPC below runs.
+    const backdatedExpiry = new Date(
+      new Date(lockBefore?.created_at as string).getTime() + 1_000,
+    ).toISOString();
     const { error: backdateError } = await service
       .from("inventory_locks")
-      .update({ expires_at: new Date(Date.now() - 60_000).toISOString() })
+      .update({ expires_at: backdatedExpiry })
       .eq("id", lockBefore?.id);
     expect(backdateError, JSON.stringify(backdateError)).toBeNull();
 
