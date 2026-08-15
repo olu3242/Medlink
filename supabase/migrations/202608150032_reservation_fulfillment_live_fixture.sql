@@ -32,7 +32,7 @@ declare
   other_organization_id uuid := gen_random_uuid();
   location_id uuid := gen_random_uuid();
   batch_id uuid := gen_random_uuid();
-  medicine_row record;
+  medicine_id uuid := gen_random_uuid();
   reservation_map jsonb := '{}'::jsonb;
   reservation_key text;
   mar_id uuid;
@@ -42,11 +42,17 @@ begin
     raise exception 'service-role certification context required' using errcode = '42501';
   end if;
 
-  select m.* into medicine_row from public.medicines m
-  where m.status = 'active' order by m.id limit 1;
-  if not found then
-    raise exception 'no active medicine available for reservation fulfillment fixture';
-  end if;
+  -- Its own medicine, not a lookup into the MERDP catalog: a clean
+  -- `supabase db reset` has no medicines rows at all (there is no
+  -- supabase/seed.sql, and canonical catalog data is loaded by the
+  -- tools/nafdac_* ETL pipeline, not by a migration), so this fixture must
+  -- not depend on catalog data being present.
+  insert into public.medicines(
+    id, brand_name, generic_name, dosage_form, route, strength_display, status
+  ) values (
+    medicine_id, 'Fixture Medicine ' || fixture_key, 'fixture-generic-' || fixture_key,
+    'tablet', 'oral', '500mg', 'active'
+  );
 
   insert into public.organizations(id, name, slug, type) values
     (organization_id, 'Fulfillment Cert ' || fixture_key, 'fulfillment-cert-' || fixture_key, 'pharmacy'),
@@ -80,7 +86,7 @@ begin
     id, organization_id, pharmacy_location_id, medicine_id, batch_number, expires_on,
     quantity_on_hand, unit, status, created_by
   ) values (
-    batch_id, organization_id, location_id, medicine_row.id, 'FULFILL-' || fixture_key, '2099-12-31',
+    batch_id, organization_id, location_id, medicine_id, 'FULFILL-' || fixture_key, '2099-12-31',
     array_length(reservation_keys, 1) + 5, 'tablet', 'available', pharmacist_id
   );
 
@@ -91,7 +97,7 @@ begin
       id, organization_id, patient_id, requested_medicine_id, state,
       transition_idempotency_key, created_by
     ) values (
-      mar_id, organization_id, patient_id, medicine_row.id, 'created',
+      mar_id, organization_id, patient_id, medicine_id, 'created',
       'fixture-mar-created-' || fixture_key || '-' || reservation_key, patient_id
     );
     update public.medication_access_requests set state = 'validated',

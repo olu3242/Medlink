@@ -927,4 +927,10 @@ describe("reservation fulfillment live-certification fixture migration", () => {
     expect(sql).toContain("other_organization_id uuid := gen_random_uuid();");
     expect(sql).toContain("insert into public.organizations(id, name, slug, type) values");
   });
+
+  it("inserts its own medicine rather than depending on MERDP catalog data existing after a plain db reset", () => {
+    expect(sql).toContain("insert into public.medicines(");
+    expect(sql).not.toContain("where m.status = 'active'");
+    expect(sql).not.toContain("no active medicine available");
+  });
 });
