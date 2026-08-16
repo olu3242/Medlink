@@ -23,13 +23,23 @@ const environmentSchema = z.object({
 
 export function requestDatabase(request: Request): SupabaseClient {
   const environment = environmentSchema.parse(process.env);
+  const authorization = request.headers.get("authorization");
   return createServerClient(
     environment.NEXT_PUBLIC_SUPABASE_URL,
     environment.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
-      global: {
-        headers: { Authorization: request.headers.get("authorization") ?? "" },
-      },
+      // Only override the client's Authorization header when the caller
+      // actually supplied one (a bearer-token caller). Setting it to ""
+      // when absent used to disable @supabase/ssr's own per-request
+      // attachment of the cookie-derived session's access token -- every
+      // browser-originated request (no client ever sends an Authorization
+      // header) silently fell back to the "anon" Postgres role for every
+      // .from()/.rpc() call even though auth.getUser() above, which reads
+      // the session directly rather than through this header, correctly
+      // resolved the signed-in user. That made every authenticated data
+      // query 403/empty for a real cookie session -- this is the actual
+      // "browser blocker" this PR exists to close.
+      ...(authorization ? { global: { headers: { Authorization: authorization } } } : {}),
       cookies: {
         getAll: () =>
           parseCookieHeader(request.headers.get("cookie") ?? "")
