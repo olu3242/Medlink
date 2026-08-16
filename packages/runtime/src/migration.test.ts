@@ -1005,6 +1005,22 @@ describe("medication golden loop live-certification fixture migration", () => {
   });
 });
 
+describe("mar_audit_events read grant migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608170042_mar_audit_events_read_grant.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("grants select on mar_audit_events to authenticated and service_role, matching its existing RLS policy scope", () => {
+    expect(sql).toContain("grant select on public.mar_audit_events to authenticated, service_role;");
+  });
+});
+
 describe("reservation fulfillment read grants migration", () => {
   const sql = readFileSync(
     join(
