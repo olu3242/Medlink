@@ -21,7 +21,26 @@ interface MailpitMessageDetail {
   readonly HTML: string;
 }
 
-const LINK_PATTERN = /https?:\/\/[^\s"'<>]+\/auth\/callback\?[^\s"'<>]+/;
+// Supabase's default magic-link template does not embed our app's own
+// /auth/callback URL directly -- it links to GoTrue's own verify
+// endpoint (…/auth/v1/verify?token=…&type=magiclink&redirect_to=…),
+// which 302-redirects the browser to our callback route (carrying the
+// PKCE `code`) only once visited. Try the verify link first since that
+// is what a stock local Supabase instance actually sends; fall back to
+// a literal callback URL in case a custom email template ever embeds
+// one directly.
+const LINK_PATTERNS = [
+  /https?:\/\/[^\s"'<>]+\/auth\/v1\/verify\?[^\s"'<>]+/,
+  /https?:\/\/[^\s"'<>]+\/auth\/callback\?[^\s"'<>]+/,
+];
+
+function findMagicLink(body: string): string | null {
+  for (const pattern of LINK_PATTERNS) {
+    const match = pattern.exec(body);
+    if (match) return match[0];
+  }
+  return null;
+}
 
 async function latestMessageId(mailpitUrl: string, recipient: string): Promise<string | null> {
   const response = await fetch(
@@ -36,8 +55,7 @@ async function extractMagicLink(mailpitUrl: string, messageId: string): Promise<
   const response = await fetch(`${mailpitUrl}/api/v1/message/${messageId}`);
   if (!response.ok) return null;
   const body = (await response.json()) as MailpitMessageDetail;
-  const match = LINK_PATTERN.exec(body.Text) ?? LINK_PATTERN.exec(body.HTML);
-  return match?.[0] ?? null;
+  return findMagicLink(body.Text) ?? findMagicLink(body.HTML);
 }
 
 // Polls Mailpit for the magic-link email MedLink's own /auth/sign-in
