@@ -946,6 +946,65 @@ describe("reservation fulfillment live-certification fixture migration", () => {
   });
 });
 
+describe("medication golden loop live-certification fixture migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608170041_medication_golden_loop_live_fixture.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("is restricted to service_role, matching the existing fixture guard pattern", () => {
+    expect(sql).toContain("if auth.role() <> 'service_role'");
+    expect(sql).toContain("grant execute on function public.certify_medication_golden_loop_fixture(");
+    expect(sql).toContain("to service_role;");
+    expect(sql).not.toContain("to authenticated;");
+  });
+
+  it("walks the real MAR state machine transition by transition through matched, no further", () => {
+    const validatedIndex = sql.indexOf("state = 'validated'");
+    const reviewedIndex = sql.indexOf("state = 'reviewed'");
+    const searchingIndex = sql.indexOf("state = 'searching'");
+    const matchedIndex = sql.indexOf("state = 'matched'");
+    expect(validatedIndex).toBeGreaterThan(-1);
+    expect(reviewedIndex).toBeGreaterThan(validatedIndex);
+    expect(searchingIndex).toBeGreaterThan(reviewedIndex);
+    expect(matchedIndex).toBeGreaterThan(searchingIndex);
+    expect(sql).not.toContain("state = 'reserved'");
+  });
+
+  it("only marks the MAR reviewed after inserting an approved clinical review", () => {
+    const reviewInsertIndex = sql.indexOf("insert into public.clinical_reviews");
+    const reviewedStateIndex = sql.indexOf("state = 'reviewed'");
+    expect(reviewInsertIndex).toBeGreaterThan(-1);
+    expect(reviewedStateIndex).toBeGreaterThan(reviewInsertIndex);
+    expect(sql).toContain("'approved', pharmacist_id, now()");
+  });
+
+  it("creates no reservation and no inventory lock -- the browser session creates those itself", () => {
+    expect(sql).not.toContain("insert into public.reservations(");
+    expect(sql).not.toContain("insert into public.inventory_locks(");
+  });
+
+  it("inserts its own medicine and a well-stocked batch, not a scarcity scenario", () => {
+    expect(sql).toContain("insert into public.medicines(");
+    expect(sql).toContain("50, 'tablet', 'available', pharmacist_id");
+  });
+
+  it("returns the medicine name so the E2E suite can assert canonical identity continuity across every step", () => {
+    expect(sql).toContain("'medicinename', 'golden loop medicine ' || fixture_key");
+  });
+
+  it("seeds all three golden-loop personas as real memberships of one organization", () => {
+    expect(sql).toContain("(organization_id, patient_id, 'patient'),");
+    expect(sql).toContain("(organization_id, pharmacist_id, 'pharmacist'),");
+    expect(sql).toContain("(organization_id, pharmacy_staff_id, 'pharmacy_staff');");
+  });
+});
+
 describe("reservation fulfillment read grants migration", () => {
   const sql = readFileSync(
     join(

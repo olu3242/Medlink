@@ -12,6 +12,10 @@ supabase/.branches/
 npm-debug.log*
 .codex-run/
 .artifacts/
+packages/e2e/.fixture.json
+packages/e2e/.golden-loop-fixture.json
+packages/e2e/playwright-report/
+packages/e2e/test-results/
 *.egg-info/
 __pycache__/
 .pytest_cache/

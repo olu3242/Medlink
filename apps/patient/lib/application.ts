@@ -46,6 +46,7 @@ export function toMar(row: MarRow) {
 export interface InventoryRow {
   id: string;
   status: string;
+  pharmacy_location_id: string;
   medicine?: { brand_name: string; generic_name: string } | null;
   pharmacy?: { name: string; locality: string } | null;
 }
@@ -57,10 +58,14 @@ export interface InventoryRow {
 // geospatial distance calculation anywhere in the repository, so this maps
 // to the pharmacy's locality (real data already on the join) instead of
 // fabricating a distanceKm value the UI previously called .toFixed(1) on
-// unconditionally.
+// unconditionally. pharmacyLocationId is surfaced so the reserve page can
+// submit a POST /api/v1/reservations body that actually matches its schema
+// (marId/pharmacyLocationId/inventoryBatchId/quantity/expiresAt) instead of
+// the bare {inventoryId} it previously sent, which always failed validation.
 export function toMatch(row: InventoryRow) {
   return {
     inventoryId: row.id,
+    pharmacyLocationId: row.pharmacy_location_id,
     medicineName: row.medicine?.brand_name || row.medicine?.generic_name || "Medicine",
     pharmacyName: row.pharmacy?.name || "Pharmacy",
     pharmacyLocality: row.pharmacy?.locality,

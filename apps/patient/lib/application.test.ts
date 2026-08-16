@@ -44,11 +44,13 @@ describe("toMatch", () => {
     const row: InventoryRow = {
       id: "00000000-0000-4000-8000-000000000002",
       status: "available",
+      pharmacy_location_id: "00000000-0000-4000-8000-000000000003",
       medicine: { brand_name: "Panadol", generic_name: "Paracetamol" },
       pharmacy: { name: "Corner Pharmacy", locality: "Lekki" },
     };
     expect(toMatch(row)).toEqual({
       inventoryId: row.id,
+      pharmacyLocationId: row.pharmacy_location_id,
       medicineName: "Panadol",
       pharmacyName: "Corner Pharmacy",
       pharmacyLocality: "Lekki",
@@ -57,7 +59,7 @@ describe("toMatch", () => {
   });
 
   it("falls back to placeholders rather than throwing when a join is missing", () => {
-    const row: InventoryRow = { id: "1", status: "available" };
+    const row: InventoryRow = { id: "1", status: "available", pharmacy_location_id: "loc-1" };
     const match = toMatch(row);
     expect(match.medicineName).toBe("Medicine");
     expect(match.pharmacyName).toBe("Pharmacy");
