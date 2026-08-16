@@ -29,3 +29,11 @@ additional_redirect_urls = [
   "http://127.0.0.1:3003",
 ]
 jwt_expiry = 3600
+
+# The auth E2E suite signs the same handful of fixture personas in
+# repeatedly across several tests in one run (patient.email alone across
+# three), well within GoTrue's default local rate limits meant for a
+# single human clicking "resend" by hand. Local/CI-only -- production
+# uses the hosted platform's own configured limits, not this file.
+[auth.rate_limit]
+email_sent = 100
