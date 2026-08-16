@@ -28,15 +28,21 @@ describe("requestDatabase", () => {
       .toBe("Bearer patient-session-token");
   });
 
-  it("forwards an empty Authorization rather than throwing when the request has none", () => {
+  it("does not force an empty Authorization when the request has none, so a cookie-derived session can still authenticate data queries", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 
+    // A browser-originated request never sends an Authorization header --
+    // only a cookie. Forcing Authorization: "" here used to silently
+    // disable @supabase/ssr's own per-request attachment of the session's
+    // access token, downgrading every .from()/.rpc() call to the "anon"
+    // Postgres role even for a signed-in user. Leaving the header entirely
+    // absent lets the client attach the real session token itself.
     const request = new Request("https://medlink.example/api/v1/medicines");
     const database = requestDatabase(request);
 
     expect((database as unknown as { rest: { headers: Headers } }).rest.headers.get("Authorization"))
-      .toBe("");
+      .toBeNull();
   });
 
   it("throws when NEXT_PUBLIC_SUPABASE_URL is missing or not a URL", () => {

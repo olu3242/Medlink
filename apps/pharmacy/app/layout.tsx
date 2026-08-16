@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@medlink/ui";
+import { signOut } from "./auth/sign-in/actions";
 import "@medlink/ui/styles.css";
 import "../app/globals.css";
 
@@ -10,5 +11,6 @@ export default function Layout({ children }: { children: ReactNode }) {
       { label: "Inventory", href: "/" },
       { label: "Reservations", href: "/reservations" },
     ]}
+    header={<form action={signOut}><button type="submit">Log out</button></form>}
   >{children}</AppShell></body></html>;
 }

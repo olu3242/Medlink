@@ -18,11 +18,13 @@ Canonical base: `main` @ `a008d41` (PR #27 merged). This branch (`feat/medicatio
 2. **Reservation expiry audit trail**: `release_expired_inventory_holds` already atomically expired overdue reservations/locks/MARs (`FOR UPDATE OF lock SKIP LOCKED`) — this was previously uncertified by any test. Added a `fulfillment_transitions` row per expiry (matching every other lifecycle RPC) and a live-DB proof.
 3. **Outbox claim-race proof**: live test confirming two concurrent workers calling `claim_runtime_outbox_events` against the same eligible event never both own it.
 
-## Browser E2E: BLOCKED — product policy gap, not implemented
+## Authentication prerequisite: RESOLVED (PR #29)
 
-Investigated, not fabricated. `apps/patient`, `apps/pharmacist`, `apps/pharmacy` have **no sign-in UI, auth pages, or middleware of their own**. Only `apps/web` (an internal ops/runtime dashboard, not a consumer-facing app) has a self-contained magic-link flow that never redirects into another app's origin. No ADR or doc specifies per-persona auth hosting or cross-app cookie/domain topology. Building this now means deciding production authentication UX and domain topology for three consumer apps unilaterally.
+`apps/patient`, `apps/pharmacist`, and `apps/pharmacy` each now extend `apps/web`'s own already-accepted magic-link pattern (self-contained sign-in/callback/logout, no cross-app cookie-domain sharing), rather than requiring a novel production auth-topology decision. Certified via real browser E2E (Playwright + Mailpit, real magic-link flow, no session bypass): patient/pharmacist/pharmacy auth, multi-persona (one identity, multiple memberships, ambiguous context fails closed), tenant isolation, RLS, and session security all PASS — 9/9 browser auth tests, live medication regression intact at 23/23. Full detail and the architectural chain: `docs/mvp-integration/AUTHENTICATION.md`.
 
-**Required before browser E2E can proceed**: a product/security decision on (a) which app(s) host sign-in for patient/pharmacist/pharmacy, (b) the auth UX per persona (magic link vs. WhatsApp-native vs. password), (c) the domain/cookie-sharing topology across apps.
+Three previously-latent defects were found and fixed while certifying this: `requestDatabase()` was forcing an empty `Authorization` header for cookie-based sessions (silently downgrading every authenticated data query to Postgres role `anon`); several identity/clinical/pharmacy tables had RLS policies but no table-level `GRANT`; and the E2E harness's magic-link parsing/redirect-allowlisting needed to match GoTrue's actual verify-link shape and every app's real callback origin. See `docs/mvp-integration/AUTHENTICATION.md` for the invariants these established.
+
+The remaining browser certification target is the **authenticated medication access golden loop**: Patient → Pharmacist → Patient match/reserve → Pharmacy confirm → Pharmacy ready → Patient pickup credential → Pharmacy collect, now that all three personas can authenticate for real. Not yet certified.
 
 Local execution is separately constrained: Docker is unreachable in this sandbox, so live/browser suites only execute in CI — consistent with the whole program's established pattern.
 
@@ -46,7 +48,8 @@ All three internal worker routes must be scheduled externally (this repository h
 
 ## Known limitations / post-RC1 backlog
 
-- Browser E2E blocked on auth architecture decision (above).
+- Authenticated medication access golden loop (Patient → Pharmacist → Pharmacy, browser E2E) not yet certified — the next slice, now unblocked by PR #29.
+- Mailpit polling/event synchronization: 3/9 browser auth tests needed one CI retry from email-indexing timing; classified non-blocking test reliability debt (all passed within the configured retry policy). Target: zero retry-dependent browser passes.
 - Outbox/expiry operational backlog visibility deferred pending an admin RPC decision.
 - Expiry notification (`reservation.expired.v1`) not implemented — no consumer registered; flagged POST_RC1 rather than inventing a template.
 

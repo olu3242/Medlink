@@ -23,13 +23,23 @@ const environmentSchema = z.object({
 
 export function requestDatabase(request: Request): SupabaseClient {
   const environment = environmentSchema.parse(process.env);
+  const authorization = request.headers.get("authorization");
   return createServerClient(
     environment.NEXT_PUBLIC_SUPABASE_URL,
     environment.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
-      global: {
-        headers: { Authorization: request.headers.get("authorization") ?? "" },
-      },
+      // Only override the client's Authorization header when the caller
+      // actually supplied one (a bearer-token caller). Setting it to ""
+      // when absent used to disable @supabase/ssr's own per-request
+      // attachment of the cookie-derived session's access token -- every
+      // browser-originated request (no client ever sends an Authorization
+      // header) silently fell back to the "anon" Postgres role for every
+      // .from()/.rpc() call even though auth.getUser() above, which reads
+      // the session directly rather than through this header, correctly
+      // resolved the signed-in user. That made every authenticated data
+      // query 403/empty for a real cookie session -- this is the actual
+      // "browser blocker" this PR exists to close.
+      ...(authorization ? { global: { headers: { Authorization: authorization } } } : {}),
       cookies: {
         getAll: () =>
           parseCookieHeader(request.headers.get("cookie") ?? "")
@@ -113,10 +123,45 @@ export async function runApi<TInput, TOutput>(
           401,
         );
       }
-      const tenantId = z.string().uuid().parse(
-        request.headers.get("x-medlink-tenant-id")
-          ?? auth.user.app_metadata.active_tenant_id,
-      );
+      // Active context resolution: an explicit x-medlink-tenant-id
+      // header (a user acting in a specific one of several memberships)
+      // or app_metadata.active_tenant_id (a previously selected
+      // default -- nothing currently sets this, so this branch is
+      // forward-compatible) wins when present. Otherwise, for a user
+      // with exactly one active membership, that membership's own
+      // organization is the only possible context and is chosen
+      // deterministically -- no browser flow sends this header today,
+      // so without this fallback every single-membership session
+      // (patient, pharmacist, or pharmacy staff signing in through
+      // their own app) would fail to resolve a tenant at all. A user
+      // with zero or multiple memberships and no explicit header still
+      // fails closed; neither is a case this function may guess at.
+      const explicitTenantId = request.headers.get("x-medlink-tenant-id")
+        ?? (typeof auth.user.app_metadata.active_tenant_id === "string"
+          ? auth.user.app_metadata.active_tenant_id
+          : undefined);
+
+      let tenantId: string;
+      if (explicitTenantId) {
+        tenantId = z.string().uuid().parse(explicitTenantId);
+      } else {
+        const { data: memberships, error: membershipsError } = await database
+          .from("organization_memberships")
+          .select("organization_id")
+          .eq("user_id", auth.user.id)
+          .is("deleted_at", null);
+        if (membershipsError || !memberships || memberships.length !== 1) {
+          throw new RuntimeError(
+            "authorization",
+            "tenant_context_required",
+            memberships && memberships.length > 1
+              ? "Multiple organization memberships require an explicit tenant context"
+              : "Tenant membership is invalid",
+            403,
+          );
+        }
+        tenantId = z.string().uuid().parse(memberships[0]?.organization_id);
+      }
       const { data: membership, error: membershipError } = await database
         .from("organization_memberships")
         .select("role")

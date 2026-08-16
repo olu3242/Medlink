@@ -6,8 +6,27 @@ export interface PatientNotification{ id:string; channel:string; template_key:st
 // row) that a pickup credential has already been issued for this
 // reservation -- never the plaintext, which no server ever stores.
 export interface PatientReservation{ id:string; status:string; pickup_code_hash:string|null; expires_at:string; created_at:string; confirmed_at?:string|null }
+import { headers } from "next/headers";
 const origin=process.env.MEDLINK_API_URL??"http://localhost:3000";
-async function get<T>(path:string):Promise<T>{const response=await fetch(new URL(path,origin),{headers:{Accept:"application/json"},next:{revalidate:20}});if(!response.ok)throw new Error("API unavailable");return response.json() as Promise<T>}
+// Server components call this app's own API route via absolute-URL
+// fetch, which -- unlike a browser's same-origin relative fetch -- never
+// automatically carries the incoming request's cookies. Forwarding them
+// explicitly (matching apps/pharmacist/lib/api.ts's already-correct
+// pattern) is what makes a logged-in patient's session actually reach
+// the route instead of 401ing silently. cache:"no-store" replaces the
+// prior revalidate:20 -- a response that now varies per session cookie
+// must never be shared across users via Next's fetch cache.
+async function get<T>(path:string):Promise<T>{
+  const incoming = await headers();
+  const forwarded = new Headers({ Accept: "application/json" });
+  for (const name of ["cookie", "authorization", "x-medlink-tenant-id"]) {
+    const value = incoming.get(name);
+    if (value) forwarded.set(name, value);
+  }
+  const response = await fetch(new URL(path,origin),{headers:forwarded,cache:"no-store"});
+  if(!response.ok)throw new Error("API unavailable");
+  return response.json() as Promise<T>;
+}
 export async function listMars(){return (await get<{data:Mar[]}>("/api/v1/mar")).data}
 export async function getMar(id:string){return (await get<{data:Mar}>(`/api/v1/mar/${encodeURIComponent(id)}`)).data}
 export async function getTimeline(id:string){return (await get<{data:TimelineEvent[]}>(`/api/v1/mar/${encodeURIComponent(id)}/timeline`)).data}

@@ -1,0 +1,17 @@
+{
+  "name": "@medlink/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:auth": "playwright test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.52.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "typescript": "^5.8.0"
+  }
+}
