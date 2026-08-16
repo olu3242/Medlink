@@ -802,10 +802,10 @@ live("live reservation fulfillment lifecycle", () => {
     // Backdate this one lock past its deadline -- fixture setup, not a
     // substitute for the RPC's own behavior under test. Must stay after
     // the lock's own created_at (inventory_locks_check requires
-    // expires_at > created_at) while still being in the past by the
-    // time the RPC below runs.
+    // expires_at > created_at); a 1ms offset is enough margin since the
+    // RPC call below is itself a separate, later network round trip.
     const backdatedExpiry = new Date(
-      new Date(lockBefore?.created_at as string).getTime() + 1_000,
+      new Date(lockBefore?.created_at as string).getTime() + 1,
     ).toISOString();
     const { error: backdateError } = await service
       .from("inventory_locks")
