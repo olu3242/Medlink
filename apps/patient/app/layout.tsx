@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "@medlink/ui";
+import { signOut } from "./auth/sign-in/actions";
 import "@medlink/ui/styles.css";
 import "./globals.css";
 
@@ -21,5 +22,6 @@ export default function Layout({ children }: { children: ReactNode }) {
       { label: "Find nearby", href: "/search" },
       { label: "My profile", href: "/profile" },
     ]}
+    header={<form action={signOut}><button type="submit">Log out</button></form>}
   >{children}</AppShell></body></html>;
 }

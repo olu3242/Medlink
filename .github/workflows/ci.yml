@@ -94,3 +94,66 @@ jobs:
           npm run test:live
       - if: always()
         run: npx supabase stop
+
+  browser-auth-e2e:
+    # Auth-only browser certification (Section 15's "who is acting"
+    # gate) -- deliberately separate from the full medication golden-loop
+    # E2E suite, which is its own, later, more expensive certification.
+    # Gated the same way as live-database (real Supabase + built apps
+    # required) rather than inventing a second toggle for this slice.
+    if: github.event_name == 'pull_request' && vars.RUN_LIVE_DATABASE_TESTS == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        working-directory: packages/e2e
+      - run: npx supabase start
+      - run: npx supabase db reset
+      - name: Build patient, pharmacist, and pharmacy against the local Supabase instance
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "$(npx supabase status -o env)"
+          NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
+          NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
+          npm run build --workspace=apps/patient --workspace=apps/pharmacist --workspace=apps/pharmacy
+      - name: Start patient, pharmacist, and pharmacy, then run the auth E2E suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "$(npx supabase status -o env)"
+          export NEXT_PUBLIC_SUPABASE_URL="$API_URL"
+          export NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY"
+
+          PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
+          PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
+          PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
+
+          for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in; do
+            for _ in $(seq 1 30); do
+              if curl -sf "$url" > /dev/null; then break; fi
+              sleep 1
+            done
+            curl -sf "$url" > /dev/null
+          done
+
+          MEDLINK_E2E_SUPABASE_URL="$API_URL" \
+          MEDLINK_E2E_SUPABASE_SERVICE_KEY="$SECRET_KEY" \
+          MEDLINK_E2E_PATIENT_URL=http://localhost:3000 \
+          MEDLINK_E2E_PHARMACIST_URL=http://localhost:3003 \
+          MEDLINK_E2E_PHARMACY_URL=http://localhost:3002 \
+          MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
+          npm run test:auth --workspace=packages/e2e
+      - if: always()
+        run: npx supabase stop
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-auth-e2e-report
+          path: packages/e2e/playwright-report/
+          retention-days: 14
