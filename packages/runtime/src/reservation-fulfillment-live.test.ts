@@ -69,6 +69,8 @@ live("live reservation fulfillment lifecycle", () => {
     "collection-race",
     "credential-authority",
     "credential-missing",
+    "expiry-target",
+    "outbox-race",
   ] as const;
 
   let fixture: {
@@ -778,5 +780,123 @@ live("live reservation fulfillment lifecycle", () => {
     expect(stillReadyError, JSON.stringify(stillReadyError)).toBeNull();
     expect(stillReady?.status).toBe("ready");
     expect(stillReady?.pickup_code_hash).toBeNull();
+  });
+
+  it("expiry: an overdue pending reservation is released atomically, restoring availability, with an audit transition", async () => {
+    const reservationId = fixture.reservations["expiry-target"];
+
+    const { data: lockBefore, error: lockBeforeError } = await service
+      .from("inventory_locks")
+      .select("id,created_at")
+      .eq("reservation_id", reservationId)
+      .single();
+    expect(lockBeforeError, JSON.stringify(lockBeforeError)).toBeNull();
+
+    const { data: batchBefore, error: batchBeforeError } = await service
+      .from("inventory_batches")
+      .select("quantity_reserved")
+      .eq("id", fixture.inventoryBatchId)
+      .single();
+    expect(batchBeforeError, JSON.stringify(batchBeforeError)).toBeNull();
+
+    // Backdate this one lock past its deadline -- fixture setup, not a
+    // substitute for the RPC's own behavior under test. Must stay after
+    // the lock's own created_at (inventory_locks_check requires
+    // expires_at > created_at); a 1ms offset is enough margin since the
+    // RPC call below is itself a separate, later network round trip.
+    const backdatedExpiry = new Date(
+      new Date(lockBefore?.created_at as string).getTime() + 1,
+    ).toISOString();
+    const { error: backdateError } = await service
+      .from("inventory_locks")
+      .update({ expires_at: backdatedExpiry })
+      .eq("id", lockBefore?.id);
+    expect(backdateError, JSON.stringify(backdateError)).toBeNull();
+
+    const { data: result, error: expiryError } = await service.rpc(
+      "release_expired_inventory_holds",
+      { target_limit: 50 },
+    );
+    expect(expiryError, JSON.stringify(expiryError)).toBeNull();
+    expect((result as { releasedHolds: number }).releasedHolds).toBeGreaterThanOrEqual(1);
+
+    const { data: reservation, error: reservationError } = await service
+      .from("reservations")
+      .select("status")
+      .eq("id", reservationId)
+      .single();
+    expect(reservationError, JSON.stringify(reservationError)).toBeNull();
+    expect(reservation?.status).toBe("expired");
+
+    const { data: lockAfter, error: lockAfterError } = await service
+      .from("inventory_locks")
+      .select("status,released_at")
+      .eq("reservation_id", reservationId)
+      .single();
+    expect(lockAfterError, JSON.stringify(lockAfterError)).toBeNull();
+    expect(lockAfter?.status).toBe("expired");
+    expect(lockAfter?.released_at).not.toBeNull();
+
+    const { data: batchAfter, error: batchAfterError } = await service
+      .from("inventory_batches")
+      .select("quantity_reserved")
+      .eq("id", fixture.inventoryBatchId)
+      .single();
+    expect(batchAfterError, JSON.stringify(batchAfterError)).toBeNull();
+    expect(batchAfter?.quantity_reserved).toBe((batchBefore?.quantity_reserved ?? 0) - 1);
+
+    const { data: transition, error: transitionError } = await service
+      .from("fulfillment_transitions")
+      .select("from_state,to_state,step")
+      .eq("reservation_id", reservationId)
+      .single();
+    expect(transitionError, JSON.stringify(transitionError)).toBeNull();
+    expect(transition).toMatchObject({ from_state: "pending", to_state: "expired", step: "system.expired" });
+
+    // Replay safety: a second run must not double-count or error on the
+    // idempotency key collision (unique constraint + ON CONFLICT DO NOTHING).
+    const replay = await service.rpc("release_expired_inventory_holds", { target_limit: 50 });
+    expect(replay.error).toBeNull();
+  });
+
+  it("outbox claim race: two workers racing for the same eligible event -- exactly one owns it", async () => {
+    const reservationId = fixture.reservations["outbox-race"];
+    const confirmed = await pharmacist.client.rpc("decide_reservation", {
+      ...baseArgs(pharmacist.id),
+      target_idempotency_key: `${reservationId}:confirmed`,
+      target_reservation_id: reservationId,
+      target_status: "confirmed",
+    });
+    expect(confirmed.error).toBeNull();
+
+    const { data: pendingEvent, error: pendingEventError } = await service
+      .from("runtime_outbox_events")
+      .select("id")
+      .eq("aggregate_id", reservationId)
+      .eq("event_type", "reservation.confirmed.v1")
+      .single();
+    expect(pendingEventError, JSON.stringify(pendingEventError)).toBeNull();
+
+    const claim = (worker: string) =>
+      service.rpc("claim_runtime_outbox_events", { target_worker: worker, target_limit: 50 });
+
+    const [claimA, claimB] = await Promise.all([claim("race-worker-a"), claim("race-worker-b")]);
+    expect(claimA.error).toBeNull();
+    expect(claimB.error).toBeNull();
+
+    const claimedA = ((claimA.data ?? []) as Array<{ id: string }>)
+      .filter((row) => row.id === pendingEvent?.id);
+    const claimedB = ((claimB.data ?? []) as Array<{ id: string }>)
+      .filter((row) => row.id === pendingEvent?.id);
+    expect(claimedA.length + claimedB.length).toBe(1);
+
+    const { data: locked, error: lockedError } = await service
+      .from("runtime_outbox_events")
+      .select("status,locked_by")
+      .eq("id", pendingEvent?.id)
+      .single();
+    expect(lockedError, JSON.stringify(lockedError)).toBeNull();
+    expect(locked?.status).toBe("publishing");
+    expect(["race-worker-a", "race-worker-b"]).toContain(locked?.locked_by);
   });
 });

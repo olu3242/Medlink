@@ -378,15 +378,17 @@ class ReservationCreatedNotificationConsumer implements EventConsumer {
   }
 }
 
-// Wires every piece above into the one dispatcher this slice needs. There
-// is no scheduler/cron in this environment -- dispatch is instead
-// piggybacked opportunistically on every reservation lifecycle route
+// Wires every piece above into the one dispatcher this slice needs. Two
+// independent call sites drive it: every reservation lifecycle route
 // (apps/patient's create route, apps/pharmacy's decide/ready/collect
-// routes), right after each one's own successful response. That is a
-// real, named tradeoff: a pending event only gets picked up on the next
-// matching request from any actor in the same environment, not on a fixed
-// schedule. A production rollout would replace these call sites with a
-// real scheduled worker calling the same dispatch() method.
+// routes) piggybacks a best-effort dispatch() right after its own
+// successful response, so events are usually picked up immediately; and
+// apps/web's POST /api/internal/notification-dispatch (same
+// bearer-token-worker pattern as /api/internal/inventory-expiry and
+// /api/internal/clinical-pipeline) exists so an external scheduler can
+// advance the queue on a fixed cadence even during a quiet period with no
+// reservation traffic at all -- this repository has no in-process
+// cron/scheduler itself.
 export function buildReservationNotificationDispatcher(
   database: SupabaseClient,
   whatsAppAccessToken: string,
