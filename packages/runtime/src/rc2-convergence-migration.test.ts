@@ -57,6 +57,11 @@ const medicationAccessContinuationSql = readFileSync(join(
   "supabase/migrations/202608170055_medication_access_workflow_continuation.sql",
 ), "utf8").toLowerCase();
 
+const outboxOperationalVisibilitySql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170056_outbox_operational_visibility.sql",
+), "utf8").toLowerCase();
+
 describe("RC2 MAR validation to clinical review handoff", () => {
   it("creates the pending review and evidence in the validating transaction", () => {
     expect(sql).toContain("function public.validate_mar");
@@ -265,5 +270,26 @@ describe("medication-access workflow continuation", () => {
     expect(medicationAccessContinuationSql).toContain("set state = 'completed'");
     expect(medicationAccessContinuationSql).toContain("medication_access.completed.v1");
     expect(medicationAccessContinuationSql).toContain("public.record_runtime_evidence(");
+  });
+});
+
+describe("tenant-safe outbox operational visibility", () => {
+  it("returns only aggregate state to monitoring and administrative roles", () => {
+    expect(outboxOperationalVisibilitySql).toContain(
+      "function public.runtime_outbox_operational_state",
+    );
+    for (const field of [
+      "pendingcount",
+      "retryingcount",
+      "deadlettercount",
+      "oldestpendingat",
+      "lastworkerrunat",
+      "lastsuccessat",
+      "lastfailureat",
+    ]) expect(outboxOperationalVisibilitySql).toContain(`'${field}'`);
+    expect(outboxOperationalVisibilitySql).toContain("event.organization_id = target_organization_id");
+    expect(outboxOperationalVisibilitySql).toContain("public.has_organization_role(");
+    expect(outboxOperationalVisibilitySql).toContain("from public, anon");
+    expect(outboxOperationalVisibilitySql).not.toContain("event.payload");
   });
 });

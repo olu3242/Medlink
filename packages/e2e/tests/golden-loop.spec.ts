@@ -542,6 +542,22 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       "reservation.credential_issued.v1", "reservation.collected.v1",
     ]) expect(eventTypes.has(expectedEvent)).toBe(true);
 
+    const { data: outboxState, error: outboxStateError } = await service.rpc(
+      "runtime_outbox_operational_state",
+      { target_organization_id: fixture.organizationId },
+    );
+    expect(outboxStateError, JSON.stringify(outboxStateError)).toBeNull();
+    expect(outboxState).toMatchObject({
+      organizationId: fixture.organizationId,
+      pendingCount: expect.any(Number),
+      retryingCount: expect.any(Number),
+      deadLetterCount: expect.any(Number),
+    });
+    expect(Object.keys(outboxState as Record<string, unknown>).sort()).toEqual([
+      "deadLetterCount", "lastFailureAt", "lastSuccessAt", "lastWorkerRunAt",
+      "oldestPendingAt", "organizationId", "pendingCount", "retryingCount",
+    ]);
+
     const { data: marAudit, error: marAuditError } = await service.from("mar_audit_events")
       .select("from_state,to_state,actor_id,correlation_id")
       .eq("mar_id", marId)
