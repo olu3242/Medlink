@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkflowInstance, WorkflowStore } from "./service";
-import { WorkflowService } from "./service";
+import { WorkflowSafetyError, WorkflowService } from "./service";
 
 // A real (if minimal) fake: unlike a fixture that always resolves
 // findByKey to a pre-seeded instance, this one starts empty, so create()
@@ -184,5 +184,37 @@ describe("WorkflowService", () => {
     await service.run({ tenantId: "t", type: "x", idempotencyKey: "k", steps });
 
     expect(ran).toBe(1);
+  });
+
+  it("rejects plans that exceed the configured step bound", async () => {
+    const service = new WorkflowService(new InMemoryWorkflowStore(), 2);
+    const steps = ["a", "b", "c"].map((name) => ({
+      name,
+      execute: async () => undefined,
+    }));
+
+    await expect(service.run({
+      tenantId: "t",
+      type: "x",
+      idempotencyKey: "bounded",
+      steps,
+    })).rejects.toThrow(WorkflowSafetyError);
+  });
+
+  it("rejects repeated step names before executing the workflow", async () => {
+    let ran = 0;
+    const service = new WorkflowService(new InMemoryWorkflowStore());
+    const steps = ["repeat", "repeat"].map((name) => ({
+      name,
+      execute: async () => { ran += 1; },
+    }));
+
+    await expect(service.run({
+      tenantId: "t",
+      type: "x",
+      idempotencyKey: "no-loop",
+      steps,
+    })).rejects.toThrow(WorkflowSafetyError);
+    expect(ran).toBe(0);
   });
 });

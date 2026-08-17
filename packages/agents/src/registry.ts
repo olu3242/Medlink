@@ -154,7 +154,7 @@ export const governedAgentCatalog: readonly AgentIdentity[] = [
         description: "Create an inventory reservation for an already-matched MAR.",
         mutatesState: true,
         invokes: "reserve_inventory",
-        allowedRoles: ["pharmacist", "pharmacy_staff"],
+        allowedRoles: ["patient"],
         requiresHumanApproval: false,
         clinicalDecision: false,
       },

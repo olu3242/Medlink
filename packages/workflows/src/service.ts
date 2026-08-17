@@ -41,8 +41,20 @@ export interface WorkflowStep {
   execute(instance: WorkflowInstance): Promise<Readonly<Record<string, unknown>> | void>;
 }
 
+export class WorkflowSafetyError extends Error {
+  readonly code = "workflow_safety_limit_exceeded";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkflowSafetyError";
+  }
+}
+
 export class WorkflowService {
-  constructor(private readonly store: WorkflowStore) {}
+  constructor(
+    private readonly store: WorkflowStore,
+    private readonly maximumSteps = 32,
+  ) {}
 
   async run(input: {
     tenantId: string;
@@ -51,6 +63,13 @@ export class WorkflowService {
     steps: readonly WorkflowStep[];
     context?: Readonly<Record<string, unknown>>;
   }): Promise<WorkflowInstance> {
+    if (input.steps.length > this.maximumSteps) {
+      throw new WorkflowSafetyError("Workflow exceeds the maximum agent step count");
+    }
+    const names = input.steps.map((step) => step.name);
+    if (new Set(names).size !== names.length) {
+      throw new WorkflowSafetyError("Workflow contains a repeated step name");
+    }
     let instance =
       (await this.store.findByKey(input.tenantId, input.idempotencyKey)) ??
       (await this.store.create(input));
