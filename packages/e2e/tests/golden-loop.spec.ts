@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { expect, test } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { signInWithMagicLink } from "../lib/auth";
 import type { GoldenLoopFixture } from "../lib/golden-fixture";
 
@@ -14,10 +14,170 @@ const clinicalWorkerToken = process.env.MEDLINK_E2E_CLINICAL_WORKER_TOKEN
   ?? "medlink-e2e-clinical-worker-token-0001";
 const whatsappAppSecret = process.env.MEDLINK_E2E_WHATSAPP_APP_SECRET
   ?? "medlink-e2e-whatsapp-secret-0001";
+const notificationWorkerToken = process.env.MEDLINK_E2E_NOTIFICATION_WORKER_TOKEN
+  ?? "medlink-e2e-notification-worker-token-0001";
+const providerUrl = process.env.MEDLINK_E2E_PROVIDER_URL ?? "http://127.0.0.1:4010";
+const paymentWebhookSecret = process.env.MEDLINK_E2E_PAYMENT_WEBHOOK_SECRET
+  ?? "medlink-e2e-payment-webhook-secret-0001";
+
+interface PaymentAttempt {
+  readonly paymentId: string;
+  readonly attemptId: string;
+  readonly providerReference: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly paymentStatus: string;
+  readonly attemptStatus: string;
+  readonly hostedPaymentUrl: string;
+}
+
+async function postPaymentEvent(
+  request: APIRequestContext,
+  event: Readonly<Record<string, unknown>>,
+  signatureSecret = paymentWebhookSecret,
+) {
+  const raw = JSON.stringify(event);
+  const signature = createHmac("sha256", signatureSecret).update(raw, "utf8").digest("hex");
+  return request.post(`${webUrl}/api/payments/webhook`, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-medlink-payment-signature": `sha256=${signature}`,
+    },
+    data: raw,
+  });
+}
 
 async function loadFixture(): Promise<GoldenLoopFixture> {
   const raw = await readFile(new URL("../.golden-loop-fixture.json", import.meta.url), "utf8");
   return JSON.parse(raw) as GoldenLoopFixture;
+}
+
+async function startSignedWhatsAppDiscovery(
+  request: APIRequestContext,
+  service: SupabaseClient,
+  fixture: GoldenLoopFixture,
+): Promise<{ conversationId: string; conversationWorkflowId: string }> {
+  const externalMessageId = `wamid.level3.${fixture.whatsappChannelIdentity}`;
+  const webhookPayload = {
+    object: "whatsapp_business_account",
+    entry: [{
+      id: "golden-loop-entry",
+      changes: [{
+        field: "messages",
+        value: {
+          messaging_product: "whatsapp",
+          metadata: { phone_number_id: fixture.whatsappPhoneNumberId },
+          messages: [{
+            from: fixture.whatsappChannelIdentity,
+            id: externalMessageId,
+            timestamp: String(Math.floor(Date.now() / 1_000)),
+            type: "text",
+            text: { body: `find ${fixture.medicineName}` },
+          }],
+        },
+      }],
+    }],
+  };
+  const rawWebhook = JSON.stringify(webhookPayload);
+  const signature = `sha256=${createHmac("sha256", whatsappAppSecret)
+    .update(rawWebhook, "utf8").digest("hex")}`;
+
+  const invalidSignature = await request.post(`${webUrl}/api/whatsapp/webhook`, {
+    headers: {
+      "Content-Type": "application/json",
+      "x-hub-signature-256": `sha256=${"0".repeat(64)}`,
+    },
+    data: rawWebhook,
+  });
+  expect(invalidSignature.status()).toBe(401);
+
+  for (let delivery = 0; delivery < 2; delivery += 1) {
+    const response = await request.post(`${webUrl}/api/whatsapp/webhook`, {
+      headers: { "Content-Type": "application/json", "x-hub-signature-256": signature },
+      data: rawWebhook,
+    });
+    expect(response.status(), await response.text()).toBe(200);
+  }
+
+  const { data: conversations, error: conversationError } = await service
+    .from("conversations")
+    .select("id,patient_id,current_intent,active_workflow_instance_id")
+    .eq("organization_id", fixture.organizationId)
+    .eq("channel_identity", fixture.whatsappChannelIdentity);
+  expect(conversationError, JSON.stringify(conversationError)).toBeNull();
+  expect(conversations).toHaveLength(1);
+  expect(conversations?.[0]).toMatchObject({
+    patient_id: fixture.patient.userId,
+    current_intent: "medicine_search",
+    active_workflow_instance_id: expect.any(String),
+  });
+  const conversationId = conversations![0]!.id;
+  const conversationWorkflowId = conversations![0]!.active_workflow_instance_id!;
+
+  const { data: inbound, error: inboundError } = await service
+    .from("conversation_messages").select("id")
+    .eq("organization_id", fixture.organizationId)
+    .eq("external_message_id", externalMessageId);
+  expect(inboundError, JSON.stringify(inboundError)).toBeNull();
+  expect(inbound).toHaveLength(1);
+
+  const { data: workflows, error: workflowError } = await service
+    .from("workflow_instances").select("id,status,completed_steps,context")
+    .eq("id", conversationWorkflowId);
+  expect(workflowError, JSON.stringify(workflowError)).toBeNull();
+  expect(workflows).toHaveLength(1);
+  expect(workflows?.[0]).toMatchObject({
+    status: "completed",
+    completed_steps: ["search_catalog"],
+    context: {
+      conversationId,
+      patientId: fixture.patient.userId,
+      searchResults: { matches: expect.any(Array) },
+    },
+  });
+  expect(JSON.stringify(workflows?.[0]?.context)).toContain(fixture.medicineId);
+
+  const { data: conversationAgent, error: conversationAgentError } = await service
+    .from("ai_runs")
+    .select("id,status,correlation_id,input_reference")
+    .eq("organization_id", fixture.organizationId)
+    .eq("agent_name", "conversation_agent")
+    .eq("correlation_id", externalMessageId)
+    .single();
+  expect(conversationAgentError, JSON.stringify(conversationAgentError)).toBeNull();
+  expect(conversationAgent).toMatchObject({
+    status: "completed",
+    input_reference: {
+      agentId: "conversation",
+      capability: "route_intent",
+      persona: "patient",
+      conversationId,
+      workflowId: conversationWorkflowId,
+    },
+  });
+  return { conversationId, conversationWorkflowId };
+}
+
+interface SimulatedWhatsAppMessage {
+  readonly externalMessageId: string;
+  readonly body: { readonly text?: { readonly body?: string } };
+}
+
+async function dispatchNotifications(request: APIRequestContext): Promise<void> {
+  const response = await request.post(`${webUrl}/api/internal/notification-dispatch`, {
+    headers: { Authorization: `Bearer ${notificationWorkerToken}` },
+    data: { limit: 50 },
+  });
+  expect(response.status(), await response.text()).toBe(200);
+}
+
+async function getSimulatedWhatsAppMessages(
+  request: APIRequestContext,
+): Promise<ReadonlyArray<SimulatedWhatsAppMessage>> {
+  const response = await request.get(`${providerUrl}/whatsapp/messages`);
+  expect(response.status(), await response.text()).toBe(200);
+  const payload = await response.json() as { messages: SimulatedWhatsAppMessage[] };
+  return payload.messages;
 }
 
 // Two real sign-ins plus a full multi-phase lifecycle exceeds the default
@@ -28,7 +188,7 @@ async function loadFixture(): Promise<GoldenLoopFixture> {
 test.setTimeout(180_000);
 test.describe.configure({ retries: 0 });
 
-test("authenticated medication access golden loop: patient -> pharmacist -> patient -> pharmacy -> patient -> pharmacy", async ({ browser }) => {
+test("signed WhatsApp medication access golden loop: WhatsApp -> patient -> pharmacist -> patient -> pharmacy -> patient -> pharmacy", async ({ browser }) => {
   const fixture = await loadFixture();
   const service = createClient(
     process.env.MEDLINK_E2E_SUPABASE_URL!,
@@ -44,7 +204,10 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
     lastMark = now;
   }
 
-  const patientContext = await browser.newContext();
+  const patientContext = await browser.newContext({
+    geolocation: { latitude: 6.5244, longitude: 3.3792 },
+    permissions: ["geolocation"],
+  });
   const patientPage = await patientContext.newPage();
   const pharmacistContext = await browser.newContext();
   const pharmacistPage = await pharmacistContext.newPage();
@@ -55,6 +218,15 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
   let prescriptionId = "";
   let conversationId = "";
   let conversationWorkflowId = "";
+
+  await test.step("signed WhatsApp discovery resolves one patient and starts the canonical workflow once", async () => {
+    ({ conversationId, conversationWorkflowId } = await startSignedWhatsAppDiscovery(
+      patientPage.request,
+      service,
+      fixture,
+    ));
+    mark("whatsappDiscovery");
+  });
 
   await test.step("patient uploads a prescription and governed providers produce human-review evidence", async () => {
     await signInWithMagicLink(patientPage, patientUrl, mailpitUrl, fixture.patient.email);
@@ -212,6 +384,52 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
     await patientPage.waitForURL(/\/search\?/);
     await expect(patientPage.getByText("Golden Loop Pharmacy")).toBeVisible();
 
+    const geoResponse = patientPage.waitForResponse((response) =>
+      response.url().includes("/api/v1/inventory?")
+      && response.url().includes("locationConsent=true")
+      && response.request().method() === "GET",
+    );
+    await patientPage.getByRole("button", { name: "Use my location" }).click();
+    const geo = await geoResponse;
+    expect(geo.status(), await geo.text()).toBe(200);
+    const discovery = await geo.json() as { data: {
+      requestedMedicineId: string;
+      outcome: string;
+      exact: Array<{
+        medicineId: string; inventoryId: string; pharmacyLocationId: string;
+        reservationEligible: boolean; priceStatus: string; distanceKm: number;
+      }>;
+      generic: Array<{
+        medicineId: string; inventoryId: string; pharmacyLocationId: string;
+        reservationEligible: boolean; pharmacistReviewRequired: boolean;
+        priceStatus: string; distanceKm: number;
+      }>;
+    } };
+    expect(discovery.data).toMatchObject({
+      requestedMedicineId: fixture.medicineId,
+      outcome: "BOTH_AVAILABLE",
+      exact: [expect.objectContaining({
+        medicineId: fixture.medicineId,
+        inventoryId: fixture.inventoryBatchId,
+        pharmacyLocationId: fixture.pharmacyLocationId,
+        reservationEligible: true,
+        priceStatus: "AVAILABLE",
+      })],
+      generic: [expect.objectContaining({
+        medicineId: fixture.genericMedicineId,
+        inventoryId: fixture.genericInventoryBatchId,
+        pharmacyLocationId: fixture.genericPharmacyLocationId,
+        reservationEligible: false,
+        pharmacistReviewRequired: true,
+        priceStatus: "PRICE_NOT_AVAILABLE",
+      })],
+    });
+    expect(discovery.data.exact[0]!.distanceKm).toBe(0);
+    expect(discovery.data.generic[0]!.distanceKm).toBeGreaterThan(0);
+    await expect(patientPage.getByText("Availability outcome:").getByText("BOTH_AVAILABLE"))
+      .toBeVisible();
+    await expect(patientPage.getByText(/Related generic option/)).toBeVisible();
+
     // Matching itself creates no reservation and no lock -- it is a read.
     const beforeMatch = await patientPage.request.get(`${patientUrl}/api/v1/reservations`, {
       headers: { Accept: "application/json" },
@@ -334,7 +552,122 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
     mark("pharmacyConfirm");
   });
 
+  await test.step("payment failure preserves the reservation; retry succeeds only from a verified provider event", async () => {
+    const { data: confirmedReservation, error: confirmedReservationError } = await service
+      .from("reservations")
+      .select("status,payment_required")
+      .eq("id", reservationId)
+      .single();
+    expect(confirmedReservationError, JSON.stringify(confirmedReservationError)).toBeNull();
+    expect(confirmedReservation).toEqual({ status: "confirmed", payment_required: true });
+
+    const prematureReady = await pharmacyPage.request.post(
+      `${pharmacyUrl}/api/v1/reservations/${reservationId}/ready`,
+    );
+    expect(prematureReady.ok()).toBe(false);
+
+    await patientPage.goto(`${patientUrl}/reservations`);
+    const firstAttemptResponsePromise = patientPage.waitForResponse((response) =>
+      response.url() === `${patientUrl}/api/v1/payments` && response.request().method() === "POST",
+    );
+    await patientPage.getByRole("button", { name: "Pay securely" }).click();
+    const firstAttemptResponse = await firstAttemptResponsePromise;
+    expect(firstAttemptResponse.status(), await firstAttemptResponse.text()).toBe(201);
+    const firstAttempt = (await firstAttemptResponse.json() as { data: PaymentAttempt }).data;
+    expect(firstAttempt).toMatchObject({
+      amountMinor: 250000,
+      currency: "NGN",
+      paymentStatus: "pending",
+      attemptStatus: "pending",
+    });
+    expect(firstAttempt.hostedPaymentUrl).toContain(firstAttempt.providerReference);
+    await expect(patientPage.getByText("Secure payment is ready.", { exact: false })).toBeVisible();
+
+    const failedEvent = {
+      eventId: `failed-${firstAttempt.attemptId}`,
+      providerReference: firstAttempt.providerReference,
+      status: "failed",
+      amountMinor: firstAttempt.amountMinor,
+      currency: firstAttempt.currency,
+    };
+    const invalidSignature = await postPaymentEvent(
+      patientPage.request,
+      { ...failedEvent, eventId: `invalid-${firstAttempt.attemptId}` },
+      "invalid-payment-webhook-secret-0001",
+    );
+    expect(invalidSignature.status()).toBe(401);
+    const wrongAmount = await postPaymentEvent(patientPage.request, {
+      ...failedEvent,
+      eventId: `amount-${firstAttempt.attemptId}`,
+      amountMinor: firstAttempt.amountMinor + 1,
+    });
+    expect(wrongAmount.status()).toBe(409);
+    const wrongCurrency = await postPaymentEvent(patientPage.request, {
+      ...failedEvent,
+      eventId: `currency-${firstAttempt.attemptId}`,
+      currency: "USD",
+    });
+    expect(wrongCurrency.status()).toBe(409);
+    const failure = await postPaymentEvent(patientPage.request, failedEvent);
+    expect(failure.status(), await failure.text()).toBe(200);
+
+    const { data: stateAfterFailure, error: stateAfterFailureError } = await service
+      .from("reservations")
+      .select("status,inventory_locks(status),payments(status)")
+      .eq("id", reservationId)
+      .single();
+    expect(stateAfterFailureError, JSON.stringify(stateAfterFailureError)).toBeNull();
+    expect(stateAfterFailure).toMatchObject({
+      status: "confirmed",
+      inventory_locks: [{ status: "active" }],
+      payments: [{ status: "pending" }],
+    });
+
+    const retryKey = `payment-retry-${reservationId}`;
+    const createRetry = () => patientPage.request.post(`${patientUrl}/api/v1/payments`, {
+      headers: { "Content-Type": "application/json" },
+      data: { reservationId, idempotencyKey: retryKey },
+    });
+    const retryResponse = await createRetry();
+    expect(retryResponse.status(), await retryResponse.text()).toBe(201);
+    const retryAttempt = (await retryResponse.json() as { data: PaymentAttempt }).data;
+    const duplicateRetryResponse = await createRetry();
+    expect(duplicateRetryResponse.status(), await duplicateRetryResponse.text()).toBe(201);
+    const duplicateRetry = (await duplicateRetryResponse.json() as { data: PaymentAttempt }).data;
+    expect(duplicateRetry.attemptId).toBe(retryAttempt.attemptId);
+    expect(duplicateRetry.paymentId).toBe(firstAttempt.paymentId);
+
+    const successEvent = {
+      eventId: `success-${retryAttempt.attemptId}`,
+      providerReference: retryAttempt.providerReference,
+      status: "succeeded",
+      amountMinor: retryAttempt.amountMinor,
+      currency: retryAttempt.currency,
+    };
+    const success = await postPaymentEvent(patientPage.request, successEvent);
+    expect(success.status(), await success.text()).toBe(200);
+    const successReplay = await postPaymentEvent(patientPage.request, successEvent);
+    expect(successReplay.status(), await successReplay.text()).toBe(200);
+
+    const { data: payment, error: paymentError } = await service.from("payments")
+      .select("id,status,reconciliation_required,payment_attempts(id,status)")
+      .eq("id", firstAttempt.paymentId)
+      .single();
+    expect(paymentError, JSON.stringify(paymentError)).toBeNull();
+    expect(payment).toMatchObject({
+      status: "captured",
+      reconciliation_required: false,
+      payment_attempts: expect.arrayContaining([
+        { id: firstAttempt.attemptId, status: "failed" },
+        { id: retryAttempt.attemptId, status: "succeeded" },
+      ]),
+    });
+    expect(payment?.payment_attempts).toHaveLength(2);
+    mark("payment");
+  });
+
   await test.step("pharmacy marks ready; no pickup credential is ever exposed to pharmacy staff", async () => {
+    await pharmacyPage.reload();
     await pharmacyPage.getByRole("button", { name: "Mark ready for pickup" }).click();
     await expect(pharmacyPage.getByText("ready", { exact: true })).toBeVisible();
 
@@ -368,6 +701,30 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       .from("inventory_locks").select("status").eq("id", inventoryLockId).single();
     expect(lockAfterReadyError, JSON.stringify(lockAfterReadyError)).toBeNull();
     expect(lockAfterReady?.status).toBe("active");
+
+    let replayDelivery = await getSimulatedWhatsAppMessages(pharmacyPage.request);
+    let stabilized = false;
+    for (let pass = 0; pass < 8; pass += 1) {
+      const previousLength = replayDelivery.length;
+      await dispatchNotifications(pharmacyPage.request);
+      replayDelivery = await getSimulatedWhatsAppMessages(pharmacyPage.request);
+      if (replayDelivery.length === previousLength) {
+        stabilized = true;
+        break;
+      }
+    }
+    expect(stabilized).toBe(true);
+    const stableLength = replayDelivery.length;
+    await dispatchNotifications(pharmacyPage.request);
+    replayDelivery = await getSimulatedWhatsAppMessages(pharmacyPage.request);
+    expect(replayDelivery).toHaveLength(stableLength);
+    const readyBodies = replayDelivery
+      .map(({ body }) => body.text?.body ?? "")
+      .filter((body) => body.includes("ready for pickup"));
+    expect(readyBodies).toEqual([
+      "Good news! Your MedLink medication reservation is ready for pickup. "
+        + "Open the MedLink app for your pickup code, then bring it to the pharmacy.",
+    ]);
     mark("pharmacyReady");
   });
 
@@ -394,6 +751,8 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       .eq("aggregate_id", reservationId);
     expect(credentialEventsError, JSON.stringify(credentialEventsError)).toBeNull();
     expect(JSON.stringify(credentialEvents)).not.toContain(pickupCode);
+    expect(JSON.stringify(await getSimulatedWhatsAppMessages(patientPage.request)))
+      .not.toContain(pickupCode);
 
     // Regenerating (a second click) must be impossible once issued -- the
     // component swaps to "already generated" text, no fresh code, no
@@ -448,6 +807,14 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       .single();
     expect(consumedLockError, JSON.stringify(consumedLockError)).toBeNull();
     expect(consumedLock?.status).toBe("consumed");
+
+    await dispatchNotifications(pharmacyPage.request);
+    const delivered = await getSimulatedWhatsAppMessages(pharmacyPage.request);
+    expect(delivered.map(({ body }) => body.text?.body ?? "")
+      .filter((body) => body.includes("pickup is complete"))).toEqual([
+      "Your MedLink medication pickup is complete. Thanks for using MedLink!",
+    ]);
+    expect(JSON.stringify(delivered)).not.toContain(pickupCode);
     mark("pharmacyCollect");
   });
 
@@ -626,115 +993,6 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       expect(events.some(({ event_type }) => event_type === "AgentTask.completed")).toBe(true);
     }
 
-    const externalMessageId = `wamid.${reservationId}`;
-    const webhookPayload = {
-      object: "whatsapp_business_account",
-      entry: [{
-        id: "golden-loop-entry",
-        changes: [{
-          field: "messages",
-          value: {
-            messaging_product: "whatsapp",
-            metadata: { phone_number_id: fixture.whatsappPhoneNumberId },
-            messages: [{
-              from: fixture.whatsappChannelIdentity,
-              id: externalMessageId,
-              timestamp: String(Math.floor(Date.now() / 1_000)),
-              type: "text",
-              text: { body: `find ${fixture.medicineName}` },
-            }],
-          },
-        }],
-      }],
-    };
-    const rawWebhook = JSON.stringify(webhookPayload);
-    const signature = `sha256=${createHmac("sha256", whatsappAppSecret)
-      .update(rawWebhook, "utf8").digest("hex")}`;
-    const invalidSignature = await patientPage.request.post(
-      `${webUrl}/api/whatsapp/webhook`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "x-hub-signature-256": `sha256=${"0".repeat(64)}`,
-        },
-        data: rawWebhook,
-      },
-    );
-    expect(invalidSignature.status()).toBe(401);
-
-    for (let delivery = 0; delivery < 2; delivery += 1) {
-      const response = await patientPage.request.post(
-        `${webUrl}/api/whatsapp/webhook`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "x-hub-signature-256": signature,
-          },
-          data: rawWebhook,
-        },
-      );
-      expect(response.status(), await response.text()).toBe(200);
-    }
-
-    const { data: conversations, error: conversationError } = await service
-      .from("conversations")
-      .select("id,patient_id,current_intent,active_workflow_instance_id")
-      .eq("organization_id", fixture.organizationId)
-      .eq("channel_identity", fixture.whatsappChannelIdentity);
-    expect(conversationError, JSON.stringify(conversationError)).toBeNull();
-    expect(conversations).toHaveLength(1);
-    expect(conversations?.[0]).toMatchObject({
-      patient_id: fixture.patient.userId,
-      current_intent: "medicine_search",
-      active_workflow_instance_id: expect.any(String),
-    });
-    conversationId = conversations![0]!.id;
-    conversationWorkflowId = conversations![0]!.active_workflow_instance_id!;
-
-    const { data: inbound, error: inboundError } = await service
-      .from("conversation_messages")
-      .select("id")
-      .eq("organization_id", fixture.organizationId)
-      .eq("external_message_id", externalMessageId);
-    expect(inboundError, JSON.stringify(inboundError)).toBeNull();
-    expect(inbound).toHaveLength(1);
-
-    const { data: workflow, error: workflowError } = await service
-      .from("workflow_instances")
-      .select("id,status,completed_steps,context")
-      .eq("id", conversationWorkflowId)
-      .single();
-    expect(workflowError, JSON.stringify(workflowError)).toBeNull();
-    expect(workflow).toMatchObject({
-      status: "completed",
-      completed_steps: ["search_catalog"],
-      context: {
-        conversationId,
-        patientId: fixture.patient.userId,
-        searchResults: { matches: expect.any(Array) },
-      },
-    });
-    expect(JSON.stringify(workflow?.context)).toContain(fixture.medicineId);
-
-    const { data: conversationAgent, error: conversationAgentError } = await service
-      .from("ai_runs")
-      .select("id,status,correlation_id,input_reference")
-      .eq("organization_id", fixture.organizationId)
-      .eq("agent_name", "conversation_agent")
-      .eq("correlation_id", externalMessageId)
-      .single();
-    expect(conversationAgentError, JSON.stringify(conversationAgentError)).toBeNull();
-    expect(conversationAgent).toMatchObject({
-      status: "completed",
-      input_reference: {
-        agentId: "conversation",
-        capability: "route_intent",
-        persona: "patient",
-        conversationId,
-        workflowId: conversationWorkflowId,
-      },
-    });
-
     console.log("golden-loop identifiers:", JSON.stringify({
       organizationId: fixture.organizationId,
       isolationOrganizationId: fixture.isolationOrganizationId,
@@ -743,6 +1001,9 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       marId,
       reviewId,
       inventoryBatchId: fixture.inventoryBatchId,
+      genericMedicineId: fixture.genericMedicineId,
+      genericPharmacyLocationId: fixture.genericPharmacyLocationId,
+      genericInventoryBatchId: fixture.genericInventoryBatchId,
       reservationId,
       inventoryLockId,
       conversationId,

@@ -12,8 +12,9 @@ export class PharmacyDiscoveryService {
 
 export interface EligibleInventory {
  readonly inventoryId:string; readonly pharmacyLocationId:string;
- readonly medicineId:string; readonly expiresOn:string;
+ readonly medicineId:string; readonly medicineName:string; readonly expiresOn:string;
  readonly availableQuantity:number; readonly state:string; readonly observedAt:string;
+ readonly unitPriceMinor:number|null; readonly currencyCode:string|null;
 }
 export interface EligiblePharmacyLocation extends Pharmacy { readonly updatedAt:string; }
 export interface EligiblePharmacyResult {

@@ -295,15 +295,24 @@ export function toSupabaseChannelIdentityLookup(
       { cause: error },
     );
     if (!link) return null;
-    const { data: membership, error: membershipError } = await database
-      .from("organization_memberships").select("user_id")
+    const { data: memberships, error: membershipError } = await database
+      .from("organization_memberships").select("user_id,role")
       .eq("organization_id", organizationId).eq("user_id", link.user_id)
-      .eq("role", "patient").is("deleted_at", null).maybeSingle();
+      .is("deleted_at", null);
     if (membershipError) throw new RuntimeError(
       "infrastructure", "database_operation_failed",
       "The data operation could not be completed", 503, true, "Retry later.",
       { cause: membershipError },
     );
-    return membership ? link.user_id : null;
+    return resolveUnambiguousPatientPersona(link.user_id, memberships ?? []);
   };
+}
+
+export function resolveUnambiguousPatientPersona(
+  linkedUserId: string,
+  memberships: ReadonlyArray<{ readonly user_id: string; readonly role: string }>,
+): string | null {
+  return memberships.length === 1 && memberships[0]?.role === "patient"
+    ? linkedUserId
+    : null;
 }

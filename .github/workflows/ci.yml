@@ -218,8 +218,12 @@ jobs:
     # Gate 2 of the two-gate framing (browser-auth-e2e above is Gate 1,
     # "who is acting"): one real authenticated transaction across three
     # personas -- patient request, pharmacist review, patient match/reserve,
-    # pharmacy confirm/ready, patient pickup credential, pharmacy collect --
-    # through real browser sessions, real Postgres, real RLS, real RPCs.
+    # pharmacy confirm, verified payment failure/retry/success, ready,
+    # patient pickup credential, pharmacy collect --
+    # initiated by a signed, duplicate-safe WhatsApp discovery and continued
+    # through real browser sessions, real Postgres, real RLS, real RPCs. The
+    # simulator also captures READY/collected notifications and proves the
+    # pickup credential never enters the channel.
     # Deliberately its own
     # job, not folded into browser-auth-e2e, matching the "keep full
     # medication golden-loop E2E separate" plan from PR #29.
@@ -258,11 +262,17 @@ jobs:
           export MEDLINK_FILE_SCANNER_URL="http://127.0.0.1:4010/scan"
           export WHATSAPP_APP_SECRET="medlink-e2e-whatsapp-secret-0001"
           export WHATSAPP_VERIFY_TOKEN="medlink-e2e-whatsapp-verify-0001"
+          export WHATSAPP_ACCESS_TOKEN="medlink-e2e-token"
+          export MEDLINK_NOTIFICATION_WORKER_TOKEN="medlink-e2e-notification-worker-token-0001"
+          export MEDLINK_E2E_WHATSAPP_GRAPH_API_BASE_URL="http://127.0.0.1:4010"
+          export MEDLINK_PAYMENT_PROVIDER_URL="http://127.0.0.1:4010"
+          export MEDLINK_PAYMENT_PROVIDER_KEY="medlink-e2e-payment-provider-key-0001"
+          export PAYMENT_WEBHOOK_SECRET="medlink-e2e-payment-webhook-secret-0001"
 
           node packages/e2e/provider-simulator.mjs &
-          PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
+          WHATSAPP_ACCESS_TOKEN= PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
           PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
-          PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
+          WHATSAPP_ACCESS_TOKEN= PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
           PORT=3004 MEDLINK_API_URL=http://localhost:3004 npm run start --workspace=apps/web &
 
           for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in http://localhost:3004/health/live; do
@@ -280,9 +290,12 @@ jobs:
           MEDLINK_E2E_PHARMACY_URL=http://localhost:3002 \
           MEDLINK_E2E_WEB_URL=http://localhost:3004 \
           MEDLINK_E2E_CLINICAL_WORKER_TOKEN="$MEDLINK_CLINICAL_WORKER_TOKEN" \
+          MEDLINK_E2E_NOTIFICATION_WORKER_TOKEN="$MEDLINK_NOTIFICATION_WORKER_TOKEN" \
+          MEDLINK_E2E_PROVIDER_URL=http://127.0.0.1:4010 \
           MEDLINK_E2E_WHATSAPP_APP_SECRET="$WHATSAPP_APP_SECRET" \
+          MEDLINK_E2E_PAYMENT_WEBHOOK_SECRET="$PAYMENT_WEBHOOK_SECRET" \
           MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
-          npm run test:golden-loop --workspace=packages/e2e
+          npm run test:whatsapp-golden-loop --workspace=packages/e2e
       - if: always()
         run: npx supabase stop
       - if: always()

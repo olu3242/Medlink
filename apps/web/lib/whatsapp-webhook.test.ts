@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWhatsAppWebhookHandlers,
   UnsupportedWorkflowTypeError,
+  resolveUnambiguousPatientPersona,
   UnwiredWorkflowInvoker,
   verifyWebhookChallenge,
   type WhatsAppWebhookDependencies,
@@ -220,6 +221,27 @@ describe("verifyWebhookChallenge", () => {
       VERIFY_TOKEN,
     );
     expect(result).toBeNull();
+  });
+});
+
+describe("resolveUnambiguousPatientPersona", () => {
+  const userId = "00000000-0000-4000-8000-000000000099";
+
+  it("resolves one linked patient membership", () => {
+    expect(resolveUnambiguousPatientPersona(userId, [
+      { user_id: userId, role: "patient" },
+    ])).toBe(userId);
+  });
+
+  it("fails closed for no membership, a non-patient role, or multiple contexts", () => {
+    expect(resolveUnambiguousPatientPersona(userId, [])).toBeNull();
+    expect(resolveUnambiguousPatientPersona(userId, [
+      { user_id: userId, role: "pharmacist" },
+    ])).toBeNull();
+    expect(resolveUnambiguousPatientPersona(userId, [
+      { user_id: userId, role: "patient" },
+      { user_id: userId, role: "pharmacist" },
+    ])).toBeNull();
   });
 });
 

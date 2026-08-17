@@ -21,6 +21,7 @@
     "@medlink/clinical": "*",
     "@medlink/medicine": "*",
     "@medlink/notifications": "*",
+    "@medlink/payments": "*",
     "@medlink/pharmacy": "*",
     "@supabase/supabase-js": "^2.52.0",
     "zod": "^3.25.0"

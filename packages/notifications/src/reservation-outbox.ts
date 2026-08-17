@@ -129,6 +129,14 @@ const NOTIFICATION_TEMPLATES: Readonly<Record<string, string>> = {
     "Open the MedLink app for your pickup code, then bring it to the pharmacy.",
   reservation_collected:
     "Your MedLink medication pickup is complete. Thanks for using MedLink!",
+  payment_required:
+    "Payment is required for your confirmed MedLink reservation. " +
+    "Open the MedLink app to pay securely.",
+  payment_failed:
+    "Your MedLink payment attempt was not completed. Your reservation remains active until its expiry time. " +
+    "Open the MedLink app to retry securely.",
+  payment_succeeded:
+    "Your MedLink payment is confirmed. The pharmacy can now prepare your reservation for pickup.",
 };
 
 export interface RecipientWhatsAppIdentity {
@@ -397,11 +405,19 @@ export function buildReservationNotificationDispatcher(
   // production code -- this parameter exists so unit tests can verify
   // recipient resolution/idempotency/template safety without making a
   // live network call to Meta's Graph API.
-  sender: WhatsAppSender = new GraphApiWhatsAppSender(whatsAppAccessToken),
+  sender?: WhatsAppSender,
+  e2eGraphApiBaseUrl?: string,
 ): OutboxDispatcher {
+  const resolvedSender = sender ?? new GraphApiWhatsAppSender(
+    whatsAppAccessToken,
+    fetch,
+    "v21.0",
+    10_000,
+    e2eGraphApiBaseUrl,
+  );
   const store = new SupabaseOutboxStore(database);
   const channel = new WhatsAppNotificationChannel(
-    sender,
+    resolvedSender,
     toSupabaseWhatsAppRecipientResolver(database),
   );
   const notifications = new NotificationService([channel], new SupabaseNotificationStore(database));
@@ -412,6 +428,9 @@ export function buildReservationNotificationDispatcher(
     reservationLifecycleConsumer(database, "reservation.cancelled.v1", "reservation_cancelled", notifications),
     reservationLifecycleConsumer(database, "reservation.ready.v1", "reservation_ready", notifications),
     reservationLifecycleConsumer(database, "reservation.collected.v1", "reservation_collected", notifications),
+    reservationLifecycleConsumer(database, "payment.required.v1", "payment_required", notifications),
+    reservationLifecycleConsumer(database, "payment.failed.v1", "payment_failed", notifications),
+    reservationLifecycleConsumer(database, "payment.succeeded.v1", "payment_succeeded", notifications),
   ];
   return new OutboxDispatcher(store, consumers, () => new Date());
 }

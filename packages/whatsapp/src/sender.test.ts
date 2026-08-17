@@ -70,6 +70,42 @@ describe("GraphApiWhatsAppSender", () => {
     ).rejects.toThrow(WhatsAppDeliveryError);
   });
 
+  it("allows an E2E-only token to target the loopback provider simulator", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ messages: [{ id: "wamid.sim.001" }] }), { status: 200 }),
+    );
+    const sender = new GraphApiWhatsAppSender(
+      "medlink-e2e-token",
+      fetchImpl,
+      "v21.0",
+      10_000,
+      "http://127.0.0.1:4010",
+    );
+
+    await sender.send("phone-123", {
+      to: "234800",
+      contentType: "text",
+      body: "safe handoff",
+      mediaId: null,
+      templateName: null,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:4010/v21.0/phone-123/messages",
+      expect.any(Object),
+    );
+  });
+
+  it("refuses to send a real token to an overridden provider URL", () => {
+    expect(() => new GraphApiWhatsAppSender(
+      "real-token",
+      fetch,
+      "v21.0",
+      10_000,
+      "http://127.0.0.1:4010",
+    )).toThrow(/E2E-only token/);
+  });
+
   it("bounds provider calls and maps a timeout without exposing the access token", async () => {
     const fetchImpl = vi.fn().mockRejectedValue(
       new DOMException("The operation timed out", "TimeoutError"),
