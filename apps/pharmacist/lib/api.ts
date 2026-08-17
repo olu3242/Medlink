@@ -15,7 +15,7 @@ async function get<T>(path: string) {
     ?? process.env.MEDLINK_API_URL
     ?? "http://localhost:3003";
   const forwarded = new Headers({ Accept: "application/json" });
-  const cookieHeader = cookieStore.getAll()
+  const cookieHeader = incoming.get("cookie") ?? cookieStore.getAll()
     .map(({ name, value }) => `${name}=${value}`)
     .join("; ");
   if (cookieHeader) forwarded.set("cookie", cookieHeader);
@@ -27,7 +27,12 @@ async function get<T>(path: string) {
     cache: "no-store",
     headers: forwarded,
   });
-  if (!response.ok) throw new Error("Review request failed");
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null) as { code?: string } | null;
+    throw new Error(
+      `Review request failed (${response.status}, ${problem?.code ?? "unknown"})`,
+    );
+  }
   return (await response.json() as { data: T }).data;
 }
 

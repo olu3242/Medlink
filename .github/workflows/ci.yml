@@ -180,27 +180,34 @@ jobs:
         working-directory: packages/e2e
       - run: npx supabase start
       - run: npx supabase db reset
-      - name: Build patient, pharmacist, and pharmacy against the local Supabase instance
+      - name: Build patient, pharmacist, pharmacy, and worker host against local Supabase
         shell: bash
         run: |
           set -euo pipefail
           eval "$(npx supabase status -o env)"
           NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
           NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
-          npm run build --workspace=apps/patient --workspace=apps/pharmacist --workspace=apps/pharmacy
-      - name: Start patient, pharmacist, and pharmacy, then run the medication golden-loop E2E suite
+          npm run build --workspace=apps/patient --workspace=apps/pharmacist --workspace=apps/pharmacy --workspace=apps/web
+      - name: Start persona apps and worker host, then run the medication golden-loop E2E suite
         shell: bash
         run: |
           set -euo pipefail
           eval "$(npx supabase status -o env)"
           export NEXT_PUBLIC_SUPABASE_URL="$API_URL"
           export NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY"
+          export SUPABASE_SERVICE_ROLE_KEY="$SECRET_KEY"
+          export MEDLINK_CLINICAL_WORKER_TOKEN="medlink-e2e-clinical-worker-token-0001"
+          export MEDLINK_OCR_PROVIDER_URL="http://127.0.0.1:4010/ocr"
+          export MEDLINK_PARSER_PROVIDER_URL="http://127.0.0.1:4010/parse"
+          export MEDLINK_FILE_SCANNER_URL="http://127.0.0.1:4010/scan"
 
+          node packages/e2e/provider-simulator.mjs &
           PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
           PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
           PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
+          PORT=3004 MEDLINK_API_URL=http://localhost:3004 npm run start --workspace=apps/web &
 
-          for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in; do
+          for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in http://localhost:3004/health/live; do
             for _ in $(seq 1 30); do
               if curl -sf "$url" > /dev/null; then break; fi
               sleep 1
@@ -213,6 +220,8 @@ jobs:
           MEDLINK_E2E_PATIENT_URL=http://localhost:3000 \
           MEDLINK_E2E_PHARMACIST_URL=http://localhost:3003 \
           MEDLINK_E2E_PHARMACY_URL=http://localhost:3002 \
+          MEDLINK_E2E_WEB_URL=http://localhost:3004 \
+          MEDLINK_E2E_CLINICAL_WORKER_TOKEN="$MEDLINK_CLINICAL_WORKER_TOKEN" \
           MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
           npm run test:golden-loop --workspace=packages/e2e
       - if: always()

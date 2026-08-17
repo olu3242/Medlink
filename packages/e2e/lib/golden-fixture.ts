@@ -66,6 +66,19 @@ export async function provisionGoldenLoopFixture(
     reviewId: string;
   };
 
+  // Clinical evidence is deliberately hidden from an ordinary pharmacist.
+  // Provision the licensed identity that the real review RLS and decision RPC
+  // require; the browser still has to authenticate and perform the decision.
+  const { error: pharmacistProfileError } = await service.rpc(
+    "certify_golden_loop_pharmacist_profile",
+    {
+      target_organization_id: scenario.organizationId,
+      target_pharmacist_id: pharmacist.userId,
+      target_license_number: `PCN-${nonce}`,
+    },
+  );
+  if (pharmacistProfileError) throw pharmacistProfileError;
+
   const isolationOrganizationId = crypto.randomUUID();
   const { error: isolationOrganizationError } = await service.from("organizations").insert({
     id: isolationOrganizationId,

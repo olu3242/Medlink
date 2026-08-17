@@ -8,6 +8,9 @@ const patientUrl = process.env.MEDLINK_E2E_PATIENT_URL ?? "http://localhost:3000
 const pharmacyUrl = process.env.MEDLINK_E2E_PHARMACY_URL ?? "http://localhost:3002";
 const pharmacistUrl = process.env.MEDLINK_E2E_PHARMACIST_URL ?? "http://localhost:3003";
 const mailpitUrl = process.env.MEDLINK_E2E_MAILPIT_URL ?? "http://127.0.0.1:54324";
+const webUrl = process.env.MEDLINK_E2E_WEB_URL ?? "http://localhost:3004";
+const clinicalWorkerToken = process.env.MEDLINK_E2E_CLINICAL_WORKER_TOKEN
+  ?? "medlink-e2e-clinical-worker-token-0001";
 
 async function loadFixture(): Promise<GoldenLoopFixture> {
   const raw = await readFile(new URL("../.golden-loop-fixture.json", import.meta.url), "utf8");
@@ -19,7 +22,7 @@ async function loadFixture(): Promise<GoldenLoopFixture> {
 // this suite already runs with retries:1 in CI for the same Mailpit-
 // timing reasons the auth suite does (see docs/mvp-integration/
 // AUTHENTICATION.md's "known, non-blocking test reliability debt").
-test.setTimeout(120_000);
+test.setTimeout(180_000);
 test.describe.configure({ retries: 0 });
 
 test("authenticated medication access golden loop: patient -> pharmacist -> patient -> pharmacy -> patient -> pharmacy", async ({ browser }) => {
@@ -44,12 +47,125 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
   const pharmacistPage = await pharmacistContext.newPage();
   const pharmacyContext = await browser.newContext();
   const pharmacyPage = await pharmacyContext.newPage();
+  let marId = fixture.marId;
+  let reviewId = fixture.reviewId;
+  let prescriptionId = "";
+
+  await test.step("patient uploads a prescription and governed providers produce human-review evidence", async () => {
+    await signInWithMagicLink(patientPage, patientUrl, mailpitUrl, fixture.patient.email);
+    await patientPage.goto(`${patientUrl}/prescriptions/new`);
+    const uploadResponse = patientPage.waitForResponse((response) =>
+      response.url().endsWith("/api/v1/prescriptions")
+      && response.request().method() === "POST",
+    );
+    await patientPage.getByLabel("Choose a prescription").setInputFiles({
+      name: "golden-loop-prescription.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n% MedLink deterministic prescription\n"),
+    });
+    await patientPage.getByRole("button", { name: "Upload prescription" }).click();
+    const accepted = await uploadResponse;
+    expect(accepted.status(), await accepted.text()).toBe(201);
+    const acceptedBody = await accepted.json() as {
+      data: { prescriptionId: string; workflowId: string; status: string };
+    };
+    prescriptionId = acceptedBody.data.prescriptionId;
+    expect(acceptedBody.data.status).toBe("received");
+    await expect(patientPage.getByText(/queued for pharmacist review/i)).toBeVisible();
+
+    for (const expectedStage of ["ocr", "parsing", "clinical_validation"]) {
+      const worker = await patientPage.request.post(`${webUrl}/api/internal/clinical-pipeline`, {
+        headers: { Authorization: `Bearer ${clinicalWorkerToken}` },
+        data: { limit: 1 },
+      });
+      const body = await worker.text();
+      expect(worker.status(), body).toBe(200);
+      expect(JSON.parse(body).data.results[0]).toMatchObject({
+        status: "completed",
+        stage: expectedStage,
+        prescriptionId,
+      });
+    }
+
+    const { data: validation, error } = await service.from("clinical_validations")
+      .select("id,status,workflow_run_id")
+      .eq("prescription_id", prescriptionId)
+      .single();
+    expect(error, JSON.stringify(error)).toBeNull();
+    expect(validation?.status).toBe("pending");
+    reviewId = validation!.id;
+    mark("prescriptionIntake");
+  });
+
+  await test.step("human pharmacist resolves the canonical medicine and approves the prescription", async () => {
+    await signInWithMagicLink(pharmacistPage, pharmacistUrl, mailpitUrl, fixture.pharmacist.email);
+    const reviewResponse = await pharmacistPage.request.get(
+      `${pharmacistUrl}/api/v1/review/${reviewId}`,
+      { headers: { Accept: "application/json" } },
+    );
+    const reviewBody = await reviewResponse.text();
+    expect(reviewResponse.status(), reviewBody).toBe(200);
+    await pharmacistPage.goto(`${pharmacistUrl}/review/${reviewId}`);
+    await expect(pharmacistPage.getByRole("heading", {
+      name: "Golden Loop Medicine",
+      exact: true,
+    })).toBeVisible();
+    await pharmacistPage.getByLabel("Find canonical medicine").fill("Golden Loop Medicine");
+    const medicineSearchResponse = pharmacistPage.waitForResponse((response) =>
+      response.url().includes("/api/v1/medicines/search?")
+      && response.request().method() === "GET",
+    );
+    await pharmacistPage.getByRole("button", { name: "Search" }).click();
+    const searchResult = await medicineSearchResponse;
+    const searchBody = await searchResult.text();
+    expect(searchResult.status(), searchBody).toBe(200);
+    expect(searchBody).toContain(fixture.medicineId);
+    await pharmacistPage.getByRole("button", { name: new RegExp(fixture.medicineName) }).click();
+    await pharmacistPage.getByRole("checkbox", { name: /Independent clinical context review required/ }).check();
+    await pharmacistPage.getByLabel("Decision").selectOption("approved");
+    await pharmacistPage.getByLabel("Clinical rationale or clarification request")
+      .fill("Prescription evidence reviewed; canonical medicine confirmed by a human pharmacist.");
+    const decisionResponse = pharmacistPage.waitForResponse((response) =>
+      response.url().endsWith(`/api/v1/review/${reviewId}`)
+      && response.request().method() === "PATCH",
+    );
+    await pharmacistPage.getByRole("button", { name: "Record decision" }).click();
+    const recordedDecision = await decisionResponse;
+    const recordedDecisionBody = await recordedDecision.text();
+    expect(recordedDecision.status(), recordedDecisionBody).toBe(200);
+    await expect(pharmacistPage.getByText(/Decision recorded/)).toBeVisible();
+
+    const { data: prescription, error } = await service.from("prescriptions")
+      .select("status").eq("id", prescriptionId).single();
+    expect(error, JSON.stringify(error)).toBeNull();
+    expect(prescription?.status).toBe("validated");
+    mark("prescriptionReview");
+  });
+
+  await test.step("patient creates the medication-access request from the approved prescription", async () => {
+    await patientPage.goto(`${patientUrl}/prescriptions/${prescriptionId}`);
+    await patientPage.getByRole("button", {
+      name: new RegExp(`Start medication access for ${fixture.medicineName}`),
+    }).click();
+    await patientPage.waitForURL(/\/mar\/[0-9a-f-]+$/);
+    marId = patientPage.url().split("/").at(-1)!;
+
+    const validate = await pharmacistPage.request.post(
+      `${pharmacistUrl}/api/v1/access-requests/${marId}/validate`,
+    );
+    expect(validate.status(), await validate.text()).toBe(200);
+    const { data: accessReview, error } = await service.from("clinical_reviews")
+      .select("id,decision").eq("mar_id", marId).single();
+    expect(error, JSON.stringify(error)).toBeNull();
+    expect(accessReview?.decision).toBe("pending");
+    reviewId = accessReview!.id;
+    mark("medicationAccessRequest");
+  });
 
   await test.step("patient accesses the medication-access request", async () => {
-    await signInWithMagicLink(patientPage, patientUrl, mailpitUrl, fixture.patient.email);
     for (const path of [
-      `/api/v1/mar/${fixture.marId}`,
-      `/api/v1/mar/${fixture.marId}/timeline`,
+      `/api/v1/mar/${marId}`,
+      `/api/v1/mar/${marId}/timeline`,
     ]) {
       const response = await patientPage.request.get(`${patientUrl}${path}`, {
         headers: { Accept: "application/json" },
@@ -57,7 +173,7 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       const body = await response.text();
       expect(response.status(), `${path}: ${body}`).toBe(200);
     }
-    await patientPage.goto(`${patientUrl}/mar/${fixture.marId}`);
+    await patientPage.goto(`${patientUrl}/mar/${marId}`);
     // Canonical identity continuity, step 1: the MAR the patient sees is
     // the exact fixture medicine, not a substituted brand string or a
     // second identity for it.
@@ -67,18 +183,17 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
   });
 
   await test.step("pharmacist reviews and approves the same medication-access request", async () => {
-    await signInWithMagicLink(pharmacistPage, pharmacistUrl, mailpitUrl, fixture.pharmacist.email);
-    await pharmacistPage.goto(`${pharmacistUrl}/access-review/${fixture.reviewId}`);
+    await pharmacistPage.goto(`${pharmacistUrl}/access-review/${reviewId}`);
     await expect(pharmacistPage.getByRole("heading", { name: fixture.medicineName })).toBeVisible();
     await expect(pharmacistPage.getByText(fixture.medicineId)).toBeVisible();
-    await expect(pharmacistPage.getByText(fixture.marId)).toBeVisible();
+    await expect(pharmacistPage.getByText(marId)).toBeVisible();
     await pharmacistPage.getByLabel("Decision").selectOption("approved");
     await pharmacistPage.getByLabel("Clinical recommendation").fill("Approved for canonical inventory matching.");
     await pharmacistPage.getByRole("button", { name: "Record access decision" }).click();
     await expect(pharmacistPage.getByText(/Review completed:/)).toBeVisible();
 
     const duplicate = await pharmacistPage.request.patch(
-      `${pharmacistUrl}/api/v1/access-reviews/${fixture.reviewId}`,
+      `${pharmacistUrl}/api/v1/access-reviews/${reviewId}`,
       { data: { decision: "approved", recommendation: "Approved for canonical inventory matching." } },
     );
     expect(duplicate.ok()).toBe(true);
@@ -101,14 +216,14 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
 
     await patientPage.getByRole("button", { name: "Review reservation" }).click();
     await patientPage.waitForURL(/\/reserve\//);
-    expect(patientPage.url()).toContain(`marId=${fixture.marId}`);
+    expect(patientPage.url()).toContain(`marId=${marId}`);
     expect(patientPage.url()).toContain(`pharmacyLocationId=${fixture.pharmacyLocationId}`);
     expect(patientPage.url()).toContain(fixture.inventoryBatchId);
 
     const { data: matchedMar, error: matchedMarError } = await service
       .from("medication_access_requests")
       .select("state,requested_medicine_id")
-      .eq("id", fixture.marId)
+      .eq("id", marId)
       .single();
     expect(matchedMarError, JSON.stringify(matchedMarError)).toBeNull();
     expect(matchedMar).toMatchObject({ state: "matched", requested_medicine_id: fixture.medicineId });
@@ -159,7 +274,7 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       status: "pending",
       organization_id: fixture.organizationId,
       patient_id: fixture.patient.userId,
-      mar_id: fixture.marId,
+      mar_id: marId,
       pharmacy_location_id: fixture.pharmacyLocationId,
     });
     const { data: lock, error: lockError } = await service
@@ -332,13 +447,13 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
     expect(patientCollect.status()).toBe(403);
 
     const patientClinicalApproval = await patientPage.request.patch(
-      `${pharmacistUrl}/api/v1/access-reviews/${fixture.reviewId}`,
+      `${pharmacistUrl}/api/v1/access-reviews/${reviewId}`,
       { data: { decision: "approved", recommendation: "Unauthorized" } },
     );
     expect(patientClinicalApproval.status()).toBe(403);
 
     const pharmacyClinicalApproval = await pharmacyPage.request.patch(
-      `${pharmacistUrl}/api/v1/access-reviews/${fixture.reviewId}`,
+      `${pharmacistUrl}/api/v1/access-reviews/${reviewId}`,
       { data: { decision: "approved", recommendation: "Unauthorized" } },
     );
     expect(pharmacyClinicalApproval.status()).toBe(403);
@@ -357,7 +472,7 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
 
     for (const [page, url] of [
       [patientPage, `${patientUrl}/api/v1/mar`],
-      [pharmacistPage, `${pharmacistUrl}/api/v1/access-reviews/${fixture.reviewId}`],
+      [pharmacistPage, `${pharmacistUrl}/api/v1/access-reviews/${reviewId}`],
       [pharmacyPage, `${pharmacyUrl}/api/v1/reservations`],
     ] as const) {
       const crossTenant = await page.request.get(url, {
@@ -380,10 +495,10 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
 
     const { data: review, error: reviewError } = await service.from("clinical_reviews")
       .select("mar_id,decision,reviewed_by")
-      .eq("id", fixture.reviewId).single();
+      .eq("id", reviewId).single();
     expect(reviewError, JSON.stringify(reviewError)).toBeNull();
     expect(review).toMatchObject({
-      mar_id: fixture.marId,
+      mar_id: marId,
       decision: "approved",
       reviewed_by: fixture.pharmacist.userId,
     });
@@ -408,7 +523,7 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
 
     const { data: marAudit, error: marAuditError } = await service.from("mar_audit_events")
       .select("from_state,to_state,actor_id,correlation_id")
-      .eq("mar_id", fixture.marId)
+      .eq("mar_id", marId)
       .order("id");
     expect(marAuditError, JSON.stringify(marAuditError)).toBeNull();
     expect((marAudit ?? []).map(({ to_state }) => to_state)).toEqual([
@@ -419,8 +534,9 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       organizationId: fixture.organizationId,
       isolationOrganizationId: fixture.isolationOrganizationId,
       medicineId: fixture.medicineId,
-      marId: fixture.marId,
-      reviewId: fixture.reviewId,
+      prescriptionId,
+      marId,
+      reviewId,
       inventoryBatchId: fixture.inventoryBatchId,
       reservationId,
       inventoryLockId,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CanonicalMedicineCatalog,
   CanonicalMedicineNotFoundError,
+  catalogMedicineSummarySchema,
   normalizeStrengthDisplay,
   saveCatalogMedicineSchema,
   type CanonicalMedicineRepository,
@@ -71,6 +72,32 @@ describe("canonical medicine catalogue", () => {
     await expect(service.find(
       "11111111-1111-4111-8111-111111111111",
     )).rejects.toBeInstanceOf(CanonicalMedicineNotFoundError);
+  });
+
+  it("projects a full canonical medicine into its search summary", () => {
+    const summary = catalogMedicineSummarySchema.parse({
+      id: "11111111-1111-4111-8111-111111111111",
+      brandName: "Panadol",
+      genericName: "Paracetamol",
+      therapeuticClassId: null,
+      therapeuticClass: null,
+      dosageForm: "tablet",
+      route: "oral",
+      strength: "500 mg",
+      normalizedStrength: "500 mg",
+      packSize: null,
+      manufacturer: null,
+      controlled: false,
+      status: "active",
+      version: 1,
+      aliases: [],
+      ingredients: [],
+      registrations: [],
+      createdAt: "2026-08-17T00:00:00.000Z",
+      updatedAt: "2026-08-17T00:00:00.000Z",
+    });
+    expect(summary.brandName).toBe("Panadol");
+    expect(summary).not.toHaveProperty("ingredients");
   });
 
   it("keeps merge and alternative creation inside the repository boundary", async () => {

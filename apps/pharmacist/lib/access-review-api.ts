@@ -7,7 +7,7 @@ export async function accessReview(id: string): Promise<AccessReviewDetail> {
     ?? process.env.MEDLINK_API_URL
     ?? "http://localhost:3003";
   const forwarded = new Headers({ Accept: "application/json" });
-  const cookieHeader = cookieStore.getAll()
+  const cookieHeader = incoming.get("cookie") ?? cookieStore.getAll()
     .map(({ name, value }) => `${name}=${value}`)
     .join("; ");
   if (cookieHeader) forwarded.set("cookie", cookieHeader);

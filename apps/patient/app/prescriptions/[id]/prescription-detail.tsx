@@ -66,6 +66,7 @@ export function PrescriptionDetailView({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
   const [clarificationResponse, setClarificationResponse] = useState("");
+  const [startingAccessFor, setStartingAccessFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -209,6 +210,29 @@ export function PrescriptionDetailView({ id }: { id: string }) {
       setMessage("The clarification could not be sent. Review the response and retry.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function startMedicationAccess(item: PrescriptionItem) {
+    if (!item.medicineId) return;
+    setStartingAccessFor(item.id);
+    setMessage("");
+    try {
+      const response = await fetch("/api/v1/mar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prescriptionId: id,
+          medicineId: item.medicineId,
+          idempotencyKey: `prescription-access:${id}:${item.medicineId}`,
+        }),
+      });
+      if (!response.ok) throw new Error();
+      const body = await response.json() as { data: { id: string } };
+      window.location.assign(`/mar/${body.data.id}`);
+    } catch {
+      setMessage("Medication access could not be started. Retry from this prescription.");
+      setStartingAccessFor(null);
     }
   }
 
@@ -413,6 +437,29 @@ export function PrescriptionDetailView({ id }: { id: string }) {
               Delete draft
             </button>
           </div>
+        )}
+        {prescription.status === "validated" && prescription.reviewStatus === "approved" && (
+          <section aria-labelledby="medication-access-heading">
+            <h3 id="medication-access-heading">Medication access</h3>
+            <p className="muted">
+              Start a governed pharmacy search from the pharmacist-resolved canonical medicine.
+            </p>
+            <div className="actions">
+              {prescription.items.filter((item) => item.medicineId).map((item) => (
+                <button
+                  className="button"
+                  type="button"
+                  key={item.id}
+                  disabled={startingAccessFor !== null}
+                  onClick={() => void startMedicationAccess(item)}
+                >
+                  {startingAccessFor === item.id
+                    ? "Starting medication access…"
+                    : `Start medication access for ${item.brandName ?? item.enteredMedicineName}`}
+                </button>
+              ))}
+            </div>
+          </section>
         )}
         {message && <p role="status">{message}</p>}
       </section>

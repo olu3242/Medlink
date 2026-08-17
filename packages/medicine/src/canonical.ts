@@ -80,7 +80,7 @@ export const catalogMedicineSummarySchema = canonicalMedicineSchema.pick({
   version: true,
   createdAt: true,
   updatedAt: true,
-});
+}).strip();
 
 export const catalogIngredientInputSchema = z.object({
   ingredientId: z.string().uuid(),
