@@ -127,13 +127,17 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
     await patientPage.getByRole("button", { name: "Request reservation" }).click();
     await expect(patientPage.getByText(/Reservation requested/)).toBeVisible();
 
-    // Duplicate browser submission: the MAR is no longer 'matched' after
-    // the first reservation succeeds (reserve_inventory advances it to
-    // 'reserved'), so a genuine second click must fail cleanly rather than
-    // silently creating a second reservation -- proving the real state
-    // machine, not a client-side de-dup guard, is what makes this safe.
+    // Duplicate browser submission reuses the deterministic idempotency key.
+    // The canonical RPC returns the original success rather than exposing an
+    // error, while the persisted count checks below prove no duplicate row,
+    // lock, or lifecycle transition was created.
+    const replayResponse = patientPage.waitForResponse((response) =>
+      response.url().endsWith("/api/v1/reservations")
+      && response.request().method() === "POST",
+    );
     await patientPage.getByRole("button", { name: "Request reservation" }).click();
-    await expect(patientPage.getByText(/could not be requested/)).toBeVisible();
+    expect((await replayResponse).ok()).toBe(true);
+    await expect(patientPage.getByText(/Reservation requested/)).toBeVisible();
 
     const afterReserve = await patientPage.request.get(`${patientUrl}/api/v1/reservations`, {
       headers: { Accept: "application/json" },
