@@ -1,6 +1,12 @@
 import { getServerEnvironment } from "../../../../lib/env";
 import { createSupabaseServiceRoleClient } from "../../../../lib/supabase/service-role";
 import {
+  IndexedMedicineSearchService,
+  SupabaseMedicineSearchIndex,
+  SupabaseSearchMedicineReader,
+} from "@medlink/search";
+import { WorkflowService } from "@medlink/workflows";
+import {
   SupabaseConversationEventLog,
   SupabaseConversationRepository,
   SupabaseMessageStore,
@@ -9,8 +15,9 @@ import {
   buildWhatsAppWebhookHandlers,
   toSupabaseChannelBindingLookup,
   toSupabaseChannelIdentityLookup,
-  UnwiredWorkflowInvoker,
 } from "../../../../lib/whatsapp-webhook";
+import { WorkflowOrchestratorInvoker } from "../../../../lib/workflow-invoker";
+import { SupabaseWorkflowStore } from "../../../../lib/workflow-store";
 
 // Thin wiring only -- see apps/web/lib/whatsapp-webhook.ts for the actual
 // logic, kept independently testable with fake dependencies. This is the
@@ -31,6 +38,10 @@ function getHandlers() {
   if (!handlers) {
     const database = createSupabaseServiceRoleClient();
     const { WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN } = getServerEnvironment();
+    const search = new IndexedMedicineSearchService(
+      new SupabaseMedicineSearchIndex(database),
+      new SupabaseSearchMedicineReader(database),
+    );
     handlers = buildWhatsAppWebhookHandlers({
       appSecret: WHATSAPP_APP_SECRET,
       verifyToken: WHATSAPP_VERIFY_TOKEN,
@@ -39,7 +50,10 @@ function getHandlers() {
       conversations: new SupabaseConversationRepository(database),
       messages: new SupabaseMessageStore(database),
       events: new SupabaseConversationEventLog(database),
-      workflows: new UnwiredWorkflowInvoker(),
+      workflows: new WorkflowOrchestratorInvoker(
+        new WorkflowService(new SupabaseWorkflowStore(database)),
+        search,
+      ),
     });
   }
   return handlers;

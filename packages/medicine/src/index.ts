@@ -2,6 +2,7 @@ export * from "./equivalency";
 export * from "./catalog-service";
 export * from "./canonical";
 export * from "./supabase-catalog";
+export * from "./supabase-mappers";
 export * from "./errors";
 export * from "./models";
 export * from "./repository";
