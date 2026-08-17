@@ -52,26 +52,37 @@ interface GraphApiSendResponse {
 // callers may override it per environment without this adapter needing a
 // code change.
 const DEFAULT_GRAPH_API_VERSION = "v21.0";
+const DEFAULT_PROVIDER_TIMEOUT_MS = 10_000;
 
 export class GraphApiWhatsAppSender implements WhatsAppSender {
   constructor(
     private readonly accessToken: string,
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly graphApiVersion: string = DEFAULT_GRAPH_API_VERSION,
+    private readonly timeoutMs: number = DEFAULT_PROVIDER_TIMEOUT_MS,
   ) {}
 
   async send(phoneNumberId: string, message: WhatsAppMessageSend): Promise<WhatsAppSendResult> {
-    const response = await this.fetchImpl(
-      `https://graph.facebook.com/${this.graphApiVersion}/${phoneNumberId}/messages`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.accessToken}`,
-          "content-type": "application/json",
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `https://graph.facebook.com/${this.graphApiVersion}/${phoneNumberId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${this.accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(toGraphApiPayload(message)),
+          signal: AbortSignal.timeout(this.timeoutMs),
         },
-        body: JSON.stringify(toGraphApiPayload(message)),
-      },
-    );
+      );
+    } catch (cause) {
+      const detail = cause instanceof Error && cause.name === "TimeoutError"
+        ? "Provider request timed out"
+        : "Provider request failed";
+      throw new WhatsAppDeliveryError(0, detail);
+    }
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
       throw new WhatsAppDeliveryError(response.status, detail);
