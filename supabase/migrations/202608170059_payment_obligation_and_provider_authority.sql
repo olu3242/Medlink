@@ -308,6 +308,7 @@ revoke insert,update,delete on public.payments from authenticated;
 revoke insert,update,delete on public.payment_events from authenticated;
 revoke insert,update,delete on public.payment_attempts from authenticated;
 grant select on public.payments,public.payment_events,public.payment_attempts to authenticated;
+grant select on public.payments,public.payment_events,public.payment_attempts to service_role;
 grant all on public.payment_attempts to service_role;
 grant execute on function public.create_payment_attempt(uuid,uuid,uuid,text,text,text,text) to authenticated;
 grant execute on function public.apply_payment_provider_event(text,text,text,bigint,text) to service_role;

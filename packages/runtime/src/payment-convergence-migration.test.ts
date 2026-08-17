@@ -40,6 +40,9 @@ describe("payment convergence migration", () => {
   it("removes direct authenticated financial writes", () => {
     expect(paymentSql).toContain("revoke insert,update,delete on public.payments from authenticated");
     expect(paymentSql).toContain("grant execute on function public.create_payment_attempt");
+    expect(paymentSql).toContain(
+      "grant select on public.payments,public.payment_events,public.payment_attempts to service_role",
+    );
   });
 });
 
