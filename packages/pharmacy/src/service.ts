@@ -1,4 +1,4 @@
-import {InvalidDiscoveryRadiusError} from "./errors"; import type {Coordinates,Pharmacy,PharmacyMatch} from "./models"; import type {PharmacyReader,PharmacyStockReader} from "./ports";
+import {InvalidDiscoveryRadiusError,LocationConsentRequiredError} from "./errors"; import type {Coordinates,Pharmacy,PharmacyMatch} from "./models"; import type {PharmacyReader,PharmacyStockReader} from "./ports";
 export function distanceKm(a:Coordinates,b:Coordinates):number{const r=6371,dLat=(b.latitude-a.latitude)*Math.PI/180,dLon=(b.longitude-a.longitude)*Math.PI/180;const x=Math.sin(dLat/2)**2+Math.cos(a.latitude*Math.PI/180)*Math.cos(b.latitude*Math.PI/180)*Math.sin(dLon/2)**2;return 2*r*Math.asin(Math.sqrt(x));}
 export class PharmacyDiscoveryService {
  constructor(private readonly pharmacies:PharmacyReader,private readonly stock:PharmacyStockReader){}
@@ -28,7 +28,7 @@ export function findEligiblePharmacies(input:{
  readonly locations:readonly EligiblePharmacyLocation[];
  readonly inventory:readonly EligibleInventory[];
 }):readonly EligiblePharmacyResult[]{
- if(!input.locationConsent)throw new Error("Location consent is required");
+ if(!input.locationConsent)throw new LocationConsentRequiredError();
  if(input.radiusKm<1||input.radiusKm>200)throw new InvalidDiscoveryRadiusError();
  const today=new Date().toISOString().slice(0,10);
  return input.locations
