@@ -4,10 +4,13 @@ import { useEffect, useState } from "react";
 import type { Match } from "../lib/api";
 import { MatchInventoryButton } from "./match-inventory-button";
 
-export function InventorySearch({ query, marId }: { query: string; marId: string | undefined }) {
+export function InventorySearch({ query, marId, medicineId }: {
+  query: string; marId: string | undefined; medicineId: string | undefined;
+}) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(Boolean(query));
+  const [locationMessage, setLocationMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -27,6 +30,42 @@ export function InventorySearch({ query, marId }: { query: string; marId: string
     return () => { active = false; };
   }, [query]);
 
+  function searchNearby() {
+    if (!medicineId || !navigator.geolocation) {
+      setLocationMessage("Location search is unavailable for this request.");
+      return;
+    }
+    setLoading(true);
+    setFailed(false);
+    setLocationMessage("Requesting location consent…");
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      try {
+        const params = new URLSearchParams({
+          medicineId,
+          latitude: String(position.coords.latitude),
+          longitude: String(position.coords.longitude),
+          radiusKm: "25",
+          locationConsent: "true",
+        });
+        const response = await fetch(`/api/v1/inventory?${params}`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error("Nearby search unavailable");
+        const body = await response.json() as { data: Match[] };
+        setMatches(body.data);
+        setLocationMessage("Showing participating pharmacies within 25 km.");
+      } catch {
+        setFailed(true);
+        setLocationMessage("Nearby inventory could not be loaded.");
+      } finally {
+        setLoading(false);
+      }
+    }, () => {
+      setLoading(false);
+      setLocationMessage("Location was not shared. General tenant availability remains visible.");
+    }, { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 });
+  }
+
   return <>
     <header className="head">
       <div>
@@ -42,6 +81,12 @@ export function InventorySearch({ query, marId }: { query: string; marId: string
         <input id="q" name="q" defaultValue={query} required placeholder="e.g. metformin 500 mg" />
       </div>
       <button className="button" type="submit">Search availability</button>
+      {medicineId ? (
+        <button className="button secondary" type="button" onClick={searchNearby}>
+          Use my location
+        </button>
+      ) : null}
+      <p aria-live="polite" className="muted">{locationMessage}</p>
     </form>
     {failed ? <p className="error" role="alert">Search is temporarily unavailable.</p> : null}
     {loading ? <p className="muted" role="status">Searching available inventory…</p> : null}

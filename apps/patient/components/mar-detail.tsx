@@ -39,7 +39,7 @@ export function MarDetail({ id }: { id: string }) {
     <section className="card">
       <h2>Current status: {mar.status}</h2>
       <p className="muted">A pharmacist makes all clinical review and substitution decisions. MedLink will notify you when action is needed.</p>
-      {SEARCHABLE_STATES.has(mar.status) && <Link className="button" href={`/search?marId=${mar.id}&q=${encodeURIComponent(mar.medicineName)}`}>Find pharmacy stock</Link>}
+      {SEARCHABLE_STATES.has(mar.status) && <Link className="button" href={`/search?marId=${mar.id}${mar.medicineId ? `&medicineId=${mar.medicineId}` : ""}&q=${encodeURIComponent(mar.medicineName)}`}>Find pharmacy stock</Link>}
     </section>
     <section className="card" aria-labelledby="timeline-title" style={{ marginTop: "1rem" }}>
       <h2 id="timeline-title">Workflow timeline</h2>

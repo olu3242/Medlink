@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RuntimeError, type RuntimeContext } from "@medlink/runtime";
+import { findEligiblePharmacies } from "@medlink/pharmacy";
 
 async function result<T>(
   query: PromiseLike<{ data: T; error: { message: string } | null }>,
@@ -23,6 +24,7 @@ export interface MarRow {
   id: string;
   state: string;
   created_at: string;
+  requested_medicine_id?: string;
   medicine?: { brand_name: string; generic_name: string } | null;
 }
 
@@ -37,6 +39,7 @@ export interface MarRow {
 export function toMar(row: MarRow) {
   return {
     id: row.id,
+    medicineId: row.requested_medicine_id,
     status: row.state,
     createdAt: row.created_at,
     medicineName: row.medicine?.brand_name || row.medicine?.generic_name || "Requested medicine",
@@ -98,6 +101,57 @@ export class AccessApplication {
     if (medicineIds) statement = statement.in("medicine_id", medicineIds);
     const rows = (await result(statement)) ?? [];
     return (rows as InventoryRow[]).map(toMatch);
+  }
+
+  async eligiblePharmacies(input: {
+    organizationId: string; medicineId: string; latitude: number;
+    longitude: number; radiusKm: number; locationConsent: boolean;
+  }) {
+    const [{ data: locations, error: locationError }, { data: inventory, error: inventoryError }] =
+      await Promise.all([
+        this.database.from("pharmacy_locations")
+          .select("id,name,latitude,longitude,is_active,is_24_hours,updated_at")
+          .eq("organization_id", input.organizationId).is("deleted_at", null),
+        this.database.rpc("search_inventory_availability", {
+          target_organization_id: input.organizationId,
+          target_medicine_id: input.medicineId,
+          target_pharmacy_location_id: null,
+          target_quantity: 1,
+        }),
+      ]);
+    if (locationError || inventoryError) throw new RuntimeError(
+      "infrastructure", "inventory_discovery_failed",
+      "Nearby inventory could not be loaded", 503, true, "Retry later.",
+      { cause: locationError ?? inventoryError },
+    );
+    return findEligiblePharmacies({
+      tenantId: input.organizationId,
+      medicineId: input.medicineId,
+      origin: { latitude: input.latitude, longitude: input.longitude },
+      radiusKm: input.radiusKm,
+      locationConsent: input.locationConsent,
+      locations: (locations ?? []).map((row) => ({
+        id: row.id, tenantId: input.organizationId, name: row.name,
+        location: { latitude: Number(row.latitude), longitude: Number(row.longitude) },
+        active: row.is_active, open24Hours: row.is_24_hours, updatedAt: row.updated_at,
+      })),
+      inventory: (inventory ?? []).map((row: Record<string, unknown>) => ({
+        inventoryId: String(row.inventory_id),
+        pharmacyLocationId: String(row.pharmacy_location_id),
+        medicineId: String(row.medicine_id), expiresOn: String(row.expires_on),
+        availableQuantity: Number(row.available_quantity), state: String(row.availability_state),
+        observedAt: new Date().toISOString(),
+      })),
+    }).map((result) => ({
+      inventoryId: result.inventory.inventoryId,
+      pharmacyLocationId: result.pharmacy.id,
+      pharmacyName: result.pharmacy.name,
+      medicineName: input.medicineId,
+      distanceKm: result.distanceKm,
+      stockStatus: result.inventory.state,
+      expiresOn: result.inventory.expiresOn,
+      inventoryTimestamp: result.inventory.observedAt,
+    }));
   }
 
   async pharmacies(organizationId: string) {
