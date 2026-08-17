@@ -27,6 +27,39 @@ describe("HostedPaymentProvider", () => {
     expect(() => new HostedPaymentProvider("real-key", "http://127.0.0.1:4010"))
       .toThrow(/E2E-only key/);
   });
+
+  it("creates a refund intent against the provider's dedicated refunds endpoint", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      providerRefundReference: "medlink-refund-attempt",
+    }), { status: 200 }));
+    const provider = new HostedPaymentProvider(
+      "medlink-e2e-key",
+      "http://127.0.0.1:4010",
+      fetchImpl,
+    );
+    const result = await provider.createRefundIntent({
+      providerRefundReference: "medlink-refund-attempt",
+      amount: { amountMinor: 250000, currency: "NGN" },
+      idempotencyKey: "refund-key",
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:4010/payments/refunds",
+      expect.objectContaining({ body: expect.stringContaining('"amountMinor":250000') }),
+    );
+    expect(result.providerRefundReference).toBe("medlink-refund-attempt");
+  });
+
+  it("rejects a refund provider reference mismatch", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      providerRefundReference: "wrong-reference",
+    }), { status: 200 }));
+    const provider = new HostedPaymentProvider("medlink-e2e-key", "http://127.0.0.1:4010", fetchImpl);
+    await expect(provider.createRefundIntent({
+      providerRefundReference: "medlink-refund-attempt",
+      amount: { amountMinor: 100, currency: "NGN" },
+      idempotencyKey: "refund-key",
+    })).rejects.toMatchObject({ code: "provider_reference_mismatch" });
+  });
 });
 
 describe("payment webhook signatures", () => {

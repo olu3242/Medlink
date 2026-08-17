@@ -268,6 +268,7 @@ jobs:
           export MEDLINK_PAYMENT_PROVIDER_URL="http://127.0.0.1:4010"
           export MEDLINK_PAYMENT_PROVIDER_KEY="medlink-e2e-payment-provider-key-0001"
           export PAYMENT_WEBHOOK_SECRET="medlink-e2e-payment-webhook-secret-0001"
+          export MEDLINK_PAYMENT_REFUND_WORKER_TOKEN="medlink-e2e-payment-refund-worker-token-0001"
 
           node packages/e2e/provider-simulator.mjs &
           WHATSAPP_ACCESS_TOKEN= PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
@@ -296,6 +297,16 @@ jobs:
           MEDLINK_E2E_PAYMENT_WEBHOOK_SECRET="$PAYMENT_WEBHOOK_SECRET" \
           MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
           npm run test:whatsapp-golden-loop --workspace=packages/e2e
+
+          MEDLINK_E2E_SUPABASE_URL="$API_URL" \
+          MEDLINK_E2E_SUPABASE_SERVICE_KEY="$SECRET_KEY" \
+          MEDLINK_E2E_PATIENT_URL=http://localhost:3000 \
+          MEDLINK_E2E_WEB_URL=http://localhost:3004 \
+          MEDLINK_E2E_PROVIDER_URL=http://127.0.0.1:4010 \
+          MEDLINK_E2E_PAYMENT_WEBHOOK_SECRET="$PAYMENT_WEBHOOK_SECRET" \
+          MEDLINK_E2E_PAYMENT_REFUND_WORKER_TOKEN="$MEDLINK_PAYMENT_REFUND_WORKER_TOKEN" \
+          MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
+          npm run test:payment-refund --workspace=packages/e2e
       - if: always()
         run: npx supabase stop
       - if: always()

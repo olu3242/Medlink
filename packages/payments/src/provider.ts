@@ -55,6 +55,32 @@ export class HostedPaymentProvider {
     }
     return data;
   }
+
+  async createRefundIntent(input: {
+    readonly providerRefundReference: string;
+    readonly amount: Money;
+    readonly idempotencyKey: string;
+  }): Promise<{ readonly providerRefundReference: string }> {
+    const response = await this.fetchImpl(`${this.baseUrl}/payments/refunds`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.apiKey}`,
+        "content-type": "application/json",
+        "idempotency-key": input.idempotencyKey,
+      },
+      body: JSON.stringify({
+        reference: input.providerRefundReference,
+        amountMinor: input.amount.amountMinor,
+        currency: input.amount.currency,
+      }),
+    });
+    if (!response.ok) throw new PaymentError("Payment provider unavailable", "provider_unavailable");
+    const data = await response.json() as { providerRefundReference: string };
+    if (data.providerRefundReference !== input.providerRefundReference) {
+      throw new PaymentError("Payment provider reference mismatch", "provider_reference_mismatch");
+    }
+    return data;
+  }
 }
 
 export function signPaymentWebhook(rawBody: string, secret: string): string {
