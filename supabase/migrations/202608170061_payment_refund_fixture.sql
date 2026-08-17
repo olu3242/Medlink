@@ -69,11 +69,17 @@ begin
     50, 1, 'tablet', 250000, 'NGN', 'available', patient_id
   );
 
+  -- Left at its required 'created' start state (enforce_and_audit_mar_state
+  -- rejects any other state on insert) -- the reservation's FK only needs a
+  -- matching MAR row to exist, and neither create_payment_attempt nor the
+  -- refund-on-exit trigger this fixture exists to certify ever inspect MAR
+  -- state, so walking the full created->validated->...->reserved state
+  -- machine here would only test machinery this suite isn't about.
   insert into public.medication_access_requests(
     id, organization_id, patient_id, requested_medicine_id, state,
     transition_idempotency_key, created_by
   ) values (
-    mar_id, organization_id, patient_id, medicine_id, 'reserved',
+    mar_id, organization_id, patient_id, medicine_id, 'created',
     'refund-fixture-mar-' || fixture_key, patient_id
   );
 
