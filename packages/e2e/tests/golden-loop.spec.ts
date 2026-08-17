@@ -46,6 +46,16 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
 
   await test.step("patient accesses the medication-access request", async () => {
     await signInWithMagicLink(patientPage, patientUrl, mailpitUrl, fixture.patient.email);
+    for (const path of [
+      `/api/v1/mar/${fixture.marId}`,
+      `/api/v1/mar/${fixture.marId}/timeline`,
+    ]) {
+      const response = await patientPage.request.get(`${patientUrl}${path}`, {
+        headers: { Accept: "application/json" },
+      });
+      const body = await response.text();
+      expect(response.status(), `${path}: ${body}`).toBe(200);
+    }
     await patientPage.goto(`${patientUrl}/mar/${fixture.marId}`);
     // Canonical identity continuity, step 1: the MAR the patient sees is
     // the exact fixture medicine, not a substituted brand string or a
