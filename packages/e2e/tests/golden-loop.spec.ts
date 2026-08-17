@@ -430,6 +430,17 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       .single();
     expect(collectedError, JSON.stringify(collectedError)).toBeNull();
     expect(collected).toEqual({ status: "collected", pickup_code_hash: null });
+
+    const { data: completedMar, error: completedMarError } = await service
+      .from("medication_access_requests")
+      .select("state,completed_at")
+      .eq("id", marId)
+      .single();
+    expect(completedMarError, JSON.stringify(completedMarError)).toBeNull();
+    expect(completedMar).toMatchObject({
+      state: "completed",
+      completed_at: expect.any(String),
+    });
     const { data: consumedLock, error: consumedLockError } = await service
       .from("inventory_locks")
       .select("status")
@@ -538,7 +549,24 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
     expect(marAuditError, JSON.stringify(marAuditError)).toBeNull();
     expect((marAudit ?? []).map(({ to_state }) => to_state)).toEqual([
       "created", "validated", "reviewed", "searching", "matched", "reserved",
+      "dispensed", "completed",
     ]);
+
+    const { data: accessWorkflow, error: accessWorkflowError } = await service
+      .from("workflow_instances")
+      .select("id,status,completed_steps,context")
+      .eq("id", marId)
+      .single();
+    expect(accessWorkflowError, JSON.stringify(accessWorkflowError)).toBeNull();
+    expect(accessWorkflow).toMatchObject({
+      id: marId,
+      status: "completed",
+      context: { marId, prescriptionId, medicineId: fixture.medicineId, state: "completed" },
+    });
+    expect(accessWorkflow?.completed_steps).toEqual(expect.arrayContaining([
+      "created", "validated", "reviewed", "searching", "matched", "reserved",
+      "dispensed", "completed",
+    ]));
 
     const { data: agentRuns, error: agentRunsError } = await service.from("ai_runs")
       .select("id,agent_name,status,prescription_id,mar_id,input_reference,idempotency_key")
@@ -561,6 +589,7 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       expect(run.prescription_id).toBe(prescriptionId);
       if (["inventory_agent", "reservation_coordinator"].includes(run.agent_name)) {
         expect(run.mar_id).toBe(marId);
+        expect(run.input_reference).toMatchObject({ workflowId: marId });
       }
       expect(run.input_reference).toMatchObject({
         agentId: expect.any(String),

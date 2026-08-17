@@ -58,7 +58,11 @@ export const GET = (request: Request) => runExperienceApi(request, "patient.inve
       agentVersion: route.agentVersion,
       persona: context.role,
       requiresHumanApproval: route.requiresHumanApproval,
-      context: { tenantId: context.organizationId, marId: input.marId },
+      context: {
+        tenantId: context.organizationId,
+        marId: input.marId,
+        workflowId: input.marId,
+      },
       input: {
         queryLength: input.q?.length ?? 0,
         locationConsent: input.locationConsent === "true",

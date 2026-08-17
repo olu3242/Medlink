@@ -52,6 +52,11 @@ const goldenLoopSearchFixtureSql = readFileSync(join(
   "supabase/migrations/202608170054_golden_loop_search_projection_fixture.sql",
 ), "utf8").toLowerCase();
 
+const medicationAccessContinuationSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170055_medication_access_workflow_continuation.sql",
+), "utf8").toLowerCase();
+
 describe("RC2 MAR validation to clinical review handoff", () => {
   it("creates the pending review and evidence in the validating transaction", () => {
     expect(sql).toContain("function public.validate_mar");
@@ -246,5 +251,19 @@ describe("golden-loop canonical search projection fixture", () => {
     expect(goldenLoopSearchFixtureSql).toContain("insert into public.medicine_ingredients");
     expect(goldenLoopSearchFixtureSql).toContain("auth.role() <> 'service_role'");
     expect(goldenLoopSearchFixtureSql).not.toMatch(/to (anon|authenticated)/);
+  });
+});
+
+describe("medication-access workflow continuation", () => {
+  it("uses the existing workflow store and completes from the collected event", () => {
+    expect(medicationAccessContinuationSql).toContain("insert into public.workflow_instances");
+    expect(medicationAccessContinuationSql).toContain("'medication_access'");
+    expect(medicationAccessContinuationSql).toContain(
+      "after insert on public.fulfillment_transitions",
+    );
+    expect(medicationAccessContinuationSql).toContain("set state = 'dispensed'");
+    expect(medicationAccessContinuationSql).toContain("set state = 'completed'");
+    expect(medicationAccessContinuationSql).toContain("medication_access.completed.v1");
+    expect(medicationAccessContinuationSql).toContain("public.record_runtime_evidence(");
   });
 });

@@ -56,7 +56,11 @@ export const POST = async (request: Request) => {
         agentVersion: route.agentVersion,
         persona: context.role,
         requiresHumanApproval: route.requiresHumanApproval,
-        context: { tenantId: context.organizationId, marId: input.marId },
+        context: {
+          tenantId: context.organizationId,
+          marId: input.marId,
+          workflowId: input.marId,
+        },
         input: {
           pharmacyLocationId: input.pharmacyLocationId,
           inventoryBatchId: input.inventoryBatchId,
