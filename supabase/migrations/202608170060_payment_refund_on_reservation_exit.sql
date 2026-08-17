@@ -14,8 +14,8 @@
 -- confirms completion. No new reservation/cancellation model -- the
 -- existing status transition is the only trigger condition.
 
-alter table public.refunds
-  add column completed_at timestamptz;
+-- refunds.completed_at already exists (migration 202607270004); no schema
+-- change needed here, only the writer that table has lacked since Wave 1.
 
 -- Deterministic, non-authenticated actor: the only caller of this trigger
 -- is an internal status UPDATE (the system expiry worker, or in principle
