@@ -860,6 +860,18 @@ live("live reservation fulfillment lifecycle", () => {
   });
 
   it("outbox claim race: two workers racing for the same eligible event -- exactly one owns it", async () => {
+    // Other live suites can legitimately leave eligible events behind. Drain
+    // that pre-existing backlog before creating this fixture event so the two
+    // workers below contend for the intended row, independent of suite order.
+    for (;;) {
+      const drained = await service.rpc("claim_runtime_outbox_events", {
+        target_worker: "outbox-race-prerequisite",
+        target_limit: 200,
+      });
+      expect(drained.error, JSON.stringify(drained.error)).toBeNull();
+      if (((drained.data ?? []) as Array<{ id: string }>).length < 200) break;
+    }
+
     const reservationId = fixture.reservations["outbox-race"];
     const confirmed = await pharmacist.client.rpc("decide_reservation", {
       ...baseArgs(pharmacist.id),

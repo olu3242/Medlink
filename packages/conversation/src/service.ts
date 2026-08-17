@@ -21,6 +21,8 @@ export interface InboundMessageInput {
   readonly contentType: MessageContentType;
   readonly body: string | null;
   readonly mediaUrl: string | null;
+  readonly patientId?: string | null;
+  readonly requireIdentity?: boolean;
 }
 
 export type ConversationTurnAction =
@@ -87,6 +89,16 @@ export class ConversationEngine {
     const message = await this.messages.recordInbound(conversation.id, recordedMessage);
     await this.events.append(conversation.id, "message_received", { messageId: message.id });
 
+    if (input.requireIdentity) {
+      if (!input.patientId || (conversation.patientId && conversation.patientId !== input.patientId)) {
+        const handedOff = await this.requestHandoff(conversation.id, "identity_link_required");
+        return { conversation: handedOff, message, action: "handoff_requested" };
+      }
+      if (!conversation.patientId) {
+        conversation = await this.linkPatientIdentity(conversation.id, input.patientId);
+      }
+    }
+
     if (conversation.status === "handed_off") {
       return { conversation, message, action: "await_human" };
     }
@@ -122,7 +134,13 @@ export class ConversationEngine {
         conversationId: conversation.id,
         workflowType: detected.intent,
         idempotencyKey: message.externalMessageId ?? message.id,
-        context: conversation.context,
+        context: {
+          ...conversation.context,
+          patientId: conversation.patientId,
+          channelIdentity: input.channelIdentity,
+          messageBody: input.body,
+          mediaId: input.mediaUrl,
+        },
       });
     } catch {
       const handedOff = await this.requestHandoff(conversation.id, "workflow_invocation_failed");

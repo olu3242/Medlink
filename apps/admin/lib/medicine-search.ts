@@ -1,12 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { BrandMedicine, GenericMedicine } from "@medlink/medicine";
 import {
   SearchUnavailableError,
   type MedicineSearchIndex,
   type SearchIndexHit,
-  type SearchMedicineReader,
+  SupabaseSearchMedicineReader,
 } from "@medlink/search";
-import { toBrandMedicine, toGenericMedicine } from "./medicine-repository";
 
 // The medicines and generics tables have no dedicated search index yet (P1
 // item 10 in docs/audit/RC1_BACKLOG.md calls out "select/configure ...
@@ -65,34 +63,4 @@ export class TrigramMedicineSearchIndex implements MedicineSearchIndex {
   }
 }
 
-export class SupabaseSearchMedicineReader implements SearchMedicineReader {
-  constructor(private readonly database: SupabaseClient) {}
-
-  async findBrandsByIds(ids: readonly string[]): Promise<readonly BrandMedicine[]> {
-    if (ids.length === 0) return [];
-    const { data, error } = await this.database.from("medicines")
-      .select("*, medicine_ingredients(active_ingredient_id, amount, unit)")
-      .in("id", ids).is("deleted_at", null);
-    if (error) throw new SearchUnavailableError(error);
-    const results: BrandMedicine[] = [];
-    for (const row of data ?? []) {
-      const medicine = toBrandMedicine(row);
-      if (medicine) results.push(medicine);
-    }
-    return results;
-  }
-
-  async findGenericsByIds(ids: readonly string[]): Promise<readonly GenericMedicine[]> {
-    if (ids.length === 0) return [];
-    const { data, error } = await this.database.from("generics")
-      .select("*, therapeutic_classes(name)")
-      .in("id", ids).is("deleted_at", null);
-    if (error) throw new SearchUnavailableError(error);
-    const results: GenericMedicine[] = [];
-    for (const row of data ?? []) {
-      const generic = toGenericMedicine(row);
-      if (generic) results.push(generic);
-    }
-    return results;
-  }
-}
+export { SupabaseSearchMedicineReader };

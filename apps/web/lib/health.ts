@@ -5,6 +5,7 @@ import {
 } from "@medlink/runtime";
 import { runtimeDiagnostics } from "@medlink/observability";
 import { createSupabaseServerClient } from "./supabase/server";
+import { createSupabaseServiceRoleClient } from "./supabase/service-role";
 
 const startedAt = new Date();
 
@@ -27,6 +28,7 @@ function createPlatformHealth(): HealthService {
     check: async () => configured(
       "NEXT_PUBLIC_SUPABASE_URL",
       "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
     ),
     recoveryHint: "Provide the required runtime configuration.",
   }));
@@ -41,8 +43,8 @@ function createPlatformHealth(): HealthService {
     category: "database",
     critical: true,
     check: async () => {
-      const database = await createSupabaseServerClient();
-      const { error } = await database.from("organizations").select("id").limit(1);
+      const database = createSupabaseServiceRoleClient();
+      const { error } = await database.from("medicines").select("id").limit(1);
       return !error;
     },
     recoveryHint: "Verify database connectivity and migration compatibility.",
@@ -52,7 +54,7 @@ function createPlatformHealth(): HealthService {
     category: "audit",
     critical: true,
     check: async () => {
-      const database = await createSupabaseServerClient();
+      const database = createSupabaseServiceRoleClient();
       const { error } = await database.from("governance_audit_events")
         .select("id").limit(1);
       return !error;
@@ -64,7 +66,7 @@ function createPlatformHealth(): HealthService {
     category: "outbox",
     critical: true,
     check: async () => {
-      const database = await createSupabaseServerClient();
+      const database = createSupabaseServiceRoleClient();
       const { error } = await database.from("runtime_outbox_events")
         .select("id").limit(1);
       return !error;

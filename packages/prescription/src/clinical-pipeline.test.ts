@@ -271,7 +271,14 @@ describe("clinical prescription pipeline", () => {
     });
     expect(value.ocr.extract).not.toHaveBeenCalled();
     expect(value.parser.parse).not.toHaveBeenCalled();
-    expect(value.observer.record).not.toHaveBeenCalled();
+    expect(value.observer.record).toHaveBeenCalledTimes(2);
+    expect(value.observer.record).toHaveBeenLastCalledWith(expect.objectContaining({
+      agentId: "clinical-review-assistant",
+      capability: "flag_validation_findings",
+      persona: "service_account",
+      requiresHumanApproval: true,
+      status: "completed",
+    }));
     expect(value.database.completeValidation).toHaveBeenCalledOnce();
     const completion = value.database.completeValidation.mock.calls[0]?.[0];
     expect(completion).toBeDefined();

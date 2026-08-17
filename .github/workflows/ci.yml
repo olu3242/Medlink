@@ -40,6 +40,62 @@ jobs:
           path: coverage/
           retention-days: 14
 
+  agent-governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:agent-governance
+
+  whatsapp-provider:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:whatsapp-provider
+
+  provider-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:provider-conformance
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:security
+      - run: npm audit --omit=dev --audit-level=high
+
+  recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:recovery
+
   migration-apply:
     runs-on: ubuntu-latest
     steps:
@@ -156,4 +212,84 @@ jobs:
         with:
           name: browser-auth-e2e-report
           path: packages/e2e/playwright-report/
+          retention-days: 14
+
+  medication-golden-loop-e2e:
+    # Gate 2 of the two-gate framing (browser-auth-e2e above is Gate 1,
+    # "who is acting"): one real authenticated transaction across three
+    # personas -- patient request, pharmacist review, patient match/reserve,
+    # pharmacy confirm/ready, patient pickup credential, pharmacy collect --
+    # through real browser sessions, real Postgres, real RLS, real RPCs.
+    # Deliberately its own
+    # job, not folded into browser-auth-e2e, matching the "keep full
+    # medication golden-loop E2E separate" plan from PR #29.
+    if: github.event_name == 'pull_request' && vars.RUN_LIVE_DATABASE_TESTS == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        working-directory: packages/e2e
+      - run: npx supabase start
+      - run: npx supabase db reset
+      - name: Build patient, pharmacist, pharmacy, and worker host against local Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "$(npx supabase status -o env)"
+          NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
+          NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
+          npm run build --workspace=apps/patient --workspace=apps/pharmacist --workspace=apps/pharmacy --workspace=apps/web
+      - name: Start persona apps and worker host, then run the medication golden-loop E2E suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "$(npx supabase status -o env)"
+          export NEXT_PUBLIC_SUPABASE_URL="$API_URL"
+          export NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY"
+          export SUPABASE_SERVICE_ROLE_KEY="$SECRET_KEY"
+          export MEDLINK_CLINICAL_WORKER_TOKEN="medlink-e2e-clinical-worker-token-0001"
+          export MEDLINK_OCR_PROVIDER_URL="http://127.0.0.1:4010/ocr"
+          export MEDLINK_PARSER_PROVIDER_URL="http://127.0.0.1:4010/parse"
+          export MEDLINK_FILE_SCANNER_URL="http://127.0.0.1:4010/scan"
+          export WHATSAPP_APP_SECRET="medlink-e2e-whatsapp-secret-0001"
+          export WHATSAPP_VERIFY_TOKEN="medlink-e2e-whatsapp-verify-0001"
+
+          node packages/e2e/provider-simulator.mjs &
+          PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
+          PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
+          PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
+          PORT=3004 MEDLINK_API_URL=http://localhost:3004 npm run start --workspace=apps/web &
+
+          for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in http://localhost:3004/health/live; do
+            for _ in $(seq 1 30); do
+              if curl -sf "$url" > /dev/null; then break; fi
+              sleep 1
+            done
+            curl -sf "$url" > /dev/null
+          done
+
+          MEDLINK_E2E_SUPABASE_URL="$API_URL" \
+          MEDLINK_E2E_SUPABASE_SERVICE_KEY="$SECRET_KEY" \
+          MEDLINK_E2E_PATIENT_URL=http://localhost:3000 \
+          MEDLINK_E2E_PHARMACIST_URL=http://localhost:3003 \
+          MEDLINK_E2E_PHARMACY_URL=http://localhost:3002 \
+          MEDLINK_E2E_WEB_URL=http://localhost:3004 \
+          MEDLINK_E2E_CLINICAL_WORKER_TOKEN="$MEDLINK_CLINICAL_WORKER_TOKEN" \
+          MEDLINK_E2E_WHATSAPP_APP_SECRET="$WHATSAPP_APP_SECRET" \
+          MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
+          npm run test:golden-loop --workspace=packages/e2e
+      - if: always()
+        run: npx supabase stop
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: medication-golden-loop-e2e-report
+          path: |
+            packages/e2e/playwright-report/
+            packages/e2e/test-results/
           retention-days: 14

@@ -1,0 +1,313 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const sql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170045_mar_validation_review_handoff.sql",
+), "utf8").toLowerCase();
+
+const channelIdentitySql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170046_channel_identity_links.sql",
+), "utf8").toLowerCase();
+
+const clinicalWorkerRepairSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170047_clinical_worker_parameter_resolution.sql",
+), "utf8").toLowerCase();
+
+const goldenLoopPharmacistFixtureSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170048_golden_loop_pharmacist_fixture.sql",
+), "utf8").toLowerCase();
+
+const pharmacistReviewReadGrantsSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170049_pharmacist_review_read_grants.sql",
+), "utf8").toLowerCase();
+
+const canonicalSearchAuthoritySql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170050_canonical_search_execution_authority.sql",
+), "utf8").toLowerCase();
+
+const canonicalProjectionReadGrantsSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170051_canonical_projection_read_grants.sql",
+), "utf8").toLowerCase();
+
+const governedAgentEvidenceSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170052_governed_agent_execution_evidence.sql",
+), "utf8").toLowerCase();
+
+const whatsappRuntimeAuthoritySql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170053_whatsapp_conversation_runtime_authority.sql",
+), "utf8").toLowerCase();
+
+const goldenLoopSearchFixtureSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170054_golden_loop_search_projection_fixture.sql",
+), "utf8").toLowerCase();
+
+const medicationAccessContinuationSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170055_medication_access_workflow_continuation.sql",
+), "utf8").toLowerCase();
+
+const outboxOperationalVisibilitySql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170056_outbox_operational_visibility.sql",
+), "utf8").toLowerCase();
+
+const reservationFixtureWorkflowStateSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170057_reservation_live_fixture_workflow_state.sql",
+), "utf8").toLowerCase();
+
+describe("RC2 MAR validation to clinical review handoff", () => {
+  it("creates the pending review and evidence in the validating transaction", () => {
+    expect(sql).toContain("function public.validate_mar");
+    expect(sql).toContain("insert into public.clinical_reviews");
+    expect(sql).toContain("updated.prescription_id");
+    expect(sql).toContain("public.record_runtime_evidence(");
+    expect(sql).not.toContain("commit;");
+  });
+
+  it("retains actor, role, tenant, state, and concurrency guards", () => {
+    expect(sql).toContain("target_actor_id is distinct from auth.uid()");
+    expect(sql).toContain("array['pharmacist', 'pharmacy_staff']::public.member_role[]");
+    expect(sql).toContain("organization_id = target_organization_id");
+    expect(sql).toContain("and state = 'created'");
+    expect(sql).toContain("on conflict (organization_id, idempotency_key)");
+  });
+});
+
+describe("RC2 verified channel identity authority", () => {
+  it("makes channel identity tenant-scoped and uniquely governed", () => {
+    expect(channelIdentitySql).toContain("create table public.channel_identity_links");
+    expect(channelIdentitySql).toContain("unique (organization_id, channel, channel_identity)");
+    expect(channelIdentitySql).toContain("status public.channel_identity_link_status");
+    expect(channelIdentitySql).toContain("status = 'verified'");
+  });
+
+  it("enables RLS and denies authenticated channel-link mutations", () => {
+    expect(channelIdentitySql).toContain("enable row level security");
+    expect(channelIdentitySql).toContain("channel_identity_links_admin_read");
+    expect(channelIdentitySql).toContain("revoke insert, update, delete");
+    expect(channelIdentitySql).toContain("grant select on public.channel_identity_links to authenticated, service_role");
+  });
+});
+
+describe("RC2 clinical worker parameter resolution", () => {
+  it("repairs every provider-pipeline worker command without replacing its authority", () => {
+    for (const name of [
+      "claim_clinical_pipeline_stage",
+      "complete_clinical_ocr",
+      "complete_clinical_parsing",
+      "complete_clinical_validation",
+      "fail_clinical_pipeline_stage",
+    ]) expect(clinicalWorkerRepairSql).toContain(name);
+    expect(clinicalWorkerRepairSql).toContain("pg_get_functiondef");
+    expect(clinicalWorkerRepairSql).toContain("insert into public.ai_audit_events");
+    expect(clinicalWorkerRepairSql).toContain("on conflict (organization_id, idempotency_key)");
+    expect(clinicalWorkerRepairSql).toContain("claimed_stage <> ''clinical_validation''");
+    expect(clinicalWorkerRepairSql).toContain("execute definition");
+  });
+});
+
+describe("golden-loop clinical persona fixture", () => {
+  it("keeps verified-pharmacist provisioning behind service-role-only authority", () => {
+    expect(goldenLoopPharmacistFixtureSql).toContain("auth.role() <> 'service_role'");
+    expect(goldenLoopPharmacistFixtureSql).toContain(
+      "membership.role = 'pharmacist'::public.member_role",
+    );
+    expect(goldenLoopPharmacistFixtureSql).toContain("'verified', true, '2099-12-31'");
+    expect(goldenLoopPharmacistFixtureSql).toContain("to service_role");
+  });
+});
+
+describe("pharmacist review relation grants", () => {
+  it("grants only reads for every RLS-protected review relation", () => {
+    for (const relation of [
+      "prescriptions",
+      "prescription_items",
+      "clinical_findings",
+      "prescription_ocr_results",
+      "clinical_evidence_packages",
+      "prescription_files",
+    ]) expect(pharmacistReviewReadGrantsSql).toContain(
+      `grant select on public.${relation} to authenticated, service_role`,
+    );
+    expect(pharmacistReviewReadGrantsSql).not.toMatch(/grant (insert|update|delete|all)/);
+  });
+});
+
+describe("canonical medicine search authority", () => {
+  it("elevates only the bounded search function instead of catalog tables", () => {
+    expect(canonicalSearchAuthoritySql).toContain(
+      "alter function public.search_medicines(text, text[], integer, integer)",
+    );
+    expect(canonicalSearchAuthoritySql).toContain("security definer");
+    expect(canonicalSearchAuthoritySql).not.toMatch(/grant .* on (table )?public\./);
+  });
+});
+
+describe("canonical medicine projection grants", () => {
+  it("adds read-only access for every RLS-protected embedded relation", () => {
+    for (const relation of [
+      "therapeutic_classes",
+      "active_ingredients",
+      "medicine_ingredients",
+      "medicine_aliases",
+      "medicine_registrations",
+    ]) expect(canonicalProjectionReadGrantsSql).toContain(
+      `grant select on public.${relation} to authenticated, service_role`,
+    );
+    expect(canonicalProjectionReadGrantsSql).not.toMatch(/grant (insert|update|delete|all)/);
+  });
+});
+
+describe("governed agent execution evidence", () => {
+  it("persists router identity, policy, correlation, and lifecycle evidence", () => {
+    expect(governedAgentEvidenceSql).toContain(
+      "function public.record_governed_agent_task_event",
+    );
+    for (const field of [
+      "agentid",
+      "agentversion",
+      "capability",
+      "persona",
+      "workflowid",
+      "conversationid",
+      "correlationid",
+      "policyresult",
+      "requireshumanapproval",
+      "durationms",
+      "errorcode",
+    ]) expect(governedAgentEvidenceSql).toContain(`'${field}'`);
+    expect(governedAgentEvidenceSql).toContain("insert into public.ai_audit_events");
+    expect(governedAgentEvidenceSql).toContain("on conflict (organization_id, idempotency_key) do nothing");
+  });
+
+  it("derives canonical prescription/workflow context and enforces tenant authority", () => {
+    expect(governedAgentEvidenceSql).toContain("from public.medication_access_requests mar");
+    expect(governedAgentEvidenceSql).toContain("from public.clinical_validations validation");
+    expect(governedAgentEvidenceSql).toContain("target_actor_id is distinct from auth.uid()");
+    expect(governedAgentEvidenceSql).toContain(
+      "public.is_organization_member(target_organization_id)",
+    );
+    expect(governedAgentEvidenceSql).toContain("using errcode = '42501'");
+    expect(governedAgentEvidenceSql).toContain("to authenticated, service_role");
+    expect(governedAgentEvidenceSql).toContain(
+      "grant select on public.ai_runs, public.ai_audit_events to service_role",
+    );
+    expect(governedAgentEvidenceSql).not.toContain(
+      "grant select on public.ai_runs, public.ai_audit_events to authenticated",
+    );
+  });
+});
+
+describe("WhatsApp conversation runtime authority", () => {
+  it("grants only the existing service adapters' bounded operations", () => {
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select on public.conversation_channel_bindings to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select, insert, update on public.conversations to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select, insert on public.conversation_messages to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select, insert on public.conversation_events to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select, insert, update on public.workflow_instances to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant execute on function public.search_medicines",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select on public.generics to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).not.toMatch(/to (anon|authenticated)/);
+  });
+
+  it("keeps verified identity fixture provisioning service-only and role-bound", () => {
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "function public.certify_whatsapp_golden_loop_identity",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain("auth.role() <> 'service_role'");
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "membership.role = 'patient'::public.member_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "membership.role = 'pharmacist'::public.member_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain("to service_role");
+  });
+});
+
+describe("golden-loop canonical search projection fixture", () => {
+  it("completes required medicine fields behind service-only authority", () => {
+    expect(goldenLoopSearchFixtureSql).toContain(
+      "function public.certify_golden_loop_search_projection",
+    );
+    expect(goldenLoopSearchFixtureSql).toContain("manufacturer_name");
+    expect(goldenLoopSearchFixtureSql).toContain("insert into public.active_ingredients");
+    expect(goldenLoopSearchFixtureSql).toContain("insert into public.medicine_ingredients");
+    expect(goldenLoopSearchFixtureSql).toContain("auth.role() <> 'service_role'");
+    expect(goldenLoopSearchFixtureSql).not.toMatch(/to (anon|authenticated)/);
+  });
+});
+
+describe("medication-access workflow continuation", () => {
+  it("uses the existing workflow store and completes from the collected event", () => {
+    expect(medicationAccessContinuationSql).toContain("insert into public.workflow_instances");
+    expect(medicationAccessContinuationSql).toContain("'medication_access'");
+    expect(medicationAccessContinuationSql).toContain(
+      "after insert on public.fulfillment_transitions",
+    );
+    expect(medicationAccessContinuationSql).toContain("set state = 'dispensed'");
+    expect(medicationAccessContinuationSql).toContain("set state = 'completed'");
+    expect(medicationAccessContinuationSql).toContain("medication_access.completed.v1");
+    expect(medicationAccessContinuationSql).toContain("public.record_runtime_evidence(");
+  });
+});
+
+describe("tenant-safe outbox operational visibility", () => {
+  it("returns only aggregate state to monitoring and administrative roles", () => {
+    expect(outboxOperationalVisibilitySql).toContain(
+      "function public.runtime_outbox_operational_state",
+    );
+    for (const field of [
+      "pendingcount",
+      "retryingcount",
+      "deadlettercount",
+      "oldestpendingat",
+      "lastworkerrunat",
+      "lastsuccessat",
+      "lastfailureat",
+    ]) expect(outboxOperationalVisibilitySql).toContain(`'${field}'`);
+    expect(outboxOperationalVisibilitySql).toContain("event.organization_id = target_organization_id");
+    expect(outboxOperationalVisibilitySql).toContain("public.has_organization_role(");
+    expect(outboxOperationalVisibilitySql).toContain("from public, anon");
+    expect(outboxOperationalVisibilitySql).not.toContain("event.payload");
+  });
+});
+
+describe("reservation live fixture workflow state", () => {
+  it("keeps the service-only fixture consistent with production reservation state", () => {
+    expect(reservationFixtureWorkflowStateSql).toContain(
+      "rename to certify_reservation_fulfillment_fixture_base",
+    );
+    expect(reservationFixtureWorkflowStateSql).toContain("auth.role() <> 'service_role'");
+    expect(reservationFixtureWorkflowStateSql).toContain("set state = 'reserved'");
+    expect(reservationFixtureWorkflowStateSql).toContain("public.reservations reservation");
+    expect(reservationFixtureWorkflowStateSql).toContain("to service_role");
+    expect(reservationFixtureWorkflowStateSql).not.toMatch(/to (anon|authenticated)/);
+  });
+});

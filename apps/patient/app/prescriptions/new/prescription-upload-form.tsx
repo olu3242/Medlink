@@ -10,7 +10,8 @@ export function PrescriptionUploadForm() {
     event.preventDefault();
     setBusy(true);
     setMessage("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     try {
       const response = await fetch("/api/v1/prescriptions", {
         method: "POST",
@@ -19,7 +20,7 @@ export function PrescriptionUploadForm() {
       });
       if (!response.ok) throw new Error();
       setMessage("Prescription received and queued for pharmacist review.");
-      event.currentTarget.reset();
+      formElement.reset();
     } catch {
       setMessage("The prescription could not be accepted. Check the file and retry.");
     } finally {

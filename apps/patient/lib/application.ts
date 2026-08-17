@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RuntimeError, type RuntimeContext } from "@medlink/runtime";
+import { findEligiblePharmacies } from "@medlink/pharmacy";
 
 async function result<T>(
   query: PromiseLike<{ data: T; error: { message: string } | null }>,
@@ -23,6 +24,7 @@ export interface MarRow {
   id: string;
   state: string;
   created_at: string;
+  requested_medicine_id?: string;
   medicine?: { brand_name: string; generic_name: string } | null;
 }
 
@@ -37,6 +39,7 @@ export interface MarRow {
 export function toMar(row: MarRow) {
   return {
     id: row.id,
+    medicineId: row.requested_medicine_id,
     status: row.state,
     createdAt: row.created_at,
     medicineName: row.medicine?.brand_name || row.medicine?.generic_name || "Requested medicine",
@@ -46,6 +49,7 @@ export function toMar(row: MarRow) {
 export interface InventoryRow {
   id: string;
   status: string;
+  pharmacy_location_id: string;
   medicine?: { brand_name: string; generic_name: string } | null;
   pharmacy?: { name: string; locality: string } | null;
 }
@@ -57,10 +61,14 @@ export interface InventoryRow {
 // geospatial distance calculation anywhere in the repository, so this maps
 // to the pharmacy's locality (real data already on the join) instead of
 // fabricating a distanceKm value the UI previously called .toFixed(1) on
-// unconditionally.
+// unconditionally. pharmacyLocationId is surfaced so the reserve page can
+// submit a POST /api/v1/reservations body that actually matches its schema
+// (marId/pharmacyLocationId/inventoryBatchId/quantity/expiresAt) instead of
+// the bare {inventoryId} it previously sent, which always failed validation.
 export function toMatch(row: InventoryRow) {
   return {
     inventoryId: row.id,
+    pharmacyLocationId: row.pharmacy_location_id,
     medicineName: row.medicine?.brand_name || row.medicine?.generic_name || "Medicine",
     pharmacyName: row.pharmacy?.name || "Pharmacy",
     pharmacyLocality: row.pharmacy?.locality,
@@ -95,6 +103,57 @@ export class AccessApplication {
     return (rows as InventoryRow[]).map(toMatch);
   }
 
+  async eligiblePharmacies(input: {
+    organizationId: string; medicineId: string; latitude: number;
+    longitude: number; radiusKm: number; locationConsent: boolean;
+  }) {
+    const [{ data: locations, error: locationError }, { data: inventory, error: inventoryError }] =
+      await Promise.all([
+        this.database.from("pharmacy_locations")
+          .select("id,name,latitude,longitude,is_active,is_24_hours,updated_at")
+          .eq("organization_id", input.organizationId).is("deleted_at", null),
+        this.database.rpc("search_inventory_availability", {
+          target_organization_id: input.organizationId,
+          target_medicine_id: input.medicineId,
+          target_pharmacy_location_id: null,
+          target_quantity: 1,
+        }),
+      ]);
+    if (locationError || inventoryError) throw new RuntimeError(
+      "infrastructure", "inventory_discovery_failed",
+      "Nearby inventory could not be loaded", 503, true, "Retry later.",
+      { cause: locationError ?? inventoryError },
+    );
+    return findEligiblePharmacies({
+      tenantId: input.organizationId,
+      medicineId: input.medicineId,
+      origin: { latitude: input.latitude, longitude: input.longitude },
+      radiusKm: input.radiusKm,
+      locationConsent: input.locationConsent,
+      locations: (locations ?? []).map((row) => ({
+        id: row.id, tenantId: input.organizationId, name: row.name,
+        location: { latitude: Number(row.latitude), longitude: Number(row.longitude) },
+        active: row.is_active, open24Hours: row.is_24_hours, updatedAt: row.updated_at,
+      })),
+      inventory: (inventory ?? []).map((row: Record<string, unknown>) => ({
+        inventoryId: String(row.inventory_id),
+        pharmacyLocationId: String(row.pharmacy_location_id),
+        medicineId: String(row.medicine_id), expiresOn: String(row.expires_on),
+        availableQuantity: Number(row.available_quantity), state: String(row.availability_state),
+        observedAt: new Date().toISOString(),
+      })),
+    }).map((result) => ({
+      inventoryId: result.inventory.inventoryId,
+      pharmacyLocationId: result.pharmacy.id,
+      pharmacyName: result.pharmacy.name,
+      medicineName: input.medicineId,
+      distanceKm: result.distanceKm,
+      stockStatus: result.inventory.state,
+      expiresOn: result.inventory.expiresOn,
+      inventoryTimestamp: result.inventory.observedAt,
+    }));
+  }
+
   async pharmacies(organizationId: string) {
     return (await result(this.database.from("pharmacy_locations").select("*")
       .eq("organization_id", organizationId).eq("is_active", true)
@@ -111,9 +170,31 @@ export class AccessApplication {
 
   async getMar(organizationId: string, id: string) {
     const row = await result(this.database.from("medication_access_requests")
-      .select("*, medicine:medicines(brand_name,generic_name), audit:mar_audit_events(*)")
+      .select("*, medicine:medicines(brand_name,generic_name)")
       .eq("organization_id", organizationId).eq("id", id).single());
     return toMar(row as MarRow);
+  }
+
+  async matchInventory(
+    context: RuntimeContext,
+    id: string,
+    input: {
+      inventoryBatchId: string;
+      pharmacyLocationId: string;
+      idempotencyKey: string;
+    },
+  ) {
+    return result(this.database.rpc("match_inventory", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: input.idempotencyKey,
+      target_channel: context.channel,
+      target_mar_id: id,
+      target_inventory_batch_id: input.inventoryBatchId,
+      target_pharmacy_location_id: input.pharmacyLocationId,
+    }));
   }
 
   async timeline(organizationId: string, marId: string) {

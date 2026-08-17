@@ -67,6 +67,26 @@ export interface ApiOperation<TInput, TOutput> {
   success?(output: TOutput): Response;
 }
 
+export function authorizeRuntimeContext(
+  context: Pick<RuntimeContext, "role">,
+  permission: string,
+): void {
+  const registeredPermission = z.enum(permissions).parse(permission);
+  try {
+    authorize(context.role as Role, registeredPermission);
+  } catch (error) {
+    throw new RuntimeError(
+      "authorization",
+      "permission_denied",
+      "You do not have permission to perform this action",
+      403,
+      false,
+      undefined,
+      { cause: error },
+    );
+  }
+}
+
 function contractPathMatches(template: string, pathname: string): boolean {
   const expected = template.split("/").filter(Boolean);
   const actual = pathname.split("/").filter(Boolean);
@@ -186,10 +206,7 @@ export async function runApi<TInput, TOutput>(
     },
     authorizer: {
       authorize(context, permission) {
-        authorize(
-          context.role as Role,
-          z.enum(permissions).parse(permission),
-        );
+        authorizeRuntimeContext(context, permission);
       },
     },
     ...standardRuntimeHooks("medlink-api"),

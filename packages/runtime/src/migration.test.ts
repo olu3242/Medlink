@@ -946,6 +946,139 @@ describe("reservation fulfillment live-certification fixture migration", () => {
   });
 });
 
+describe("medication golden loop live-certification fixture migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608170041_medication_golden_loop_live_fixture.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("is restricted to service_role, matching the existing fixture guard pattern", () => {
+    expect(sql).toContain("if auth.role() <> 'service_role'");
+    expect(sql).toContain("grant execute on function public.certify_medication_golden_loop_fixture(");
+    expect(sql).toContain("to service_role;");
+    expect(sql).not.toContain("to authenticated;");
+  });
+
+  it("stops at validated so the pharmacist and patient browsers perform review and matching", () => {
+    const validatedIndex = sql.indexOf("state = 'validated'");
+    expect(validatedIndex).toBeGreaterThan(-1);
+    expect(sql).not.toContain("state = 'reviewed'");
+    expect(sql).not.toContain("state = 'searching'");
+    expect(sql).not.toContain("state = 'matched'");
+    expect(sql).not.toContain("state = 'reserved'");
+  });
+
+  it("creates one pending review for the real pharmacist browser", () => {
+    expect(sql).toContain("insert into public.clinical_reviews(");
+    expect(sql).toContain("organization_id, mar_id, 'pending'");
+    expect(sql).toContain("'reviewid', review_id");
+  });
+
+  it("creates no reservation and no inventory lock -- the browser session creates those itself", () => {
+    expect(sql).not.toContain("insert into public.reservations(");
+    expect(sql).not.toContain("insert into public.inventory_locks(");
+  });
+
+  it("inserts its own medicine and a well-stocked batch, not a scarcity scenario", () => {
+    expect(sql).toContain("insert into public.medicines(");
+    expect(sql).toContain("50, 'tablet', 'available', pharmacist_id");
+  });
+
+  it("returns the medicine name so the E2E suite can assert canonical identity continuity across every step", () => {
+    expect(sql).toContain("'medicinename', 'golden loop medicine ' || fixture_key");
+  });
+
+  it("seeds all three golden-loop personas as real memberships of one organization", () => {
+    expect(sql).toContain("(organization_id, patient_id, 'patient'),");
+    expect(sql).toContain("(organization_id, pharmacist_id, 'pharmacist'),");
+    expect(sql).toContain("(organization_id, pharmacy_staff_id, 'pharmacy_staff');");
+  });
+});
+
+describe("patient inventory matching migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608170043_patient_inventory_matching.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("exposes only eligible tenant inventory to a patient", () => {
+    expect(sql).toContain("create policy inventory_batches_patient_discovery");
+    expect(sql).toContain("array['patient']::public.member_role[]");
+    expect(sql).toContain("quantity_on_hand > quantity_reserved");
+    expect(sql).toContain("expires_on >= current_date");
+  });
+
+  it("requires patient ownership and exact canonical inventory identity", () => {
+    expect(sql).toContain("mar.patient_id is distinct from target_actor_id");
+    expect(sql).toContain("batch.medicine_id is distinct from mar.requested_medicine_id");
+    expect(sql).toContain("pharmacy_location_id = target_pharmacy_location_id");
+  });
+
+  it("walks reviewed to searching to matched without creating a lock", () => {
+    const reviewed = sql.indexOf("mar.state <> 'reviewed'");
+    const searching = sql.indexOf("state = 'searching'");
+    const matched = sql.indexOf("set state = 'matched'", searching);
+    expect(reviewed).toBeGreaterThan(-1);
+    expect(searching).toBeGreaterThan(reviewed);
+    expect(matched).toBeGreaterThan(searching);
+    expect(sql).not.toContain("insert into public.inventory_locks");
+    expect(sql).not.toContain("insert into public.reservations");
+  });
+
+  it("records canonical matching runtime evidence and supports exact replay", () => {
+    expect(sql).toContain("perform public.record_runtime_evidence");
+    expect(sql).toContain("'mar.inventory_matched'");
+    expect(sql).toContain("mar.transition_idempotency_key = target_idempotency_key || ':matched'");
+  });
+});
+
+describe("clinical review read grant migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608170044_clinical_review_read_grant.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("allows authenticated review reads while leaving row scope to existing RLS", () => {
+    expect(sql).toContain(
+      "grant select on public.clinical_reviews to authenticated, service_role;",
+    );
+    expect(sql).not.toContain("grant insert");
+    expect(sql).not.toContain("grant update");
+    expect(sql).not.toContain("grant delete");
+  });
+});
+
+describe("mar_audit_events read grant migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608170042_mar_audit_events_read_grant.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("grants select on mar_audit_events to authenticated and service_role, matching its existing RLS policy scope", () => {
+    expect(sql).toContain("grant select on public.mar_audit_events to authenticated, service_role;");
+  });
+});
+
 describe("reservation fulfillment read grants migration", () => {
   const sql = readFileSync(
     join(

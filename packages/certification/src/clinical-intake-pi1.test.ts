@@ -260,7 +260,15 @@ describe("RC2 PI-1 clinical intake acceptance", () => {
       "completed",
       "started",
       "completed",
+      "started",
+      "completed",
     ]);
+    expect(telemetry.at(-1)).toMatchObject({
+      agentId: "clinical-review-assistant",
+      capability: "flag_validation_findings",
+      requiresHumanApproval: true,
+      status: "completed",
+    });
 
     const reviews = new PharmacistReviewService(harness);
     await expect(reviews.list(identifiers.tenantId)).resolves.toHaveLength(1);

@@ -82,7 +82,7 @@ export const POST = (request: Request) => runApi(request, {
       });
     }
     const service = new PrescriptionIntakeService(
-      new HttpPrescriptionScanner(context),
+      new HttpPrescriptionScanner(context, database),
       new SupabasePrescriptionStorage(database),
       new SupabasePrescriptionIntakeRepository(database),
       nodePrescriptionIntegrity,

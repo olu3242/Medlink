@@ -3,4 +3,5 @@ export * from "./errors";
 export * from "./ports";
 export * from "./service";
 export * from "./supabase-index";
+export * from "./supabase-reader";
 export * from "./validation";

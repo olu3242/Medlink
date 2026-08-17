@@ -1,5 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { requestDatabase } from "./index";
+import { authorizeRuntimeContext, requestDatabase } from "./index";
+
+describe("authorizeRuntimeContext", () => {
+  it("maps a role denial to a sanitized forbidden runtime error", () => {
+    expect(() => authorizeRuntimeContext(
+      { role: "patient" },
+      "reservation:manage",
+    )).toThrow(expect.objectContaining({
+      category: "authorization",
+      code: "permission_denied",
+      message: "You do not have permission to perform this action",
+      status: 403,
+    }));
+  });
+
+  it("allows a registered permission assigned to the role", () => {
+    expect(() => authorizeRuntimeContext(
+      { role: "patient" },
+      "reservation:create",
+    )).not.toThrow();
+  });
+});
 
 // packages/api previously had zero tests despite being the canonical
 // pipeline apps/admin and apps/patient route every request through

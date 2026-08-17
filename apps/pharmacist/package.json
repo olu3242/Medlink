@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@medlink/agent-runtime": "*",
+    "@medlink/agents": "*",
     "@medlink/api": "*",
     "@medlink/clinical": "*",
     "@medlink/inventory": "*",

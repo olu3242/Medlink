@@ -57,6 +57,10 @@ export interface WhatsAppWebhookDependencies {
   readonly appSecret: string;
   readonly verifyToken: string;
   readonly resolveOrganizationId: (phoneNumberId: string) => Promise<string | null>;
+  readonly resolveIdentity: (
+    organizationId: string,
+    channelIdentity: string,
+  ) => Promise<string | null>;
   readonly conversations: ConversationRepository;
   readonly messages: MessageStore;
   readonly events: ConversationEventLog;
@@ -206,12 +210,19 @@ export function buildWhatsAppWebhookHandlers(deps: WhatsAppWebhookDependencies) 
         // gives the Conversation Engine a distinct path for them.
         let unsupported = 0;
 
-        for (const event of normalized) {
-          if (event.kind === "status") continue;
-          if (event.kind === "unsupported_message") {
-            unsupported += 1;
-            continue;
-          }
+        unsupported += normalized.filter(({ kind }) => kind === "unsupported_message").length;
+        const messages = normalized
+          .filter((event): event is Extract<(typeof normalized)[number], { kind: "message" }> =>
+            event.kind === "message")
+          .sort((left, right) =>
+            left.message.receivedAt.getTime() - right.message.receivedAt.getTime()
+            || left.message.externalMessageId.localeCompare(right.message.externalMessageId));
+
+        for (const event of messages) {
+          const patientId = await deps.resolveIdentity(
+            context.organizationId,
+            event.message.from,
+          );
           const result = await engine.receiveMessage({
             organizationId: context.organizationId,
             channel: "whatsapp",
@@ -220,6 +231,8 @@ export function buildWhatsAppWebhookHandlers(deps: WhatsAppWebhookDependencies) 
             contentType: event.message.contentType,
             body: event.message.body,
             mediaUrl: event.message.mediaId,
+            patientId,
+            requireIdentity: true,
           });
           processed += 1;
           if (result.action === "handoff_requested") handedOff += 1;
@@ -262,5 +275,35 @@ export function toSupabaseChannelBindingLookup(
       );
     }
     return data?.organization_id ?? null;
+  };
+}
+
+export function toSupabaseChannelIdentityLookup(
+  database: SupabaseClient,
+): (organizationId: string, channelIdentity: string) => Promise<string | null> {
+  return async (organizationId, channelIdentity) => {
+    const { data: link, error } = await database.from("channel_identity_links")
+      .select("user_id")
+      .eq("organization_id", organizationId)
+      .eq("channel", "whatsapp")
+      .eq("channel_identity", channelIdentity)
+      .eq("status", "verified")
+      .maybeSingle<{ user_id: string }>();
+    if (error) throw new RuntimeError(
+      "infrastructure", "database_operation_failed",
+      "The data operation could not be completed", 503, true, "Retry later.",
+      { cause: error },
+    );
+    if (!link) return null;
+    const { data: membership, error: membershipError } = await database
+      .from("organization_memberships").select("user_id")
+      .eq("organization_id", organizationId).eq("user_id", link.user_id)
+      .eq("role", "patient").is("deleted_at", null).maybeSingle();
+    if (membershipError) throw new RuntimeError(
+      "infrastructure", "database_operation_failed",
+      "The data operation could not be completed", 503, true, "Retry later.",
+      { cause: membershipError },
+    );
+    return membership ? link.user_id : null;
   };
 }

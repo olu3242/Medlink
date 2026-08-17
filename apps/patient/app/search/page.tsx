@@ -1,2 +1,8 @@
-import Link from "next/link";import {searchInventory,type Match} from "../../lib/api";
-export default async function Search({searchParams}:{searchParams:Promise<{q?:string}>}){const {q=""}=await searchParams;let matches:Match[]=[];let failed=false;if(q)try{matches=await searchInventory(q)}catch{failed=true}return <><header className="head"><div><div className="eyebrow">Medicine search</div><h1>Find medicine nearby</h1><p className="muted">Availability is confirmed when your reservation is accepted.</p></div></header><form className="card" method="get"><div className="field"><label htmlFor="q">Brand or generic medicine</label><input id="q" name="q" defaultValue={q} required placeholder="e.g. metformin 500 mg"/></div><button className="button" type="submit">Search availability</button></form>{failed?<p className="error" role="alert">Search is temporarily unavailable.</p>:q?<section aria-label="Search results" className="grid" style={{marginTop:"1rem"}}>{matches.length?matches.map(match=><article className="card" key={match.inventoryId}><span className="status">{match.stockStatus}</span><h2>{match.medicineName}</h2><p>{match.pharmacyName}</p><p className="muted">{match.pharmacyLocality??"Location unavailable"}</p><Link className="button" href={`/reserve/${match.inventoryId}`}>Review reservation</Link></article>):<div className="card"><h2>No nearby matches</h2><p className="muted">Try a generic name or wider search area.</p></div>}</section>:null}</>}
+import { InventorySearch } from "../../components/inventory-search";
+
+export default async function Search({ searchParams }: {
+  searchParams: Promise<{ q?: string; marId?: string; medicineId?: string }>;
+}) {
+  const { q = "", marId, medicineId } = await searchParams;
+  return <InventorySearch query={q} marId={marId} medicineId={medicineId} />;
+}

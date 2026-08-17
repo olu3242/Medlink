@@ -69,4 +69,40 @@ describe("GraphApiWhatsAppSender", () => {
       sender.send("phone-123", { to: "234800", contentType: "text", body: "hi", mediaId: null, templateName: null }),
     ).rejects.toThrow(WhatsAppDeliveryError);
   });
+
+  it("bounds provider calls and maps a timeout without exposing the access token", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(
+      new DOMException("The operation timed out", "TimeoutError"),
+    );
+    const sender = new GraphApiWhatsAppSender("secret-token", fetchImpl, "v21.0", 25);
+
+    await expect(sender.send("phone-123", {
+      to: "234800",
+      contentType: "text",
+      body: "hi",
+      mediaId: null,
+      templateName: null,
+    })).rejects.toMatchObject({
+      code: "delivery_failed",
+      providerStatus: 0,
+      message: expect.not.stringContaining("secret-token"),
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("maps a provider media rejection through the same retryable delivery boundary", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response("media unavailable", { status: 404 }));
+    const sender = new GraphApiWhatsAppSender("token-123", fetchImpl);
+
+    await expect(sender.send("phone-123", {
+      to: "234800",
+      contentType: "image",
+      body: null,
+      mediaId: "missing-media",
+      templateName: null,
+    })).rejects.toMatchObject({ code: "delivery_failed", providerStatus: 404 });
+  });
 });

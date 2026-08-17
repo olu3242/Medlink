@@ -33,7 +33,11 @@ function sign(rawBody: string): string {
   return `sha256=${createHmac("sha256", APP_SECRET).update(rawBody, "utf8").digest("hex")}`;
 }
 
-function textMessagePayload(overrides?: { readonly id?: string; readonly body?: string }) {
+function textMessagePayload(overrides?: {
+  readonly id?: string;
+  readonly body?: string;
+  readonly timestamp?: string;
+}) {
   return {
     object: "whatsapp_business_account",
     entry: [{
@@ -46,7 +50,7 @@ function textMessagePayload(overrides?: { readonly id?: string; readonly body?: 
           messages: [{
             from: "+2348000000001",
             id: overrides?.id ?? "wamid.001",
-            timestamp: "1700000000",
+            timestamp: overrides?.timestamp ?? "1700000000",
             type: "text",
             text: { body: overrides?.body ?? "hi" },
           }],
@@ -181,6 +185,7 @@ function baseDeps(overrides?: Partial<WhatsAppWebhookDependencies>): WhatsAppWeb
     verifyToken: VERIFY_TOKEN,
     resolveOrganizationId: async (phoneNumberId) =>
       phoneNumberId === "phone-number-1" ? ORGANIZATION_ID : null,
+    resolveIdentity: async () => "00000000-0000-4000-8000-000000000099",
     conversations: new InMemoryConversationRepository(),
     messages: new InMemoryMessageStore(),
     events: new InMemoryEventLog(),
@@ -254,6 +259,53 @@ describe("buildWhatsAppWebhookHandlers POST", () => {
     expect(body.data).toMatchObject({ processed: 1, unsupported: 0 });
     expect(messages.inbound).toHaveLength(1);
     expect(messages.inbound[0]).toMatchObject({ externalMessageId: "wamid.001", body: "hi" });
+  });
+
+  it("accepts a delayed provider retry without treating provider time as authentication", async () => {
+    const workflows = new RecordingWorkflowInvoker();
+    const { POST } = buildWhatsAppWebhookHandlers(baseDeps({ workflows }));
+    const rawBody = JSON.stringify(textMessagePayload({
+      id: "wamid.delayed",
+      body: "find amoxicillin",
+      timestamp: "1",
+    }));
+
+    const response = await POST(new Request("https://example.test/webhook", {
+      method: "POST",
+      headers: { "x-hub-signature-256": sign(rawBody) },
+      body: rawBody,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(workflows.calls).toHaveLength(1);
+  });
+
+  it("processes an out-of-order provider batch by message timestamp", async () => {
+    const workflows = new RecordingWorkflowInvoker();
+    const payload = textMessagePayload({ id: "wamid.later", body: "find later" });
+    payload.entry[0]!.changes[0]!.value.messages.unshift({
+      from: "+2348000000001",
+      id: "wamid.earlier",
+      timestamp: "1600000000",
+      type: "text",
+      text: { body: "find earlier" },
+    });
+    payload.entry[0]!.changes[0]!.value.messages.reverse();
+    const rawBody = JSON.stringify(payload);
+    const { POST } = buildWhatsAppWebhookHandlers(baseDeps({ workflows }));
+
+    const response = await POST(new Request("https://example.test/webhook", {
+      method: "POST",
+      headers: { "x-hub-signature-256": sign(rawBody) },
+      body: rawBody,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(workflows.calls.map((call) =>
+      (call as { context: { messageBody: string } }).context.messageBody)).toEqual([
+      "find earlier",
+      "find later",
+    ]);
   });
 
   it("rejects a delivery with no signature at all", async () => {

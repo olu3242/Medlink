@@ -1,2 +1,6 @@
-import Link from "next/link";import {notFound} from "next/navigation";import {getMar,getTimeline} from "../../../lib/api";
-export default async function MarPage({params}:{params:Promise<{id:string}>}){const{id}=await params;let mar;let timeline;try{[mar,timeline]=await Promise.all([getMar(id),getTimeline(id)])}catch{notFound()}return <><header className="head"><div><div className="eyebrow">Request status</div><h1>{mar.medicineName}</h1></div><Link className="secondary" href="/">All requests</Link></header><section className="card"><h2>Current status: {mar.status}</h2><p className="muted">A pharmacist makes all clinical review and substitution decisions. MedLink will notify you when action is needed.</p></section><section className="card" aria-labelledby="timeline-title" style={{marginTop:"1rem"}}><h2 id="timeline-title">Workflow timeline</h2>{timeline.length?<ol className="timeline">{timeline.map(event=><li key={event.id}><strong>{event.event_type}</strong><p>{event.from_state?`${event.from_state} → `:""}{event.to_state??"Recorded"}</p><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleString()}</time>{event.correlation_id&&<details><summary>Support reference</summary><code>{event.correlation_id}</code></details>}</li>)}</ol>:<p className="muted">No workflow events have been recorded yet.</p>}</section></>}
+import { MarDetail } from "../../../components/mar-detail";
+
+export default async function MarPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <MarDetail id={id} />;
+}

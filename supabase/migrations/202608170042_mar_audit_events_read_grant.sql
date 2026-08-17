@@ -1,0 +1,14 @@
+-- Same gap, same fix as every prior grant migration this program has
+-- found (202608150033, 202608160039, 202608160040): mar_audit_events
+-- has carried a real "to authenticated" RLS policy (mar_audit_events_
+-- read) since 202607270003_medication_access_core.sql, but never a
+-- table-level GRANT. No path ever exercised it directly until now:
+-- apps/patient/lib/application.ts's timeline() selects from
+-- mar_audit_events as the signed-in patient's own authenticated session,
+-- and the MAR detail page (/mar/[id]) that calls it had no reachable
+-- browser session pointed at it until this PR's golden-loop suite
+-- became the first real authenticated visitor. Surfaced as the MAR
+-- detail page falling through to notFound() (both getMar() and
+-- getTimeline() run in the same Promise.all, and either throwing
+-- triggers the same catch).
+grant select on public.mar_audit_events to authenticated, service_role;

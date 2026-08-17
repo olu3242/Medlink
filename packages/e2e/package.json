@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:auth": "playwright test"
+    "test:auth": "playwright test tests/auth.spec.ts",
+    "test:golden-loop": "playwright test tests/golden-loop.spec.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.0",

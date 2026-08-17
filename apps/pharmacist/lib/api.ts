@@ -4,18 +4,22 @@ import type {
   PharmacistReviewSummary,
 } from "@medlink/clinical";
 import type { InventoryBatch } from "@medlink/inventory";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 export type Review = PharmacistReviewSummary;
 export type ReviewDetail = PharmacistReviewDetail;
 
 async function get<T>(path: string) {
-  const incoming = await headers();
+  const [incoming, cookieStore] = await Promise.all([headers(), cookies()]);
   const origin = process.env.MEDLINK_PHARMACIST_URL
     ?? process.env.MEDLINK_API_URL
     ?? "http://localhost:3003";
   const forwarded = new Headers({ Accept: "application/json" });
-  for (const name of ["cookie", "authorization", "x-medlink-tenant-id"]) {
+  const cookieHeader = incoming.get("cookie") ?? cookieStore.getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ");
+  if (cookieHeader) forwarded.set("cookie", cookieHeader);
+  for (const name of ["authorization", "x-medlink-tenant-id"]) {
     const value = incoming.get(name);
     if (value) forwarded.set(name, value);
   }
@@ -23,7 +27,12 @@ async function get<T>(path: string) {
     cache: "no-store",
     headers: forwarded,
   });
-  if (!response.ok) throw new Error("Review request failed");
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null) as { code?: string } | null;
+    throw new Error(
+      `Review request failed (${response.status}, ${problem?.code ?? "unknown"})`,
+    );
+  }
   return (await response.json() as { data: T }).data;
 }
 

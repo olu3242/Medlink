@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   AgentTaskExecutor,
   MvpAgentPolicy,
+  SupabaseAgentTaskObserver,
   type AgentTaskObserver,
 } from "@medlink/agent-runtime";
 import { runtimeLogger } from "@medlink/observability";
@@ -297,9 +298,11 @@ implements ClinicalPipelineRepository {
   }
 }
 
-function taskObserver(): AgentTaskObserver {
+function taskObserver(database: SupabaseClient): AgentTaskObserver {
+  const durable = new SupabaseAgentTaskObserver(database);
   return {
-    record(event) {
+    async record(event) {
+      await durable.record(event);
       const context: RuntimeContext = {
         correlationId: event.correlationId,
         requestId: event.taskId,
@@ -312,7 +315,7 @@ function taskObserver(): AgentTaskObserver {
         channel: "worker",
         apiVersion: "v1",
       };
-      return runtimeLogger(context, {
+      runtimeLogger(context, {
         service: "clinical-pipeline-worker",
         component: "agent-runtime",
         operation: event.action,
@@ -344,7 +347,7 @@ export function createClinicalPipelineWorker(database: SupabaseClient) {
       environment.MEDLINK_PARSER_PROVIDER_URL,
       environment.MEDLINK_PARSER_PROVIDER_TOKEN,
     ),
-    new AgentTaskExecutor(new MvpAgentPolicy(), taskObserver()),
+    new AgentTaskExecutor(new MvpAgentPolicy(), taskObserver(database)),
   );
 }
 

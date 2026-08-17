@@ -4,3 +4,4 @@ export * from "./memory";
 export * from "./planning";
 export * from "./coordination";
 export * from "./supervision";
+export * from "./router";
