@@ -4,3 +4,4 @@ export * from "./service";
 export * from "./errors";
 export * from "./locations";
 export * from "./supabase-locations";
+export * from "./medication-discovery";

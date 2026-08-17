@@ -136,6 +136,12 @@ export const eventContracts: readonly VersionedEventContract[] = [
     required: ["tenantId", "paymentId", "reservationId"],
   },
   {
+    type: "payment.attempt-created.v1",
+    version: 1,
+    aggregate: "payment",
+    required: ["tenantId", "paymentId", "reservationId", "attemptId"],
+  },
+  {
     type: "medicine.catalog-created.v1",
     version: 1,
     aggregate: "medicine",

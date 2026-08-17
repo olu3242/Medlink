@@ -8,7 +8,9 @@ const location = (id: string, longitude: number) => ({
 });
 const inventory = (id: string, pharmacyLocationId: string, expiresOn: string) => ({
   inventoryId: id, pharmacyLocationId, medicineId: "medicine-a", expiresOn,
+  medicineName: "Medicine A",
   availableQuantity: 1, state: "in_stock", observedAt: "2026-08-17T00:00:00Z",
+  unitPriceMinor: null, currencyCode: null,
 });
 
 describe("findEligiblePharmacies", () => {

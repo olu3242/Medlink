@@ -37,6 +37,7 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "prescription:read", "prescription:create",
     "inventory:read", "reservation:read", "reservation:create",
     "reservation:credential",
+    "payment:read", "payment:create",
     "mar:read", "mar:create",
   ]),
 };

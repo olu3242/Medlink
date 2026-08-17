@@ -154,6 +154,7 @@ describe("listReservations", () => {
       id: reservationId, status: "confirmed", patient_id: "patient-1",
       created_at: "2026-01-01T00:00:00Z", confirmed_at: "2026-01-01T00:01:00Z",
       expires_at: "2026-01-02T00:00:00Z",
+      payment_required: true, payments: [{ status: "captured" }],
       pharmacy_location: { id: "loc-1", name: "Main Street" },
       inventory_locks: [{ quantity: 2, inventory_batch: { medicine: { brand_name: "Amoxil", generic_name: null } } }],
     }]);
@@ -164,6 +165,7 @@ describe("listReservations", () => {
       medicineName: "Amoxil", pharmacyLocationName: "Main Street", quantity: 2,
       createdAt: "2026-01-01T00:00:00Z", confirmedAt: "2026-01-01T00:01:00Z",
       expiresAt: "2026-01-02T00:00:00Z",
+      paymentRequired: true, paymentStatus: "captured",
     }]);
   });
 
@@ -171,12 +173,13 @@ describe("listReservations", () => {
     const { database } = fakeListDatabase([{
       id: reservationId, status: "confirmed", patient_id: "patient-1",
       created_at: "2026-01-01T00:00:00Z", confirmed_at: null, expires_at: "2026-01-02T00:00:00Z",
+      payment_required: false, payments: [],
       pharmacy_location: null, inventory_locks: [],
     }]);
     const [entry] = await listReservations(context, database, reservationListQuerySchema.parse({}));
     expect(Object.keys(entry as object).sort()).toEqual(
       ["confirmedAt", "createdAt", "expiresAt", "id", "medicineName", "patientId",
-        "pharmacyLocationName", "quantity", "status"],
+        "paymentRequired", "paymentStatus", "pharmacyLocationName", "quantity", "status"],
     );
   });
 });

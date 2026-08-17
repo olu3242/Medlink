@@ -18,5 +18,16 @@ export async function signInWithMagicLink(
   await page.waitForURL(/sent=true/);
 
   const magicLink = await awaitMagicLink(mailpitUrl, email);
-  await page.goto(magicLink);
+  const expectedOrigin = new URL(baseUrl).origin;
+  await page.goto(magicLink, { waitUntil: "networkidle" });
+  await page.waitForURL((url) =>
+    url.origin === expectedOrigin
+    && url.pathname !== "/auth/callback"
+    && !url.searchParams.has("error"),
+  );
+  await page.waitForLoadState("networkidle");
+  const sessionCookies = await page.context().cookies(baseUrl);
+  if (!sessionCookies.some(({ name }) => name.includes("auth-token"))) {
+    throw new Error("Magic-link callback completed without a Supabase session cookie");
+  }
 }

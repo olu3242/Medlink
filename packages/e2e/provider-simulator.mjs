@@ -1,6 +1,9 @@
 import { createServer } from "node:http";
 
 const port = Number(process.env.MEDLINK_E2E_PROVIDER_PORT ?? 4010);
+const whatsAppMessages = [];
+const paymentIntents = [];
+const paymentRefunds = [];
 
 function json(response, status, body) {
   response.writeHead(status, { "content-type": "application/json" });
@@ -42,6 +45,54 @@ const server = createServer(async (request, response) => {
       }],
       overallConfidence: 0.98,
     });
+  }
+  if (request.url === "/whatsapp/messages" && request.method === "GET") {
+    return json(response, 200, { messages: whatsAppMessages });
+  }
+  if (request.url === "/payments/intents" && request.method === "GET") {
+    return json(response, 200, { intents: paymentIntents });
+  }
+  if (request.url === "/payments/intents" && request.method === "POST") {
+    const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const idempotencyKey = request.headers["idempotency-key"];
+    const prior = paymentIntents.find((intent) => intent.idempotencyKey === idempotencyKey);
+    if (prior) return json(response, 200, prior.response);
+    const result = {
+      idempotencyKey,
+      reference: body.reference,
+      amountMinor: body.amountMinor,
+      currency: body.currency,
+      response: {
+        providerReference: body.reference,
+        hostedPaymentUrl: `http://127.0.0.1:${port}/payments/checkout/${body.reference}`,
+      },
+    };
+    paymentIntents.push(result);
+    return json(response, 201, result.response);
+  }
+  if (request.url === "/payments/refunds" && request.method === "GET") {
+    return json(response, 200, { refunds: paymentRefunds });
+  }
+  if (request.url === "/payments/refunds" && request.method === "POST") {
+    const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const idempotencyKey = request.headers["idempotency-key"];
+    const prior = paymentRefunds.find((refund) => refund.idempotencyKey === idempotencyKey);
+    if (prior) return json(response, 200, prior.response);
+    const result = {
+      idempotencyKey,
+      reference: body.reference,
+      amountMinor: body.amountMinor,
+      currency: body.currency,
+      response: { providerRefundReference: body.reference },
+    };
+    paymentRefunds.push(result);
+    return json(response, 201, result.response);
+  }
+  if (/^\/v\d+\.\d+\/[^/]+\/messages$/.test(request.url ?? "") && request.method === "POST") {
+    const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const externalMessageId = `wamid.sim.${whatsAppMessages.length + 1}`;
+    whatsAppMessages.push({ externalMessageId, body });
+    return json(response, 200, { messages: [{ id: externalMessageId }] });
   }
   return json(response, 404, { error: "not_found" });
 });

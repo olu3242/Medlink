@@ -119,6 +119,9 @@ describe("buildReservationNotificationDispatcher", () => {
       ["reservation.cancelled.v1"],
       ["reservation.ready.v1"],
       ["reservation.collected.v1"],
+      ["payment.required.v1"],
+      ["payment.failed.v1"],
+      ["payment.succeeded.v1"],
     ] as const) {
       const { database, updates } = fakeDatabase({
         claimed: [reservationLifecycleEvent(type)],

@@ -10,6 +10,9 @@ const environmentSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   WHATSAPP_ACCESS_TOKEN: z.string().min(1),
+  MEDLINK_E2E_WHATSAPP_GRAPH_API_BASE_URL: z.string()
+    .regex(/^http:\/\/(127\.0\.0\.1|localhost):\d+$/)
+    .optional(),
   MEDLINK_NOTIFICATION_WORKER_TOKEN: z.string().min(32),
 });
 const inputSchema = z.object({
@@ -60,6 +63,8 @@ export async function POST(request: Request) {
   const dispatcher = buildReservationNotificationDispatcher(
     database,
     environment.data.WHATSAPP_ACCESS_TOKEN,
+    undefined,
+    environment.data.MEDLINK_E2E_WHATSAPP_GRAPH_API_BASE_URL,
   );
   await dispatcher.dispatch("scheduled-reservations-worker", parsed.data.limit);
   return Response.json({ data: { worker: "scheduled-reservations-worker", limit: parsed.data.limit } });

@@ -100,6 +100,8 @@ interface ReservationInboxRow {
   readonly created_at: string;
   readonly confirmed_at: string | null;
   readonly expires_at: string;
+  readonly payment_required: boolean;
+  readonly payments: ReadonlyArray<{ readonly status: string }>;
   readonly pharmacy_location: { readonly id: string; readonly name: string } | null;
   readonly inventory_locks: ReadonlyArray<{
     readonly quantity: number;
@@ -125,6 +127,8 @@ export interface ReservationInboxEntry {
   readonly createdAt: string;
   readonly confirmedAt: string | null;
   readonly expiresAt: string;
+  readonly paymentRequired: boolean;
+  readonly paymentStatus: string | null;
 }
 
 function toInboxEntry(row: ReservationInboxRow): ReservationInboxEntry {
@@ -139,6 +143,10 @@ function toInboxEntry(row: ReservationInboxRow): ReservationInboxEntry {
     createdAt: row.created_at,
     confirmedAt: row.confirmed_at,
     expiresAt: row.expires_at,
+    paymentRequired: row.payment_required,
+    paymentStatus: row.payments.some(({ status }) => status === "captured")
+      ? "captured"
+      : row.payments[0]?.status ?? null,
   };
 }
 
@@ -149,7 +157,8 @@ export async function listReservations(
 ): Promise<readonly ReservationInboxEntry[]> {
   let statement = database.from("reservations")
     .select(`
-      id, status, patient_id, created_at, confirmed_at, expires_at,
+      id, status, patient_id, created_at, confirmed_at, expires_at, payment_required,
+      payments(status),
       pharmacy_location:pharmacy_locations(id, name),
       inventory_locks(quantity, inventory_batch:inventory_batches(medicine:medicines(brand_name, generic_name)))
     `)

@@ -53,20 +53,37 @@ interface GraphApiSendResponse {
 // code change.
 const DEFAULT_GRAPH_API_VERSION = "v21.0";
 const DEFAULT_PROVIDER_TIMEOUT_MS = 10_000;
+const DEFAULT_GRAPH_API_BASE_URL = "https://graph.facebook.com";
+
+function resolveGraphApiBaseUrl(accessToken: string, override?: string): string {
+  if (!override) return DEFAULT_GRAPH_API_BASE_URL;
+  const url = new URL(override);
+  const loopback = url.protocol === "http:"
+    && (url.hostname === "127.0.0.1" || url.hostname === "localhost");
+  if (!loopback || !accessToken.startsWith("medlink-e2e-")) {
+    throw new Error("A Graph API override requires a loopback URL and an E2E-only token");
+  }
+  return url.origin;
+}
 
 export class GraphApiWhatsAppSender implements WhatsAppSender {
+  private readonly graphApiBaseUrl: string;
+
   constructor(
     private readonly accessToken: string,
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly graphApiVersion: string = DEFAULT_GRAPH_API_VERSION,
     private readonly timeoutMs: number = DEFAULT_PROVIDER_TIMEOUT_MS,
-  ) {}
+    graphApiBaseUrl?: string,
+  ) {
+    this.graphApiBaseUrl = resolveGraphApiBaseUrl(accessToken, graphApiBaseUrl);
+  }
 
   async send(phoneNumberId: string, message: WhatsAppMessageSend): Promise<WhatsAppSendResult> {
     let response: Response;
     try {
       response = await this.fetchImpl(
-        `https://graph.facebook.com/${this.graphApiVersion}/${phoneNumberId}/messages`,
+        `${this.graphApiBaseUrl}/${this.graphApiVersion}/${phoneNumberId}/messages`,
         {
           method: "POST",
           headers: {

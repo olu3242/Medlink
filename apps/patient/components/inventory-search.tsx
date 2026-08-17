@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Match } from "../lib/api";
+import type { MedicationAvailabilityOutcome, MedicationDiscoveryResult } from "@medlink/pharmacy";
 import { MatchInventoryButton } from "./match-inventory-button";
 
 export function InventorySearch({ query, marId, medicineId }: {
@@ -11,6 +12,7 @@ export function InventorySearch({ query, marId, medicineId }: {
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(Boolean(query));
   const [locationMessage, setLocationMessage] = useState("");
+  const [outcome, setOutcome] = useState<MedicationAvailabilityOutcome>();
 
   useEffect(() => {
     let active = true;
@@ -54,9 +56,10 @@ export function InventorySearch({ query, marId, medicineId }: {
           headers: { Accept: "application/json" },
         });
         if (!response.ok) throw new Error("Nearby search unavailable");
-        const body = await response.json() as { data: Match[] };
-        setMatches(body.data);
-        setLocationMessage("Showing participating pharmacies within 25 km.");
+        const body = await response.json() as { data: MedicationDiscoveryResult };
+        setMatches([...body.data.exact, ...body.data.generic]);
+        setOutcome(body.data.outcome);
+        setLocationMessage(`Showing participating pharmacies within 25 km: ${body.data.outcome}.`);
       } catch {
         setFailed(true);
         setLocationMessage("Nearby inventory could not be loaded.");
@@ -94,16 +97,28 @@ export function InventorySearch({ query, marId, medicineId }: {
     {failed ? <p className="error" role="alert">Search is temporarily unavailable.</p> : null}
     {loading ? <p className="muted" role="status">Searching available inventory…</p> : null}
     {!failed && !loading && query ? <section aria-label="Search results" className="grid" style={{ marginTop: "1rem" }}>
+      {outcome ? <p className="muted">Availability outcome: <strong>{outcome}</strong></p> : null}
       {matches.length ? matches.map((match) => <article className="card" key={match.inventoryId}>
         <span className="status">{match.stockStatus}</span>
         <h2>{match.medicineName}</h2>
         <p>{match.pharmacyName}</p>
         <p className="muted">{match.pharmacyLocality ?? "Location unavailable"}</p>
-        {marId ? <MatchInventoryButton
+        {match.distanceKm !== undefined ? <p>{match.distanceKm.toFixed(1)} km away</p> : null}
+        {match.priceStatus === "AVAILABLE" && match.unitPriceMinor != null
+          ? <p>{match.currencyCode} {(match.unitPriceMinor / 100).toFixed(2)}</p>
+          : match.priceStatus === "PRICE_NOT_AVAILABLE"
+            ? <p className="muted">Price not available</p>
+            : null}
+        {match.relationship === "generic_related" ? <p className="muted">
+          Related generic option — pharmacist review is required before selection.
+        </p> : null}
+        {marId && match.reservationEligible !== false ? <MatchInventoryButton
           marId={marId}
           inventoryBatchId={match.inventoryId}
           pharmacyLocationId={match.pharmacyLocationId}
-        /> : <p className="muted">Start from your medication request to reserve.</p>}
+        /> : match.relationship === "generic_related"
+          ? null
+          : <p className="muted">Start from your medication request to reserve.</p>}
       </article>) : <div className="card">
         <h2>No nearby matches</h2>
         <p className="muted">Try a generic name or wider search area.</p>

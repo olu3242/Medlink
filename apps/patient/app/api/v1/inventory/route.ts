@@ -4,6 +4,7 @@ import {
   SupabaseAgentTaskObserver,
 } from "@medlink/agent-runtime";
 import { routeAgent } from "@medlink/agents";
+import type { MedicationDiscoveryResult } from "@medlink/pharmacy";
 import { z } from "zod";
 import { AccessApplication } from "../../../../lib/application";
 import { runExperienceApi } from "../../../../lib/api-server";
@@ -46,7 +47,7 @@ export const GET = (request: Request) => runExperienceApi(request, "patient.inve
     const result = await new AgentTaskExecutor(
       new MvpAgentPolicy(),
       new SupabaseAgentTaskObserver(database),
-    ).execute<Record<string, unknown>, InventorySearchResult[]>({
+    ).execute<Record<string, unknown>, InventorySearchResult[] | MedicationDiscoveryResult>({
       id: `${context.requestId}:inventory-discovery`,
       engine: "ML-ENG-013",
       capability: route.capabilityName,

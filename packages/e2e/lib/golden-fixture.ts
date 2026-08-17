@@ -12,6 +12,9 @@ export interface GoldenLoopFixture {
   readonly medicineId: string;
   readonly medicineName: string;
   readonly inventoryBatchId: string;
+  readonly genericMedicineId: string;
+  readonly genericPharmacyLocationId: string;
+  readonly genericInventoryBatchId: string;
   readonly whatsappPhoneNumberId: string;
   readonly whatsappChannelIdentity: string;
   readonly marId: string;
@@ -74,6 +77,24 @@ export async function provisionGoldenLoopFixture(
   );
   if (searchProjectionError) throw searchProjectionError;
 
+  const { data: discoveryData, error: discoveryError } = await service.rpc(
+    "certify_whatsapp_discovery_golden_fixture",
+    {
+      target_organization_id: scenario.organizationId,
+      target_requested_medicine_id: scenario.medicineId,
+      target_created_by: pharmacist.userId,
+      fixture_key: nonce,
+    },
+  );
+  if (discoveryError || !discoveryData) {
+    throw discoveryError ?? new Error("discovery fixture RPC returned no data");
+  }
+  const discovery = discoveryData as {
+    genericMedicineId: string;
+    genericPharmacyLocationId: string;
+    genericInventoryBatchId: string;
+  };
+
   // Clinical evidence is deliberately hidden from an ordinary pharmacist.
   // Provision the licensed identity that the real review RLS and decision RPC
   // require; the browser still has to authenticate and perform the decision.
@@ -112,6 +133,7 @@ export async function provisionGoldenLoopFixture(
 
   return {
     ...scenario,
+    ...discovery,
     isolationOrganizationId,
     whatsappPhoneNumberId,
     whatsappChannelIdentity,

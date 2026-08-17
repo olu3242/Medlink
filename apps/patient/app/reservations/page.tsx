@@ -5,6 +5,7 @@ import { EmptyState } from "@medlink/ui";
 import { useEffect, useState } from "react";
 import type { PatientReservation } from "../../lib/api";
 import { CredentialAction } from "./CredentialAction";
+import { PaymentAction } from "./PaymentAction";
 
 export default function ReservationsPage() {
   const [items, setItems] = useState<PatientReservation[]>([]);
@@ -38,6 +39,10 @@ export default function ReservationsPage() {
       : items.length ? <div className="grid">{items.map((item) => <article className="card" key={item.id}>
         <span className="status">{item.status}</span>
         <p className="muted">Requested <time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time></p>
+        {item.status === "confirmed" && item.payment_required ? <PaymentAction
+          reservationId={item.id}
+          captured={item.payments?.some((payment) => payment.status === "captured") ?? false}
+        /> : null}
         {item.status === "ready" && <CredentialAction
           reservationId={item.id}
           alreadyIssued={item.pickup_code_hash !== null}

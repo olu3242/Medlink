@@ -15,6 +15,7 @@
     "@medlink/inventory": "*",
     "@medlink/notifications": "*",
     "@medlink/observability": "*",
+    "@medlink/payments": "*",
     "@medlink/platform": "*",
     "@medlink/prescription": "*",
     "@medlink/runtime": "*",
