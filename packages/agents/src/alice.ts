@@ -1,6 +1,10 @@
 import type { AIGateway, PromptDefinition } from "@medlink/ai";
 import type { RuntimeContext } from "@medlink/runtime";
-import { detectsClinicalAdviceRequest, detectsClinicalDecisionLanguage } from "./alice-guardrail";
+import {
+  detectsAuthorityBypassRequest,
+  detectsClinicalAdviceRequest,
+  detectsClinicalDecisionLanguage,
+} from "./alice-guardrail";
 import { authorizeAgentCapability, type AgentAuthorizationDenialReason } from "./policy";
 import type { EscalationStore } from "./supervision";
 
@@ -40,7 +44,10 @@ export interface AliceAnswer {
 export interface AliceEscalation {
   readonly kind: "escalated";
   readonly escalationId: string;
-  readonly reason: "patient_question_requires_clinical_judgment" | "response_required_clinical_judgment";
+  readonly reason:
+    | "authority_bypass_attempt"
+    | "patient_question_requires_clinical_judgment"
+    | "response_required_clinical_judgment";
 }
 
 export type AliceResponse = AliceAnswer | AliceEscalation;
@@ -125,6 +132,10 @@ export class AliceAgent {
 
     if (detectsClinicalAdviceRequest(request.question)) {
       return this.escalate(context, request, "patient_question_requires_clinical_judgment");
+    }
+
+    if (detectsAuthorityBypassRequest(request.question)) {
+      return this.escalate(context, request, "authority_bypass_attempt");
     }
 
     const inputs: Record<string, string> =

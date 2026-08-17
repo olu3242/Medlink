@@ -46,6 +46,15 @@ const server = createServer(async (request, response) => {
       overallConfidence: 0.98,
     });
   }
+  if (request.url === "/anthropic/messages" && request.method === "POST") {
+    return json(response, 200, {
+      content: [{
+        type: "text",
+        text: "I can help you use MedLink to find verified pharmacy availability. Medicine, price, approval, reservation, payment, and fulfillment decisions remain with MedLink's domain services and licensed pharmacy team.",
+      }],
+      usage: { input_tokens: 24, output_tokens: 31 },
+    });
+  }
   if (request.url === "/whatsapp/messages" && request.method === "GET") {
     return json(response, 200, { messages: whatsAppMessages });
   }

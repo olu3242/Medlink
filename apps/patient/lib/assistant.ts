@@ -7,7 +7,13 @@ import { SupabaseEscalationStore } from "./escalation-store";
 
 function defaultAnthropicProvider(): ModelProvider {
   const environment = getServerEnvironment();
-  return new AnthropicMessagesProvider("anthropic-primary", environment.ANTHROPIC_API_KEY, environment.ANTHROPIC_MODEL);
+  return new AnthropicMessagesProvider(
+    "anthropic-primary",
+    environment.ANTHROPIC_API_KEY,
+    environment.ANTHROPIC_MODEL,
+    fetch,
+    environment.ANTHROPIC_ENDPOINT,
+  );
 }
 
 // AG-02 -- wires Alice to the real AI Gateway and a real, durable

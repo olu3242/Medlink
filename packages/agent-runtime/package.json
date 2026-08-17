@@ -1,1 +1,1 @@
-{"name":"@medlink/agent-runtime","version":"0.1.0","private":true,"type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@medlink/runtime":"*","@supabase/supabase-js":"^2.52.0"}}
+{"name":"@medlink/agent-runtime","version":"0.1.0","private":true,"type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@medlink/agents":"*","@medlink/runtime":"*","@supabase/supabase-js":"^2.52.0"}}

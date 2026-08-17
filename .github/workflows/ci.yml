@@ -269,6 +269,9 @@ jobs:
           export MEDLINK_PAYMENT_PROVIDER_KEY="medlink-e2e-payment-provider-key-0001"
           export PAYMENT_WEBHOOK_SECRET="medlink-e2e-payment-webhook-secret-0001"
           export MEDLINK_PAYMENT_REFUND_WORKER_TOKEN="medlink-e2e-payment-refund-worker-token-0001"
+          export ANTHROPIC_API_KEY="medlink-e2e-anthropic-key-0001"
+          export ANTHROPIC_MODEL="medlink-e2e-deterministic-v1"
+          export ANTHROPIC_ENDPOINT="http://127.0.0.1:4010/anthropic/messages"
 
           node packages/e2e/provider-simulator.mjs &
           WHATSAPP_ACCESS_TOKEN= PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
