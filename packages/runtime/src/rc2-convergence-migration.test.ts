@@ -62,6 +62,11 @@ const outboxOperationalVisibilitySql = readFileSync(join(
   "supabase/migrations/202608170056_outbox_operational_visibility.sql",
 ), "utf8").toLowerCase();
 
+const reservationFixtureWorkflowStateSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170057_reservation_live_fixture_workflow_state.sql",
+), "utf8").toLowerCase();
+
 describe("RC2 MAR validation to clinical review handoff", () => {
   it("creates the pending review and evidence in the validating transaction", () => {
     expect(sql).toContain("function public.validate_mar");
@@ -291,5 +296,18 @@ describe("tenant-safe outbox operational visibility", () => {
     expect(outboxOperationalVisibilitySql).toContain("public.has_organization_role(");
     expect(outboxOperationalVisibilitySql).toContain("from public, anon");
     expect(outboxOperationalVisibilitySql).not.toContain("event.payload");
+  });
+});
+
+describe("reservation live fixture workflow state", () => {
+  it("keeps the service-only fixture consistent with production reservation state", () => {
+    expect(reservationFixtureWorkflowStateSql).toContain(
+      "rename to certify_reservation_fulfillment_fixture_base",
+    );
+    expect(reservationFixtureWorkflowStateSql).toContain("auth.role() <> 'service_role'");
+    expect(reservationFixtureWorkflowStateSql).toContain("set state = 'reserved'");
+    expect(reservationFixtureWorkflowStateSql).toContain("public.reservations reservation");
+    expect(reservationFixtureWorkflowStateSql).toContain("to service_role");
+    expect(reservationFixtureWorkflowStateSql).not.toMatch(/to (anon|authenticated)/);
   });
 });
