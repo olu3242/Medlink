@@ -316,15 +316,20 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
   });
 
   await test.step("cross-persona authorization fails safely", async () => {
-    const patientOnPharmacy = await patientPage.request.get(`${pharmacyUrl}/api/v1/reservations`, {
-      headers: { Accept: "application/json" },
-    });
-    expect(patientOnPharmacy.status()).toBe(403);
-
-    const pharmacyOnPatient = await pharmacyPage.request.get(`${patientUrl}/api/v1/mar`, {
-      headers: { Accept: "application/json" },
-    });
-    expect(pharmacyOnPatient.status()).toBe(403);
+    const patientConfirm = await patientPage.request.patch(
+      `${pharmacyUrl}/api/v1/reservations/${reservationId}`,
+      { data: { status: "confirmed" } },
+    );
+    expect(patientConfirm.status()).toBe(403);
+    const patientReady = await patientPage.request.post(
+      `${pharmacyUrl}/api/v1/reservations/${reservationId}/ready`,
+    );
+    expect(patientReady.status()).toBe(403);
+    const patientCollect = await patientPage.request.post(
+      `${pharmacyUrl}/api/v1/reservations/${reservationId}/collect`,
+      { data: { pickupCode: "WRONGCODE" } },
+    );
+    expect(patientCollect.status()).toBe(403);
 
     const patientClinicalApproval = await patientPage.request.patch(
       `${pharmacistUrl}/api/v1/access-reviews/${fixture.reviewId}`,
@@ -343,6 +348,23 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       { data: { pickupCodeHash: "0".repeat(64) } },
     );
     expect(pharmacistCredential.status()).toBe(403);
+
+    const pharmacyCredential = await pharmacyPage.request.post(
+      `${patientUrl}/api/v1/reservations/${reservationId}/credential`,
+      { data: { pickupCodeHash: "0".repeat(64) } },
+    );
+    expect(pharmacyCredential.status()).toBe(403);
+
+    for (const [page, url] of [
+      [patientPage, `${patientUrl}/api/v1/mar`],
+      [pharmacistPage, `${pharmacistUrl}/api/v1/access-reviews/${fixture.reviewId}`],
+      [pharmacyPage, `${pharmacyUrl}/api/v1/reservations`],
+    ] as const) {
+      const crossTenant = await page.request.get(url, {
+        headers: { "x-medlink-tenant-id": fixture.isolationOrganizationId },
+      });
+      expect(crossTenant.status()).toBe(403);
+    }
   });
 
   await test.step("persisted identity, audit, idempotency, and outbox evidence are continuous", async () => {
@@ -395,6 +417,7 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
 
     console.log("golden-loop identifiers:", JSON.stringify({
       organizationId: fixture.organizationId,
+      isolationOrganizationId: fixture.isolationOrganizationId,
       medicineId: fixture.medicineId,
       marId: fixture.marId,
       reviewId: fixture.reviewId,
