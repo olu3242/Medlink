@@ -1136,6 +1136,26 @@ describe("outbox/audit read grants migration", () => {
   });
 });
 
+describe("agent escalation read grant migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608170064_agent_escalation_read_grant.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("makes the existing role-scoped read policy reachable without changing RLS", () => {
+    expect(sql).toContain(
+      "grant select on public.agent_escalations to authenticated, service_role;",
+    );
+    expect(sql).not.toContain("create policy");
+    expect(sql).not.toContain("alter table");
+  });
+});
+
 describe("outbox dispatch worker migration (G09 minimum slice)", () => {
   const sql = readFileSync(
     join(
