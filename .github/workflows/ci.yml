@@ -161,14 +161,12 @@ jobs:
   medication-golden-loop-e2e:
     # Gate 2 of the two-gate framing (browser-auth-e2e above is Gate 1,
     # "who is acting"): one real authenticated transaction across three
-    # personas -- patient match/reserve, pharmacy confirm/ready, patient
-    # pickup credential, pharmacy collect -- through real browser
-    # sessions, real Postgres, real RLS, real RPCs. Deliberately its own
+    # personas -- patient request, pharmacist review, patient match/reserve,
+    # pharmacy confirm/ready, patient pickup credential, pharmacy collect --
+    # through real browser sessions, real Postgres, real RLS, real RPCs.
+    # Deliberately its own
     # job, not folded into browser-auth-e2e, matching the "keep full
-    # medication golden-loop E2E separate" plan from PR #29. Only patient
-    # and pharmacy need to be running -- this suite's pharmacist step is
-    # fixture-certified, not browser-driven (see the pharmacist review UI
-    # gap documented in golden-loop.spec.ts and the RC1 release doc).
+    # medication golden-loop E2E separate" plan from PR #29.
     if: github.event_name == 'pull_request' && vars.RUN_LIVE_DATABASE_TESTS == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -182,15 +180,15 @@ jobs:
         working-directory: packages/e2e
       - run: npx supabase start
       - run: npx supabase db reset
-      - name: Build patient and pharmacy against the local Supabase instance
+      - name: Build patient, pharmacist, and pharmacy against the local Supabase instance
         shell: bash
         run: |
           set -euo pipefail
           eval "$(npx supabase status -o env)"
           NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
           NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
-          npm run build --workspace=apps/patient --workspace=apps/pharmacy
-      - name: Start patient and pharmacy, then run the medication golden-loop E2E suite
+          npm run build --workspace=apps/patient --workspace=apps/pharmacist --workspace=apps/pharmacy
+      - name: Start patient, pharmacist, and pharmacy, then run the medication golden-loop E2E suite
         shell: bash
         run: |
           set -euo pipefail
@@ -199,9 +197,10 @@ jobs:
           export NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY"
 
           PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
+          PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
           PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
 
-          for url in http://localhost:3000/auth/sign-in http://localhost:3002/auth/sign-in; do
+          for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in; do
             for _ in $(seq 1 30); do
               if curl -sf "$url" > /dev/null; then break; fi
               sleep 1
@@ -212,6 +211,7 @@ jobs:
           MEDLINK_E2E_SUPABASE_URL="$API_URL" \
           MEDLINK_E2E_SUPABASE_SERVICE_KEY="$SECRET_KEY" \
           MEDLINK_E2E_PATIENT_URL=http://localhost:3000 \
+          MEDLINK_E2E_PHARMACIST_URL=http://localhost:3003 \
           MEDLINK_E2E_PHARMACY_URL=http://localhost:3002 \
           MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
           npm run test:golden-loop --workspace=packages/e2e
@@ -221,5 +221,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: medication-golden-loop-e2e-report
-          path: packages/e2e/playwright-report/
+          path: |
+            packages/e2e/playwright-report/
+            packages/e2e/test-results/
           retention-days: 14
