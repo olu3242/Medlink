@@ -4,17 +4,12 @@
 -- invariants directly (not the create_mar/decide_clinical_review RPCs,
 -- which each authenticate as a single caller) so that patient- and
 -- pharmacist-attributed rows can be produced in one service-role
--- transaction, while still walking the MAR state machine transition by
--- transition through its guarding trigger rather than bypassing it.
+-- transaction, while still walking the MAR state machine through its
+-- initial validation rather than bypassing its guarding trigger.
 --
--- Unlike certify_reservation_fulfillment_fixture, this fixture stops at
--- 'matched' and creates NO reservation and NO inventory lock -- the
--- golden-loop E2E is specifically testing that a real authenticated
--- patient browser session can create that reservation for itself
--- through the real POST /api/v1/reservations route, not a pre-seeded
--- shortcut. The inventory batch is sized well above what the loop's
--- single reservation needs, so the golden loop is never a scarcity/
--- concurrency test -- concurrency remains the live suite's job.
+-- This fixture stops at 'validated' with a pending clinical review. The
+-- pharmacist browser must approve it, and the patient browser must match
+-- and reserve inventory. It creates NO reservation and NO inventory lock.
 create or replace function public.certify_medication_golden_loop_fixture(
   fixture_key text,
   patient_id uuid,
@@ -32,6 +27,7 @@ declare
   medicine_id uuid := gen_random_uuid();
   batch_id uuid := gen_random_uuid();
   mar_id uuid := gen_random_uuid();
+  review_id uuid;
 begin
   if auth.role() <> 'service_role' or fixture_key !~ '^[a-z0-9-]{6,80}$' then
     raise exception 'service-role certification context required' using errcode = '42501';
@@ -85,20 +81,10 @@ begin
     transition_idempotency_key = 'fixture-mar-validated-' || fixture_key
     where id = mar_id;
   insert into public.clinical_reviews(
-    organization_id, mar_id, decision, reviewed_by, reviewed_at, idempotency_key
+    organization_id, mar_id, decision, idempotency_key
   ) values (
-    organization_id, mar_id, 'approved', pharmacist_id, now(),
-    'fixture-review-' || fixture_key
-  );
-  update public.medication_access_requests set state = 'reviewed',
-    transition_idempotency_key = 'fixture-mar-reviewed-' || fixture_key
-    where id = mar_id;
-  update public.medication_access_requests set state = 'searching',
-    transition_idempotency_key = 'fixture-mar-searching-' || fixture_key
-    where id = mar_id;
-  update public.medication_access_requests set state = 'matched',
-    transition_idempotency_key = 'fixture-mar-matched-' || fixture_key
-    where id = mar_id;
+    organization_id, mar_id, 'pending', 'fixture-review-' || fixture_key
+  ) returning id into review_id;
 
   return jsonb_build_object(
     'organizationId', organization_id,
@@ -106,7 +92,8 @@ begin
     'medicineId', medicine_id,
     'medicineName', 'Golden Loop Medicine ' || fixture_key,
     'inventoryBatchId', batch_id,
-    'marId', mar_id
+    'marId', mar_id,
+    'reviewId', review_id
   );
 end;
 $$;

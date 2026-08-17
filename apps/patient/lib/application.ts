@@ -116,9 +116,31 @@ export class AccessApplication {
 
   async getMar(organizationId: string, id: string) {
     const row = await result(this.database.from("medication_access_requests")
-      .select("*, medicine:medicines(brand_name,generic_name), audit:mar_audit_events(*)")
+      .select("*, medicine:medicines(brand_name,generic_name)")
       .eq("organization_id", organizationId).eq("id", id).single());
     return toMar(row as MarRow);
+  }
+
+  async matchInventory(
+    context: RuntimeContext,
+    id: string,
+    input: {
+      inventoryBatchId: string;
+      pharmacyLocationId: string;
+      idempotencyKey: string;
+    },
+  ) {
+    return result(this.database.rpc("match_inventory", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: input.idempotencyKey,
+      target_channel: context.channel,
+      target_mar_id: id,
+      target_inventory_batch_id: input.inventoryBatchId,
+      target_pharmacy_location_id: input.pharmacyLocationId,
+    }));
   }
 
   async timeline(organizationId: string, marId: string) {

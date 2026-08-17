@@ -12,6 +12,7 @@ export interface GoldenLoopFixture {
   readonly medicineName: string;
   readonly inventoryBatchId: string;
   readonly marId: string;
+  readonly reviewId: string;
   readonly patient: GoldenLoopPersona;
   readonly pharmacist: GoldenLoopPersona;
   readonly pharmacyStaff: GoldenLoopPersona;
@@ -21,9 +22,9 @@ export interface GoldenLoopFixture {
 // one canonical medicine/MAR/inventory-batch scenario (via the
 // certify_medication_golden_loop_fixture RPC -- see
 // supabase/migrations/202608170041_medication_golden_loop_live_fixture.sql).
-// The MAR stops at 'matched': everything downstream (reserve, confirm,
-// ready, credential, collect) is created by the browser sessions
-// themselves through the real application, not by this fixture.
+// The MAR stops at 'validated' with a pending review. Review, match,
+// reserve, confirm, ready, credential, and collect are all driven by the
+// authenticated browser sessions through the real applications.
 export async function provisionGoldenLoopFixture(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -61,6 +62,7 @@ export async function provisionGoldenLoopFixture(
     medicineName: string;
     inventoryBatchId: string;
     marId: string;
+    reviewId: string;
   };
 
   return { ...scenario, patient, pharmacist, pharmacyStaff };

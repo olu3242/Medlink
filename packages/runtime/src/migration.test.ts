@@ -964,24 +964,19 @@ describe("medication golden loop live-certification fixture migration", () => {
     expect(sql).not.toContain("to authenticated;");
   });
 
-  it("walks the real MAR state machine transition by transition through matched, no further", () => {
+  it("stops at validated so the pharmacist and patient browsers perform review and matching", () => {
     const validatedIndex = sql.indexOf("state = 'validated'");
-    const reviewedIndex = sql.indexOf("state = 'reviewed'");
-    const searchingIndex = sql.indexOf("state = 'searching'");
-    const matchedIndex = sql.indexOf("state = 'matched'");
     expect(validatedIndex).toBeGreaterThan(-1);
-    expect(reviewedIndex).toBeGreaterThan(validatedIndex);
-    expect(searchingIndex).toBeGreaterThan(reviewedIndex);
-    expect(matchedIndex).toBeGreaterThan(searchingIndex);
+    expect(sql).not.toContain("state = 'reviewed'");
+    expect(sql).not.toContain("state = 'searching'");
+    expect(sql).not.toContain("state = 'matched'");
     expect(sql).not.toContain("state = 'reserved'");
   });
 
-  it("only marks the MAR reviewed after inserting an approved clinical review", () => {
-    const reviewInsertIndex = sql.indexOf("insert into public.clinical_reviews");
-    const reviewedStateIndex = sql.indexOf("state = 'reviewed'");
-    expect(reviewInsertIndex).toBeGreaterThan(-1);
-    expect(reviewedStateIndex).toBeGreaterThan(reviewInsertIndex);
-    expect(sql).toContain("'approved', pharmacist_id, now()");
+  it("creates one pending review for the real pharmacist browser", () => {
+    expect(sql).toContain("insert into public.clinical_reviews(");
+    expect(sql).toContain("organization_id, mar_id, 'pending'");
+    expect(sql).toContain("'reviewid', review_id");
   });
 
   it("creates no reservation and no inventory lock -- the browser session creates those itself", () => {
@@ -1002,6 +997,48 @@ describe("medication golden loop live-certification fixture migration", () => {
     expect(sql).toContain("(organization_id, patient_id, 'patient'),");
     expect(sql).toContain("(organization_id, pharmacist_id, 'pharmacist'),");
     expect(sql).toContain("(organization_id, pharmacy_staff_id, 'pharmacy_staff');");
+  });
+});
+
+describe("patient inventory matching migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608170043_patient_inventory_matching.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("exposes only eligible tenant inventory to a patient", () => {
+    expect(sql).toContain("create policy inventory_batches_patient_discovery");
+    expect(sql).toContain("array['patient']::public.member_role[]");
+    expect(sql).toContain("quantity_on_hand > quantity_reserved");
+    expect(sql).toContain("expires_on >= current_date");
+  });
+
+  it("requires patient ownership and exact canonical inventory identity", () => {
+    expect(sql).toContain("mar.patient_id is distinct from target_actor_id");
+    expect(sql).toContain("batch.medicine_id is distinct from mar.requested_medicine_id");
+    expect(sql).toContain("pharmacy_location_id = target_pharmacy_location_id");
+  });
+
+  it("walks reviewed to searching to matched without creating a lock", () => {
+    const reviewed = sql.indexOf("mar.state <> 'reviewed'");
+    const searching = sql.indexOf("state = 'searching'");
+    const matched = sql.indexOf("set state = 'matched'", searching);
+    expect(reviewed).toBeGreaterThan(-1);
+    expect(searching).toBeGreaterThan(reviewed);
+    expect(matched).toBeGreaterThan(searching);
+    expect(sql).not.toContain("insert into public.inventory_locks");
+    expect(sql).not.toContain("insert into public.reservations");
+  });
+
+  it("records canonical matching runtime evidence and supports exact replay", () => {
+    expect(sql).toContain("perform public.record_runtime_evidence");
+    expect(sql).toContain("'mar.inventory_matched'");
+    expect(sql).toContain("mar.transition_idempotency_key = target_idempotency_key || ':matched'");
   });
 });
 
