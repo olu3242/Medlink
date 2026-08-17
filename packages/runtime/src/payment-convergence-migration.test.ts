@@ -43,6 +43,12 @@ describe("payment convergence migration", () => {
     expect(paymentSql).toContain(
       "grant select on public.payments,public.payment_events,public.payment_attempts to service_role",
     );
+    expect(paymentSql).toContain(
+      "grant select,insert on public.notifications,public.notification_delivery_attempts to service_role",
+    );
+    expect(paymentSql).toContain(
+      "grant select,update on public.runtime_outbox_events to service_role",
+    );
   });
 });
 

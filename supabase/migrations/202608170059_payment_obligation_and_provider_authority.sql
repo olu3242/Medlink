@@ -310,6 +310,12 @@ revoke insert,update,delete on public.payment_attempts from authenticated;
 grant select on public.payments,public.payment_events,public.payment_attempts to authenticated;
 grant select on public.payments,public.payment_events,public.payment_attempts to service_role;
 grant all on public.payment_attempts to service_role;
+-- The scheduled notification worker persists idempotent payment lifecycle
+-- delivery evidence and publishes rows it claimed through the SECURITY
+-- DEFINER claim RPC. Opaque local service keys still require these table
+-- privileges explicitly; no authenticated role receives them.
+grant select,insert on public.notifications,public.notification_delivery_attempts to service_role;
+grant select,update on public.runtime_outbox_events to service_role;
 grant execute on function public.create_payment_attempt(uuid,uuid,uuid,text,text,text,text) to authenticated;
 grant execute on function public.apply_payment_provider_event(text,text,text,bigint,text) to service_role;
 
