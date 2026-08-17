@@ -66,6 +66,12 @@ describe("pharmacy catalog SKU mapping migration", () => {
     expect(sql).toContain("grant execute on function public.decide_pharmacy_catalog_mapping(");
   });
 
+  it("grants table-level select to back its own RLS read policies", () => {
+    expect(sql).toContain(
+      "grant select on public.pharmacy_catalog_items, public.pharmacy_catalog_mappings\n  to authenticated, service_role",
+    );
+  });
+
   it("is idempotent per organization on all three RPCs", () => {
     expect(sql).toContain("unique (organization_id, idempotency_key)");
     const occurrences = sql.match(/unique \(organization_id, idempotency_key\)/g) ?? [];

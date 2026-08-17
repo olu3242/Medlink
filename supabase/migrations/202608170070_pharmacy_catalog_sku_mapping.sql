@@ -149,10 +149,17 @@ comment on table public.pharmacy_catalog_mappings is
   'Governed, historied assertion that a pharmacy_catalog_items row represents a specific already-canonical medicines.id. At most one is_current=true row per item (partial unique index), and only ever a matched one. Superseding a mapping never deletes the prior row -- history/provenance is preserved by construction.';
 
 -- All writes go through these RPCs, matching create_inventory_batch/
--- reserve_inventory's own convention: authenticated table grants are
--- revoked, so nothing can bypass the invariants enforced here.
+-- reserve_inventory's own convention: authenticated table grants for
+-- insert/update/delete are revoked, so nothing can bypass the invariants
+-- enforced here. RLS policies above are a second, independent gate on top
+-- of ordinary table privileges, not a replacement for them -- the SELECT
+-- grant itself is still required or every read fails closed with 42501
+-- regardless of policy (the exact gap 202608170060 already had to fix once
+-- for public.refunds).
 revoke insert, update, delete on public.pharmacy_catalog_items from authenticated;
 revoke insert, update, delete on public.pharmacy_catalog_mappings from authenticated;
+grant select on public.pharmacy_catalog_items, public.pharmacy_catalog_mappings
+  to authenticated, service_role;
 
 create or replace function public.create_pharmacy_catalog_item(
   target_organization_id uuid,
