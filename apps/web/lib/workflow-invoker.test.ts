@@ -2,7 +2,11 @@ import { AgentTaskExecutor, MvpAgentPolicy } from "@medlink/agent-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { WorkflowService, type WorkflowInstance, type WorkflowStore } from "@medlink/workflows";
 import type { MedicineSearchService, SearchPage } from "@medlink/search";
-import { UnsupportedWorkflowTypeError, WorkflowOrchestratorInvoker } from "./workflow-invoker";
+import {
+  UnsupportedWorkflowTypeError,
+  WorkflowOrchestratorInvoker,
+  medicineSearchTerm,
+} from "./workflow-invoker";
 
 class InMemoryWorkflowStore implements WorkflowStore {
   private byId = new Map<string, WorkflowInstance>();
@@ -63,6 +67,16 @@ const organizationId = "00000000-0000-4000-8000-000000000001";
 const conversationId = "00000000-0000-4000-8000-000000000002";
 
 describe("WorkflowOrchestratorInvoker", () => {
+  it.each([
+    ["find ibuprofen", "ibuprofen"],
+    ["Search for Amoxicillin 500mg", "Amoxicillin 500mg"],
+    ["looking for metformin", "metformin"],
+    ["need medication atorvastatin", "atorvastatin"],
+    ["vitamin c", "vitamin c"],
+  ])("derives a bounded medicine term from %s", (message, expected) => {
+    expect(medicineSearchTerm(message)).toBe(expected);
+  });
+
   it("runs the medicine_search workflow and returns the completed instance's id and status", async () => {
     const invoker = new WorkflowOrchestratorInvoker(
       new WorkflowService(new InMemoryWorkflowStore()),

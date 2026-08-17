@@ -200,6 +200,8 @@ jobs:
           export MEDLINK_OCR_PROVIDER_URL="http://127.0.0.1:4010/ocr"
           export MEDLINK_PARSER_PROVIDER_URL="http://127.0.0.1:4010/parse"
           export MEDLINK_FILE_SCANNER_URL="http://127.0.0.1:4010/scan"
+          export WHATSAPP_APP_SECRET="medlink-e2e-whatsapp-secret-0001"
+          export WHATSAPP_VERIFY_TOKEN="medlink-e2e-whatsapp-verify-0001"
 
           node packages/e2e/provider-simulator.mjs &
           PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
@@ -222,6 +224,7 @@ jobs:
           MEDLINK_E2E_PHARMACY_URL=http://localhost:3002 \
           MEDLINK_E2E_WEB_URL=http://localhost:3004 \
           MEDLINK_E2E_CLINICAL_WORKER_TOKEN="$MEDLINK_CLINICAL_WORKER_TOKEN" \
+          MEDLINK_E2E_WHATSAPP_APP_SECRET="$WHATSAPP_APP_SECRET" \
           MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
           npm run test:golden-loop --workspace=packages/e2e
       - if: always()

@@ -9,6 +9,14 @@ export class UnsupportedWorkflowTypeError extends Error {
   }
 }
 
+export function medicineSearchTerm(messageBody: string): string {
+  const trimmed = messageBody.trim();
+  return trimmed.replace(
+    /^(?:find|search(?:\s+for)?|looking\s+for|need\s+(?:medicine|medication))\s+/i,
+    "",
+  ).trim();
+}
+
 // Adapts packages/workflows' WorkflowService to packages/conversation's
 // WorkflowInvoker port -- the connection ADR 0003's diagram draws between
 // the Conversation Engine and the Workflow Orchestrator. Only
@@ -38,7 +46,7 @@ export class WorkflowOrchestratorInvoker implements WorkflowInvoker {
     const context = input.workflowType === "medicine_search"
       && typeof input.context.term !== "string"
       && typeof input.context.messageBody === "string"
-      ? { ...input.context, term: input.context.messageBody }
+      ? { ...input.context, term: medicineSearchTerm(input.context.messageBody) }
       : input.context;
     const invoke = async () => {
       const instance = await this.service.run({

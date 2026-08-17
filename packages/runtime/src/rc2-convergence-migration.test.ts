@@ -42,6 +42,16 @@ const governedAgentEvidenceSql = readFileSync(join(
   "supabase/migrations/202608170052_governed_agent_execution_evidence.sql",
 ), "utf8").toLowerCase();
 
+const whatsappRuntimeAuthoritySql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170053_whatsapp_conversation_runtime_authority.sql",
+), "utf8").toLowerCase();
+
+const goldenLoopSearchFixtureSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170054_golden_loop_search_projection_fixture.sql",
+), "utf8").toLowerCase();
+
 describe("RC2 MAR validation to clinical review handoff", () => {
   it("creates the pending review and evidence in the validating transaction", () => {
     expect(sql).toContain("function public.validate_mar");
@@ -182,5 +192,59 @@ describe("governed agent execution evidence", () => {
     expect(governedAgentEvidenceSql).not.toContain(
       "grant select on public.ai_runs, public.ai_audit_events to authenticated",
     );
+  });
+});
+
+describe("WhatsApp conversation runtime authority", () => {
+  it("grants only the existing service adapters' bounded operations", () => {
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select on public.conversation_channel_bindings to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select, insert, update on public.conversations to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select, insert on public.conversation_messages to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select, insert on public.conversation_events to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select, insert, update on public.workflow_instances to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant execute on function public.search_medicines",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "grant select on public.generics to service_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).not.toMatch(/to (anon|authenticated)/);
+  });
+
+  it("keeps verified identity fixture provisioning service-only and role-bound", () => {
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "function public.certify_whatsapp_golden_loop_identity",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain("auth.role() <> 'service_role'");
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "membership.role = 'patient'::public.member_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain(
+      "membership.role = 'pharmacist'::public.member_role",
+    );
+    expect(whatsappRuntimeAuthoritySql).toContain("to service_role");
+  });
+});
+
+describe("golden-loop canonical search projection fixture", () => {
+  it("completes required medicine fields behind service-only authority", () => {
+    expect(goldenLoopSearchFixtureSql).toContain(
+      "function public.certify_golden_loop_search_projection",
+    );
+    expect(goldenLoopSearchFixtureSql).toContain("manufacturer_name");
+    expect(goldenLoopSearchFixtureSql).toContain("insert into public.active_ingredients");
+    expect(goldenLoopSearchFixtureSql).toContain("insert into public.medicine_ingredients");
+    expect(goldenLoopSearchFixtureSql).toContain("auth.role() <> 'service_role'");
+    expect(goldenLoopSearchFixtureSql).not.toMatch(/to (anon|authenticated)/);
   });
 });

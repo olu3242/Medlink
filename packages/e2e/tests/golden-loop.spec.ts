@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
@@ -11,6 +12,8 @@ const mailpitUrl = process.env.MEDLINK_E2E_MAILPIT_URL ?? "http://127.0.0.1:5432
 const webUrl = process.env.MEDLINK_E2E_WEB_URL ?? "http://localhost:3004";
 const clinicalWorkerToken = process.env.MEDLINK_E2E_CLINICAL_WORKER_TOKEN
   ?? "medlink-e2e-clinical-worker-token-0001";
+const whatsappAppSecret = process.env.MEDLINK_E2E_WHATSAPP_APP_SECRET
+  ?? "medlink-e2e-whatsapp-secret-0001";
 
 async function loadFixture(): Promise<GoldenLoopFixture> {
   const raw = await readFile(new URL("../.golden-loop-fixture.json", import.meta.url), "utf8");
@@ -50,6 +53,8 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
   let marId = fixture.marId;
   let reviewId = fixture.reviewId;
   let prescriptionId = "";
+  let conversationId = "";
+  let conversationWorkflowId = "";
 
   await test.step("patient uploads a prescription and governed providers produce human-review evidence", async () => {
     await signInWithMagicLink(patientPage, patientUrl, mailpitUrl, fixture.patient.email);
@@ -576,6 +581,115 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       expect(events.some(({ event_type }) => event_type === "AgentTask.completed")).toBe(true);
     }
 
+    const externalMessageId = `wamid.${reservationId}`;
+    const webhookPayload = {
+      object: "whatsapp_business_account",
+      entry: [{
+        id: "golden-loop-entry",
+        changes: [{
+          field: "messages",
+          value: {
+            messaging_product: "whatsapp",
+            metadata: { phone_number_id: fixture.whatsappPhoneNumberId },
+            messages: [{
+              from: fixture.whatsappChannelIdentity,
+              id: externalMessageId,
+              timestamp: String(Math.floor(Date.now() / 1_000)),
+              type: "text",
+              text: { body: `find ${fixture.medicineName}` },
+            }],
+          },
+        }],
+      }],
+    };
+    const rawWebhook = JSON.stringify(webhookPayload);
+    const signature = `sha256=${createHmac("sha256", whatsappAppSecret)
+      .update(rawWebhook, "utf8").digest("hex")}`;
+    const invalidSignature = await patientPage.request.post(
+      `${webUrl}/api/whatsapp/webhook`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "x-hub-signature-256": `sha256=${"0".repeat(64)}`,
+        },
+        data: rawWebhook,
+      },
+    );
+    expect(invalidSignature.status()).toBe(401);
+
+    for (let delivery = 0; delivery < 2; delivery += 1) {
+      const response = await patientPage.request.post(
+        `${webUrl}/api/whatsapp/webhook`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "x-hub-signature-256": signature,
+          },
+          data: rawWebhook,
+        },
+      );
+      expect(response.status(), await response.text()).toBe(200);
+    }
+
+    const { data: conversations, error: conversationError } = await service
+      .from("conversations")
+      .select("id,patient_id,current_intent,active_workflow_instance_id")
+      .eq("organization_id", fixture.organizationId)
+      .eq("channel_identity", fixture.whatsappChannelIdentity);
+    expect(conversationError, JSON.stringify(conversationError)).toBeNull();
+    expect(conversations).toHaveLength(1);
+    expect(conversations?.[0]).toMatchObject({
+      patient_id: fixture.patient.userId,
+      current_intent: "medicine_search",
+      active_workflow_instance_id: expect.any(String),
+    });
+    conversationId = conversations![0]!.id;
+    conversationWorkflowId = conversations![0]!.active_workflow_instance_id!;
+
+    const { data: inbound, error: inboundError } = await service
+      .from("conversation_messages")
+      .select("id")
+      .eq("organization_id", fixture.organizationId)
+      .eq("external_message_id", externalMessageId);
+    expect(inboundError, JSON.stringify(inboundError)).toBeNull();
+    expect(inbound).toHaveLength(1);
+
+    const { data: workflow, error: workflowError } = await service
+      .from("workflow_instances")
+      .select("id,status,completed_steps,context")
+      .eq("id", conversationWorkflowId)
+      .single();
+    expect(workflowError, JSON.stringify(workflowError)).toBeNull();
+    expect(workflow).toMatchObject({
+      status: "completed",
+      completed_steps: ["search_catalog"],
+      context: {
+        conversationId,
+        patientId: fixture.patient.userId,
+        searchResults: { matches: expect.any(Array) },
+      },
+    });
+    expect(JSON.stringify(workflow?.context)).toContain(fixture.medicineId);
+
+    const { data: conversationAgent, error: conversationAgentError } = await service
+      .from("ai_runs")
+      .select("id,status,correlation_id,input_reference")
+      .eq("organization_id", fixture.organizationId)
+      .eq("agent_name", "conversation_agent")
+      .eq("correlation_id", externalMessageId)
+      .single();
+    expect(conversationAgentError, JSON.stringify(conversationAgentError)).toBeNull();
+    expect(conversationAgent).toMatchObject({
+      status: "completed",
+      input_reference: {
+        agentId: "conversation",
+        capability: "route_intent",
+        persona: "patient",
+        conversationId,
+        workflowId: conversationWorkflowId,
+      },
+    });
+
     console.log("golden-loop identifiers:", JSON.stringify({
       organizationId: fixture.organizationId,
       isolationOrganizationId: fixture.isolationOrganizationId,
@@ -586,6 +700,8 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       inventoryBatchId: fixture.inventoryBatchId,
       reservationId,
       inventoryLockId,
+      conversationId,
+      conversationWorkflowId,
     }));
   });
 
