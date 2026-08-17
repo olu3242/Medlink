@@ -20,6 +20,7 @@ async function loadFixture(): Promise<GoldenLoopFixture> {
 // timing reasons the auth suite does (see docs/mvp-integration/
 // AUTHENTICATION.md's "known, non-blocking test reliability debt").
 test.setTimeout(120_000);
+test.describe.configure({ retries: 0 });
 
 test("authenticated medication access golden loop: patient -> pharmacist -> patient -> pharmacy -> patient -> pharmacy", async ({ browser }) => {
   const fixture = await loadFixture();
