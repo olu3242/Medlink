@@ -1042,6 +1042,27 @@ describe("patient inventory matching migration", () => {
   });
 });
 
+describe("clinical review read grant migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608170044_clinical_review_read_grant.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("allows authenticated review reads while leaving row scope to existing RLS", () => {
+    expect(sql).toContain(
+      "grant select on public.clinical_reviews to authenticated, service_role;",
+    );
+    expect(sql).not.toContain("grant insert");
+    expect(sql).not.toContain("grant update");
+    expect(sql).not.toContain("grant delete");
+  });
+});
+
 describe("mar_audit_events read grant migration", () => {
   const sql = readFileSync(
     join(
