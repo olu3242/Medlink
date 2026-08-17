@@ -1,21 +1,20 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function AccessReviewForm({ reviewId }: { reviewId: string }) {
-  const router = useRouter();
+export function AccessReviewForm({ reviewId, onCompleted }: { reviewId: string; onCompleted?: (decision: string) => void }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(form: FormData) {
     setBusy(true);
     setMessage("");
+    const decision = String(form.get("decision"));
     const response = await fetch(`/api/v1/access-reviews/${reviewId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        decision: form.get("decision"),
+        decision,
         recommendation: form.get("recommendation"),
       }),
     });
@@ -26,7 +25,7 @@ export function AccessReviewForm({ reviewId }: { reviewId: string }) {
     }
     setMessage("Medication-access review recorded with audit evidence.");
     setBusy(false);
-    router.refresh();
+    onCompleted?.(decision);
   }
 
   return <form className="decision" action={submit}>
