@@ -29,6 +29,17 @@ const CLINICAL_DECISION_LANGUAGE_PATTERNS: readonly RegExp[] = [
   /\bswitch (to|from) .* medicine\b/i,
 ];
 
+const AUTHORITY_BYPASS_REQUEST_PATTERNS: readonly RegExp[] = [
+  /\bignore (?:the )?pharmacist (?:approval|review|requirement)\b/i,
+  /\bmark (?:this|the) medicine as available\b/i,
+  /\bchange (?:the )?price\b/i,
+  /\breserve .* (?:inventory|stock) (?:is|says) (?:zero|empty|unavailable)\b/i,
+  /\btreat me as (?:a )?pharmacy staff\b/i,
+  /\bskip (?:the )?payment\b/i,
+  /\bmark (?:the )?(?:order|reservation) (?:as )?collected\b/i,
+  /\buse another pharmacy(?:'s)? inventory\b/i,
+];
+
 // Checked against the patient's own message, before any model call --
 // catches an obvious clinical question early, cheaply, and without ever
 // sending it to a non-clinical prompt.
@@ -42,4 +53,11 @@ export function detectsClinicalAdviceRequest(text: string): boolean {
 // instead (see alice.ts's respond()).
 export function detectsClinicalDecisionLanguage(text: string): boolean {
   return CLINICAL_DECISION_LANGUAGE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+// Prompt text can express an intent to bypass a domain boundary, but it
+// cannot grant authority. These requests are stopped before the model is
+// called and escalated for review; Alice has no domain tools regardless.
+export function detectsAuthorityBypassRequest(text: string): boolean {
+  return AUTHORITY_BYPASS_REQUEST_PATTERNS.some((pattern) => pattern.test(text));
 }

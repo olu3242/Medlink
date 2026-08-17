@@ -3,16 +3,11 @@ import type {
   AgentPolicyDecision,
   AgentTask,
 } from "./contracts";
+import { authorizeAgentTask } from "@medlink/agents";
 
-const allowed = new Set([
-  "file_scan",
-  "ocr",
-  "prescription_parse",
-  "clinical_warning",
-  "route_intent",
-  "search_medicine",
-  "search_inventory",
-  "reserve_inventory",
+const legacyTaskBindings = new Set([
+  "prescription-reader:ML-CAP-006:file_scan:patient",
+  "prescription-reader:ML-CAP-006:prescription_parse:service_account",
 ]);
 
 const pharmacistReview = new Map([
@@ -26,7 +21,15 @@ export class MvpAgentPolicy implements AgentPolicy {
   evaluate(
     task: Pick<
       AgentTask<unknown, unknown>,
-      "action" | "actor" | "capability" | "context" | "engine" | "tenantId"
+      | "action"
+      | "actor"
+      | "agentId"
+      | "capability"
+      | "context"
+      | "engine"
+      | "persona"
+      | "requiresHumanApproval"
+      | "tenantId"
     >,
   ): AgentPolicyDecision {
     if (task.context.tenantId !== task.tenantId) {
@@ -40,10 +43,21 @@ export class MvpAgentPolicy implements AgentPolicy {
         reason,
       };
     }
-    if (allowed.has(task.action)) return { status: "allowed" };
+    if (!task.agentId || !task.persona) {
+      return { status: "blocked", reason: "Agent identity and persona are required" };
+    }
+    const legacyKey = `${task.agentId}:${task.capability}:${task.action}:${task.persona}`;
+    if (legacyTaskBindings.has(legacyKey)) return { status: "allowed" };
+    const authorization = authorizeAgentTask({
+      agentId: task.agentId,
+      capabilityName: task.capability,
+      action: task.action,
+      role: task.persona,
+    });
+    if (authorization.allowed) return { status: "allowed" };
     return {
       status: "blocked",
-      reason: `Action '${task.action}' is not approved for the MVP`,
+      reason: `Agent task is not approved for the MVP (${authorization.reason})`,
     };
   }
 }
