@@ -6,7 +6,7 @@ export interface PatientNotification{ id:string; channel:string; template_key:st
 // row) that a pickup credential has already been issued for this
 // reservation -- never the plaintext, which no server ever stores.
 export interface PatientReservation{ id:string; status:string; pickup_code_hash:string|null; expires_at:string; created_at:string; confirmed_at?:string|null }
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 const origin=process.env.MEDLINK_API_URL??"http://localhost:3000";
 // Server components call this app's own API route via absolute-URL
 // fetch, which -- unlike a browser's same-origin relative fetch -- never
@@ -17,9 +17,13 @@ const origin=process.env.MEDLINK_API_URL??"http://localhost:3000";
 // prior revalidate:20 -- a response that now varies per session cookie
 // must never be shared across users via Next's fetch cache.
 async function get<T>(path:string):Promise<T>{
-  const incoming = await headers();
+  const [incoming, cookieStore] = await Promise.all([headers(), cookies()]);
   const forwarded = new Headers({ Accept: "application/json" });
-  for (const name of ["cookie", "authorization", "x-medlink-tenant-id"]) {
+  const cookieHeader = cookieStore.getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ");
+  if (cookieHeader) forwarded.set("cookie", cookieHeader);
+  for (const name of ["authorization", "x-medlink-tenant-id"]) {
     const value = incoming.get(name);
     if (value) forwarded.set(name, value);
   }
