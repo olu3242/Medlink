@@ -39,4 +39,8 @@ describe("payment refund on reservation exit migration", () => {
     expect(refundSql).toContain("succeeded_total >= payment_row.amount_minor");
     expect(refundSql).toContain("then 'refunded' else 'partially_refunded'");
   });
+
+  it("backs the pre-existing refunds RLS policy with the table-level grant it always lacked", () => {
+    expect(refundSql).toContain("grant select on public.refunds to authenticated, service_role");
+  });
 });

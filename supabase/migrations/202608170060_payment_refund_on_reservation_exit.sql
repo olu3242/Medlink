@@ -205,6 +205,15 @@ $$;
 revoke all on function public.apply_refund_provider_event(text,text,text,bigint,text) from public;
 grant execute on function public.apply_refund_provider_event(text,text,text,bigint,text) to service_role;
 
+-- refunds (migration 202607270004) shipped an RLS policy but never a
+-- table-level grant to back it -- RLS alone does not satisfy Postgres'
+-- own permission check, so every read failed closed with 42501
+-- regardless of policy. Read-only: every write to this table goes through
+-- the SECURITY DEFINER functions above, owned by a role that already
+-- bypasses RLS, matching how payments/payment_attempts/payment_events
+-- (202608170059) are granted.
+grant select on public.refunds to authenticated, service_role;
+
 comment on function public.initiate_reservation_refund_on_exit is
   'Creates one pending refund for a captured, un-refunded payment whenever its reservation leaves confirmed/ready for cancelled/expired. System-attributed (no authenticated end-user session exists on this path); idempotent per reservation.';
 comment on function public.apply_refund_provider_event is
