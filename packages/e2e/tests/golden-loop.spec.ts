@@ -294,6 +294,11 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
 
   await test.step("pharmacy confirms; a duplicate confirm replays instead of double-transitioning", async () => {
     await signInWithMagicLink(pharmacyPage, pharmacyUrl, mailpitUrl, fixture.pharmacyStaff.email);
+    const inboxResponse = await pharmacyPage.request.get(
+      `${pharmacyUrl}/api/v1/reservations`,
+      { headers: { Accept: "application/json" } },
+    );
+    expect(inboxResponse.status(), await inboxResponse.text()).toBe(200);
     await pharmacyPage.goto(`${pharmacyUrl}/reservations`);
     // Canonical identity continuity, step 3: the pharmacy sees the same
     // patient and the same medicine the fixture and the reservation above
@@ -529,6 +534,47 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
     expect((marAudit ?? []).map(({ to_state }) => to_state)).toEqual([
       "created", "validated", "reviewed", "searching", "matched", "reserved",
     ]);
+
+    const { data: agentRuns, error: agentRunsError } = await service.from("ai_runs")
+      .select("id,agent_name,status,prescription_id,mar_id,input_reference,idempotency_key")
+      .eq("organization_id", fixture.organizationId)
+      .or(`prescription_id.eq.${prescriptionId},mar_id.eq.${marId}`);
+    expect(agentRunsError, JSON.stringify(agentRunsError)).toBeNull();
+    const governedRuns = (agentRuns ?? []).filter(({ idempotency_key }) =>
+      idempotency_key.startsWith("agent-task:"));
+    const requiredAgents = new Set([
+      "ocr_agent",
+      "clinical_review_assistant",
+      "medicine_match_agent",
+      "inventory_agent",
+      "reservation_coordinator",
+    ]);
+    const observedAgents = new Set(governedRuns.map(({ agent_name }) => agent_name));
+    for (const agent of requiredAgents) expect(observedAgents.has(agent)).toBe(true);
+    for (const run of governedRuns) {
+      expect(run.status).toBe("completed");
+      expect(run.prescription_id).toBe(prescriptionId);
+      if (["inventory_agent", "reservation_coordinator"].includes(run.agent_name)) {
+        expect(run.mar_id).toBe(marId);
+      }
+      expect(run.input_reference).toMatchObject({
+        agentId: expect.any(String),
+        capability: expect.any(String),
+        persona: expect.any(String),
+        requiresHumanApproval: expect.any(Boolean),
+      });
+    }
+    const runIds = governedRuns.map(({ id }) => id);
+    const { data: agentAudit, error: agentAuditError } = await service
+      .from("ai_audit_events")
+      .select("ai_run_id,event_type,actor_id,metadata")
+      .in("ai_run_id", runIds);
+    expect(agentAuditError, JSON.stringify(agentAuditError)).toBeNull();
+    for (const runId of runIds) {
+      const events = (agentAudit ?? []).filter(({ ai_run_id }) => ai_run_id === runId);
+      expect(events.some(({ event_type }) => event_type === "AgentTask.started")).toBe(true);
+      expect(events.some(({ event_type }) => event_type === "AgentTask.completed")).toBe(true);
+    }
 
     console.log("golden-loop identifiers:", JSON.stringify({
       organizationId: fixture.organizationId,

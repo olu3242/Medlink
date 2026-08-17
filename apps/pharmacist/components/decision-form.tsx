@@ -109,7 +109,7 @@ export function DecisionForm({
     setMessage("");
     try {
       const rows = await data<MedicineMatch[]>(
-        `/api/v1/medicines/search?q=${encodeURIComponent(query)}`,
+        `/api/v1/medicines/search?q=${encodeURIComponent(query)}&reviewId=${encodeURIComponent(reviewId)}`,
       );
       setMatches((current) => ({ ...current, [itemId]: rows }));
     } catch {

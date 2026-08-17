@@ -37,6 +37,11 @@ const canonicalProjectionReadGrantsSql = readFileSync(join(
   "supabase/migrations/202608170051_canonical_projection_read_grants.sql",
 ), "utf8").toLowerCase();
 
+const governedAgentEvidenceSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170052_governed_agent_execution_evidence.sql",
+), "utf8").toLowerCase();
+
 describe("RC2 MAR validation to clinical review handoff", () => {
   it("creates the pending review and evidence in the validating transaction", () => {
     expect(sql).toContain("function public.validate_mar");
@@ -137,5 +142,45 @@ describe("canonical medicine projection grants", () => {
       `grant select on public.${relation} to authenticated, service_role`,
     );
     expect(canonicalProjectionReadGrantsSql).not.toMatch(/grant (insert|update|delete|all)/);
+  });
+});
+
+describe("governed agent execution evidence", () => {
+  it("persists router identity, policy, correlation, and lifecycle evidence", () => {
+    expect(governedAgentEvidenceSql).toContain(
+      "function public.record_governed_agent_task_event",
+    );
+    for (const field of [
+      "agentid",
+      "agentversion",
+      "capability",
+      "persona",
+      "workflowid",
+      "conversationid",
+      "correlationid",
+      "policyresult",
+      "requireshumanapproval",
+      "durationms",
+      "errorcode",
+    ]) expect(governedAgentEvidenceSql).toContain(`'${field}'`);
+    expect(governedAgentEvidenceSql).toContain("insert into public.ai_audit_events");
+    expect(governedAgentEvidenceSql).toContain("on conflict (organization_id, idempotency_key) do nothing");
+  });
+
+  it("derives canonical prescription/workflow context and enforces tenant authority", () => {
+    expect(governedAgentEvidenceSql).toContain("from public.medication_access_requests mar");
+    expect(governedAgentEvidenceSql).toContain("from public.clinical_validations validation");
+    expect(governedAgentEvidenceSql).toContain("target_actor_id is distinct from auth.uid()");
+    expect(governedAgentEvidenceSql).toContain(
+      "public.is_organization_member(target_organization_id)",
+    );
+    expect(governedAgentEvidenceSql).toContain("using errcode = '42501'");
+    expect(governedAgentEvidenceSql).toContain("to authenticated, service_role");
+    expect(governedAgentEvidenceSql).toContain(
+      "grant select on public.ai_runs, public.ai_audit_events to service_role",
+    );
+    expect(governedAgentEvidenceSql).not.toContain(
+      "grant select on public.ai_runs, public.ai_audit_events to authenticated",
+    );
   });
 });

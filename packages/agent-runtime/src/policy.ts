@@ -9,6 +9,10 @@ const allowed = new Set([
   "ocr",
   "prescription_parse",
   "clinical_warning",
+  "route_intent",
+  "search_medicine",
+  "search_inventory",
+  "reserve_inventory",
 ]);
 
 const pharmacistReview = new Map([

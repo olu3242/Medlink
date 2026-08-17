@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { AgentTaskExecutor, MvpAgentPolicy } from "@medlink/agent-runtime";
+import { describe, expect, it, vi } from "vitest";
 import { WorkflowService, type WorkflowInstance, type WorkflowStore } from "@medlink/workflows";
 import type { MedicineSearchService, SearchPage } from "@medlink/search";
 import { UnsupportedWorkflowTypeError, WorkflowOrchestratorInvoker } from "./workflow-invoker";
@@ -110,5 +111,37 @@ describe("WorkflowOrchestratorInvoker", () => {
         context: {},
       }),
     ).rejects.toThrow(UnsupportedWorkflowTypeError);
+  });
+
+  it("routes verified patient intent and records the resulting workflow handoff", async () => {
+    const record = vi.fn();
+    const invoker = new WorkflowOrchestratorInvoker(
+      new WorkflowService(new InMemoryWorkflowStore()),
+      new FakeSearchService(),
+      new AgentTaskExecutor(new MvpAgentPolicy(), { record }),
+    );
+
+    await invoker.invoke({
+      organizationId,
+      conversationId,
+      workflowType: "medicine_search",
+      idempotencyKey: "wamid.004",
+      context: {
+        patientId: "00000000-0000-4000-8000-000000000003",
+        messageBody: "find ibuprofen",
+      },
+    });
+
+    expect(record).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenLastCalledWith(expect.objectContaining({
+      agentId: "conversation",
+      capability: "route_intent",
+      persona: "patient",
+      status: "completed",
+      context: expect.objectContaining({
+        conversationId,
+        workflowId: "wamid.004",
+      }),
+    }));
   });
 });

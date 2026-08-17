@@ -2,6 +2,7 @@ import {
   AgentTaskExecutor,
   type AgentStage,
 } from "@medlink/agent-runtime";
+import { routeAgent } from "@medlink/agents";
 import { z } from "zod";
 import {
   structuredPrescriptionSchema,
@@ -278,20 +279,65 @@ implements AgentStage<string, ClinicalPipelineClaim, StageOutput> {
     signal: AbortSignal,
   ): Promise<StageOutput> {
     if (claim.stage === "clinical_validation") {
-      return {
-        stage: claim.stage,
-        findings: this.quality.validate(claim.extraction),
-      };
+      const route = routeAgent({
+        workflowType: "medication_access",
+        workflowState: claim.stage,
+        requiredCapability: "clinical.findings",
+        persona: "service_account",
+        tenantId: claim.tenantId,
+      });
+      const validation = await this.taskExecutor.execute({
+        id: `${claim.workflowId}:${claim.stage}:${claim.extractionId}:${claim.attempt}`,
+        engine: "ML-ENG-013",
+        capability: route.capabilityName,
+        action: "clinical_warning",
+        actor: "system",
+        tenantId: claim.tenantId,
+        correlationId: claim.correlationId,
+        agentId: route.agentId,
+        agentVersion: route.agentVersion,
+        persona: "service_account",
+        requiresHumanApproval: route.requiresHumanApproval,
+        context: {
+          tenantId: claim.tenantId,
+          patientId: claim.patientId,
+          prescriptionId: claim.prescriptionId,
+          workflowId: claim.workflowId,
+        },
+        input: { itemCount: claim.extraction.items.length },
+        execute: async () => this.quality.validate(claim.extraction),
+      });
+      if (validation.status !== "completed") {
+        throw new ClinicalPipelineError(
+          "clinical_task_unexpected_approval",
+          "Advisory clinical validation did not complete",
+          false,
+        );
+      }
+      return { stage: claim.stage, findings: validation.output };
     }
     const action = claim.stage === "ocr" ? "ocr" : "prescription_parse";
+    const route = claim.stage === "ocr"
+      ? routeAgent({
+          workflowType: "medication_access",
+          workflowState: claim.stage,
+          requiredCapability: "prescription.ocr",
+          persona: "service_account",
+          tenantId: claim.tenantId,
+        })
+      : null;
     const result = await this.taskExecutor.execute({
       id: `${claim.workflowId}:${claim.stage}:${claim.extractionId}:${claim.attempt}`,
       engine: "ML-ENG-013",
-      capability: "ML-CAP-006",
+      capability: route?.capabilityName ?? "ML-CAP-006",
       action,
       actor: "system",
       tenantId: claim.tenantId,
       correlationId: claim.correlationId,
+      agentId: route?.agentId ?? "prescription-reader",
+      agentVersion: route?.agentVersion ?? "1.0.0",
+      persona: "service_account",
+      requiresHumanApproval: route?.requiresHumanApproval ?? false,
       context: {
         tenantId: claim.tenantId,
         patientId: claim.patientId,

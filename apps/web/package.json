@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@medlink/agent-runtime": "*",
+    "@medlink/agents": "*",
     "@medlink/conversation": "*",
     "@medlink/database": "*",
     "@medlink/inventory": "*",

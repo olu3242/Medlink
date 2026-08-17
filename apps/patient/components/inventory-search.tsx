@@ -20,7 +20,9 @@ export function InventorySearch({ query, marId, medicineId }: {
     }
     setLoading(true);
     setFailed(false);
-    fetch(`/api/v1/inventory?q=${encodeURIComponent(query)}`, {
+    const params = new URLSearchParams({ q: query });
+    if (marId) params.set("marId", marId);
+    fetch(`/api/v1/inventory?${params}`, {
       headers: { Accept: "application/json" },
     }).then(async (response) => {
       if (!response.ok) throw new Error("Search unavailable");
@@ -28,7 +30,7 @@ export function InventorySearch({ query, marId, medicineId }: {
       if (active) setMatches(body.data);
     }).catch(() => active && setFailed(true)).finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [query]);
+  }, [marId, query]);
 
   function searchNearby() {
     if (!medicineId || !navigator.geolocation) {
@@ -47,6 +49,7 @@ export function InventorySearch({ query, marId, medicineId }: {
           radiusKm: "25",
           locationConsent: "true",
         });
+        if (marId) params.set("marId", marId);
         const response = await fetch(`/api/v1/inventory?${params}`, {
           headers: { Accept: "application/json" },
         });

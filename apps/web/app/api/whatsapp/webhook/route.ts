@@ -53,6 +53,10 @@ function getHandlers() {
       workflows: new WorkflowOrchestratorInvoker(
         new WorkflowService(new SupabaseWorkflowStore(database)),
         search,
+        new AgentTaskExecutor(
+          new MvpAgentPolicy(),
+          new SupabaseAgentTaskObserver(database),
+        ),
       ),
     });
   }
@@ -61,3 +65,8 @@ function getHandlers() {
 
 export const GET = (request: Request) => getHandlers().GET(request);
 export const POST = (request: Request) => getHandlers().POST(request);
+import {
+  AgentTaskExecutor,
+  MvpAgentPolicy,
+  SupabaseAgentTaskObserver,
+} from "@medlink/agent-runtime";

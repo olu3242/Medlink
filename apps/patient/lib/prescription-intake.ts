@@ -1,6 +1,7 @@
 import {
   AgentTaskExecutor,
   MvpAgentPolicy,
+  SupabaseAgentTaskObserver,
   type AgentTaskObserver,
 } from "@medlink/agent-runtime";
 import { runtimeLogger } from "@medlink/observability";
@@ -39,22 +40,29 @@ function unavailable(message: string, cause?: unknown) {
 export class HttpPrescriptionScanner implements PrescriptionScanner {
   private readonly executor: AgentTaskExecutor;
 
-  constructor(private readonly context: RuntimeContext) {
+  constructor(
+    private readonly context: RuntimeContext,
+    database: SupabaseClient,
+  ) {
+    const durable = new SupabaseAgentTaskObserver(database);
     const observer: AgentTaskObserver = {
-      record: (event) => runtimeLogger(context, {
-        service: "patient-app",
-        component: "agent-runtime",
-        operation: event.capability,
-      }).info("agent task state changed", {
-        durationMs: event.durationMs,
-        errorCode: event.errorCode,
-        attributes: {
-          event: "agent.task.telemetry",
-          taskId: event.taskId,
-          action: event.action,
-          status: event.status,
-        },
-      }),
+      record: async (event) => {
+        await durable.record(event);
+        runtimeLogger(context, {
+          service: "patient-app",
+          component: "agent-runtime",
+          operation: event.capability,
+        }).info("agent task state changed", {
+          durationMs: event.durationMs,
+          errorCode: event.errorCode,
+          attributes: {
+            event: "agent.task.telemetry",
+            taskId: event.taskId,
+            action: event.action,
+            status: event.status,
+          },
+        });
+      },
     };
     this.executor = new AgentTaskExecutor(new MvpAgentPolicy(), observer);
   }
@@ -73,6 +81,10 @@ export class HttpPrescriptionScanner implements PrescriptionScanner {
       actor: this.context.userId,
       tenantId: this.context.organizationId,
       correlationId: this.context.correlationId,
+      agentId: "prescription-reader",
+      agentVersion: "1.0.0",
+      persona: this.context.role,
+      requiresHumanApproval: false,
       context: {
         tenantId: this.context.organizationId,
         patientId: this.context.userId,

@@ -24,6 +24,7 @@ export class WorkflowOrchestratorInvoker implements WorkflowInvoker {
   constructor(
     private readonly service: WorkflowService,
     private readonly searchService: MedicineSearchService,
+    private readonly executor?: AgentTaskExecutor,
   ) {}
 
   async invoke(input: {
@@ -39,14 +40,60 @@ export class WorkflowOrchestratorInvoker implements WorkflowInvoker {
       && typeof input.context.messageBody === "string"
       ? { ...input.context, term: input.context.messageBody }
       : input.context;
-    const instance = await this.service.run({
+    const invoke = async () => {
+      const instance = await this.service.run({
+        tenantId: input.organizationId,
+        type: input.workflowType,
+        idempotencyKey: input.idempotencyKey,
+        context: { conversationId: input.conversationId, ...context },
+        steps,
+      });
+      return { workflowInstanceId: instance.id, status: instance.status };
+    };
+    if (!this.executor) return invoke();
+
+    const patientId = typeof input.context.patientId === "string"
+      ? input.context.patientId
+      : undefined;
+    const route = routeAgent({
+      workflowType: "medication_access",
+      workflowState: "intent_routed",
+      requiredCapability: "conversation.intent",
+      persona: "patient",
       tenantId: input.organizationId,
-      type: input.workflowType,
-      idempotencyKey: input.idempotencyKey,
-      context: { conversationId: input.conversationId, ...context },
-      steps,
     });
-    return { workflowInstanceId: instance.id, status: instance.status };
+    const taskContext: {
+      tenantId: string;
+      patientId?: string;
+      conversationId: string;
+      workflowId?: string;
+    } = {
+      tenantId: input.organizationId,
+      ...(patientId ? { patientId } : {}),
+      conversationId: input.conversationId,
+    };
+    const result = await this.executor.execute({
+      id: `${input.idempotencyKey}:conversation-route`,
+      engine: "ML-ENG-013",
+      capability: route.capabilityName,
+      action: "route_intent",
+      actor: patientId ?? "system",
+      tenantId: input.organizationId,
+      correlationId: input.idempotencyKey,
+      agentId: route.agentId,
+      agentVersion: route.agentVersion,
+      persona: "patient",
+      requiresHumanApproval: route.requiresHumanApproval,
+      context: taskContext,
+      input: { workflowType: input.workflowType },
+      execute: async () => {
+        const invoked = await invoke();
+        taskContext.workflowId = invoked.workflowInstanceId;
+        return invoked;
+      },
+    });
+    if (result.status !== "completed") throw new Error("Unexpected human gate");
+    return result.output;
   }
 
   private stepsFor(workflowType: string): readonly WorkflowStep[] {
@@ -56,3 +103,5 @@ export class WorkflowOrchestratorInvoker implements WorkflowInvoker {
     throw new UnsupportedWorkflowTypeError(workflowType);
   }
 }
+import { AgentTaskExecutor } from "@medlink/agent-runtime";
+import { routeAgent } from "@medlink/agents";

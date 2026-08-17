@@ -2,7 +2,9 @@ export interface AgentContext {
   readonly tenantId: string;
   readonly patientId?: string | undefined;
   readonly prescriptionId?: string | undefined;
+  readonly marId?: string | undefined;
   readonly workflowId?: string | undefined;
+  readonly conversationId?: string | undefined;
   readonly pharmacistId?: string | undefined;
   readonly pharmacyId?: string | undefined;
   readonly sessionId?: string | undefined;
@@ -16,6 +18,10 @@ export interface AgentTask<TInput, TOutput> {
   readonly actor: string;
   readonly tenantId: string;
   readonly correlationId: string;
+  readonly agentId?: string | undefined;
+  readonly agentVersion?: string | undefined;
+  readonly persona?: string | undefined;
+  readonly requiresHumanApproval?: boolean | undefined;
   readonly context: AgentContext;
   readonly input: TInput;
   execute(): Promise<TOutput>;
@@ -47,6 +53,12 @@ export interface AgentTaskTelemetry {
   readonly engine: string;
   readonly capability: string;
   readonly action: string;
+  readonly actor: string;
+  readonly agentId: string;
+  readonly agentVersion: string;
+  readonly persona: string;
+  readonly requiresHumanApproval: boolean;
+  readonly context: AgentContext;
   readonly status: AgentTaskStatus;
   readonly durationMs: number;
   readonly errorCode?: string | undefined;

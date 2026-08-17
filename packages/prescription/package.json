@@ -6,6 +6,7 @@
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
     "@medlink/agent-runtime": "*",
+    "@medlink/agents": "*",
     "zod": "^3.25.0"
   }
 }
