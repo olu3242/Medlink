@@ -151,7 +151,7 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
 
     const { data: reservation, error: reservationError } = await service
       .from("reservations")
-      .select("id,status,organization_id,patient_id,mar_id,inventory_batch_id")
+      .select("id,status,organization_id,patient_id,mar_id,pharmacy_location_id")
       .eq("id", reservationId)
       .single();
     expect(reservationError, JSON.stringify(reservationError)).toBeNull();
@@ -160,7 +160,7 @@ test("authenticated medication access golden loop: patient -> pharmacist -> pati
       organization_id: fixture.organizationId,
       patient_id: fixture.patient.userId,
       mar_id: fixture.marId,
-      inventory_batch_id: fixture.inventoryBatchId,
+      pharmacy_location_id: fixture.pharmacyLocationId,
     });
     const { data: lock, error: lockError } = await service
       .from("inventory_locks")
