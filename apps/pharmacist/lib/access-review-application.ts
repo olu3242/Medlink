@@ -33,6 +33,25 @@ export interface AccessReviewDetail {
 export class AccessReviewApplication {
   constructor(private readonly database: SupabaseClient) {}
 
+  async validateMar(context: RuntimeContext, marId: string) {
+    await result(this.database.rpc("validate_mar", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: `${marId}:validate`,
+      target_channel: context.channel,
+      target_mar_id: marId,
+    }));
+    const review = await result(this.database.from("clinical_reviews")
+      .select("id,mar_id,decision")
+      .eq("organization_id", context.organizationId)
+      .eq("mar_id", marId)
+      .eq("decision", "pending")
+      .single());
+    return review as { id: string; mar_id: string; decision: string };
+  }
+
   async get(organizationId: string, id: string): Promise<AccessReviewDetail> {
     const review = await result(this.database.from("clinical_reviews")
       .select("id,decision,recommendation,reviewed_by,reviewed_at,mar_id")
