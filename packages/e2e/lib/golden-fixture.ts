@@ -7,6 +7,7 @@ export interface GoldenLoopPersona {
 
 export interface GoldenLoopFixture {
   readonly organizationId: string;
+  readonly isolationOrganizationId: string;
   readonly pharmacyLocationId: string;
   readonly medicineId: string;
   readonly medicineName: string;
@@ -65,5 +66,14 @@ export async function provisionGoldenLoopFixture(
     reviewId: string;
   };
 
-  return { ...scenario, patient, pharmacist, pharmacyStaff };
+  const isolationOrganizationId = crypto.randomUUID();
+  const { error: isolationOrganizationError } = await service.from("organizations").insert({
+    id: isolationOrganizationId,
+    name: `Golden Loop Isolation ${nonce}`,
+    slug: `golden-loop-isolation-${nonce}`,
+    type: "pharmacy",
+  });
+  if (isolationOrganizationError) throw isolationOrganizationError;
+
+  return { ...scenario, isolationOrganizationId, patient, pharmacist, pharmacyStaff };
 }
