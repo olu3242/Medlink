@@ -34,11 +34,16 @@ export class WorkflowOrchestratorInvoker implements WorkflowInvoker {
     readonly context: Readonly<Record<string, unknown>>;
   }): Promise<WorkflowInvocationResult> {
     const steps = this.stepsFor(input.workflowType);
+    const context = input.workflowType === "medicine_search"
+      && typeof input.context.term !== "string"
+      && typeof input.context.messageBody === "string"
+      ? { ...input.context, term: input.context.messageBody }
+      : input.context;
     const instance = await this.service.run({
       tenantId: input.organizationId,
       type: input.workflowType,
       idempotencyKey: input.idempotencyKey,
-      context: { conversationId: input.conversationId, ...input.context },
+      context: { conversationId: input.conversationId, ...context },
       steps,
     });
     return { workflowInstanceId: instance.id, status: instance.status };

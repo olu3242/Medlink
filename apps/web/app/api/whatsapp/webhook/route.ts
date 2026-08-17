@@ -8,6 +8,7 @@ import {
 import {
   buildWhatsAppWebhookHandlers,
   toSupabaseChannelBindingLookup,
+  toSupabaseChannelIdentityLookup,
   UnwiredWorkflowInvoker,
 } from "../../../../lib/whatsapp-webhook";
 
@@ -34,6 +35,7 @@ function getHandlers() {
       appSecret: WHATSAPP_APP_SECRET,
       verifyToken: WHATSAPP_VERIFY_TOKEN,
       resolveOrganizationId: toSupabaseChannelBindingLookup(database),
+      resolveIdentity: toSupabaseChannelIdentityLookup(database),
       conversations: new SupabaseConversationRepository(database),
       messages: new SupabaseMessageStore(database),
       events: new SupabaseConversationEventLog(database),

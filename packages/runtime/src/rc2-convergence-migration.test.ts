@@ -7,6 +7,11 @@ const sql = readFileSync(join(
   "supabase/migrations/202608170045_mar_validation_review_handoff.sql",
 ), "utf8").toLowerCase();
 
+const channelIdentitySql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608170046_channel_identity_links.sql",
+), "utf8").toLowerCase();
+
 describe("RC2 MAR validation to clinical review handoff", () => {
   it("creates the pending review and evidence in the validating transaction", () => {
     expect(sql).toContain("function public.validate_mar");
@@ -22,5 +27,21 @@ describe("RC2 MAR validation to clinical review handoff", () => {
     expect(sql).toContain("organization_id = target_organization_id");
     expect(sql).toContain("and state = 'created'");
     expect(sql).toContain("on conflict (organization_id, idempotency_key)");
+  });
+});
+
+describe("RC2 verified channel identity authority", () => {
+  it("makes channel identity tenant-scoped and uniquely governed", () => {
+    expect(channelIdentitySql).toContain("create table public.channel_identity_links");
+    expect(channelIdentitySql).toContain("unique (organization_id, channel, channel_identity)");
+    expect(channelIdentitySql).toContain("status public.channel_identity_link_status");
+    expect(channelIdentitySql).toContain("status = 'verified'");
+  });
+
+  it("enables RLS and denies authenticated channel-link mutations", () => {
+    expect(channelIdentitySql).toContain("enable row level security");
+    expect(channelIdentitySql).toContain("channel_identity_links_admin_read");
+    expect(channelIdentitySql).toContain("revoke insert, update, delete");
+    expect(channelIdentitySql).toContain("grant select on public.channel_identity_links to authenticated, service_role");
   });
 });

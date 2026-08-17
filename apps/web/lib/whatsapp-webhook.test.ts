@@ -181,6 +181,7 @@ function baseDeps(overrides?: Partial<WhatsAppWebhookDependencies>): WhatsAppWeb
     verifyToken: VERIFY_TOKEN,
     resolveOrganizationId: async (phoneNumberId) =>
       phoneNumberId === "phone-number-1" ? ORGANIZATION_ID : null,
+    resolveIdentity: async () => "00000000-0000-4000-8000-000000000099",
     conversations: new InMemoryConversationRepository(),
     messages: new InMemoryMessageStore(),
     events: new InMemoryEventLog(),
