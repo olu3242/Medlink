@@ -58,6 +58,12 @@ live("Partner Engine live database",()=>{
       expect(readiness.ready,JSON.stringify(readiness)).toBe(true);
       const active=(await db.query("select (public.transition_partner_relationship($1,'activate',$2,$3,$4,$5)).*",[first.id,"All independently governed readiness requirements are satisfied",current.version,"activate-e2e-partner","corr-partner-e2e"])).rows[0];
       expect(active.relationship_status).toBe("active");
+      expect((await db.query("select public.partner_location_network_state($1) value",[location])).rows[0].value).toMatchObject({networkReady:false,legacyNetwork:false,blockers:["inventory_source_missing"]});
+      await db.query("insert into public.inventory_freshness_policies(reference,source_type,max_age_seconds,approved_by,approval_evidence,effective_at) values($1,'manual',3600,$2,$3,now())",["certification://inventory-freshness/manual-partner-e2e",reviewer,"certification-only duration; not a production policy"]);
+      await actor(applicant);
+      const source=(await db.query("select (public.create_inventory_source($1,$2,'manual',$3,$4)).id id",[approved.organization_id,location,"Partner E2E Manual Source","certification://inventory-freshness/manual-partner-e2e"])).rows[0];
+      await db.query("select public.record_inventory_source_sync($1,$2,'healthy',$3,$3,$4,$5)",[approved.organization_id,source.id,now,"certification://partner-source-sync/e2e","source-sync-e2e-partner"]);
+      await actor(reviewer);
       expect((await db.query("select public.partner_location_network_state($1) value",[location])).rows[0].value).toMatchObject({networkReady:true,legacyNetwork:false,blockers:[]});
       const suspended=(await db.query("select (public.transition_partner_relationship($1,'suspend',$2,$3,$4,$5)).*",[first.id,"Controlled suspension blocks new discovery while obligations remain governed",active.version,"suspend-e2e-partner","corr-partner-e2e"])).rows[0];
       expect(suspended.relationship_status).toBe("suspended");
