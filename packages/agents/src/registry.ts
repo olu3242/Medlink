@@ -219,6 +219,31 @@ export const governedAgentCatalog: readonly AgentIdentity[] = [
     ],
   },
   {
+    id: "partner-readiness",
+    name: "Partner Readiness Advisor",
+    mission: "Explain missing partner and location readiness evidence without approving, activating, or suspending a relationship.",
+    memoryBoundary: "none",
+    status: "active",
+    capabilities: [
+      {
+        name: "explain_partner_readiness",
+        description: "Summarize persisted readiness blockers for an authorized applicant or reviewer.",
+        mutatesState: false,
+        allowedRoles: ["tenant_admin", "pharmacy_owner", "platform_admin"],
+        requiresHumanApproval: false,
+        clinicalDecision: false,
+      },
+      {
+        name: "triage_integration_health",
+        description: "Recommend operator investigation from persisted integration-health evidence.",
+        mutatesState: false,
+        allowedRoles: ["tenant_admin", "pharmacy_owner", "platform_admin"],
+        requiresHumanApproval: false,
+        clinicalDecision: false,
+      },
+    ],
+  },
+  {
     id: "analytics",
     name: "Analytics Agent",
     mission: "Aggregate tenant-scoped operational metrics.",

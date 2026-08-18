@@ -12,7 +12,7 @@ import { createInventoryDiscoveryStep } from "./inventory-discovery";
 import { createPrescriptionUploadStep } from "./prescription-upload";
 
 describe("workflowDefinitions", () => {
-  it("defines a structural step sequence for all fifteen canonical workflows, matching their canonical names", () => {
+  it("defines a structural step sequence for every canonical workflow, matching its canonical name", () => {
     for (const [id, name] of canonicalWorkflows) {
       const definition = workflowDefinitions[id];
       expect(definition, `missing definition for ${id}`).toBeDefined();

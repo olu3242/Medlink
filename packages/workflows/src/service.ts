@@ -105,6 +105,7 @@ export const canonicalWorkflows = [
   ["WF-013", "Consultation"],
   ["WF-014", "Refill"],
   ["WF-015", "Workflow Completion"],
+  ["WF-016", "Partner Onboarding"],
 ] as const;
 
 export type CanonicalWorkflowId = (typeof canonicalWorkflows)[number][0];

@@ -2,7 +2,7 @@ import { Button } from "@medlink/ui";
 import { requestMagicLink } from "./actions";
 
 type SignInPageProps = {
-  searchParams: Promise<{ error?: string; sent?: string }>;
+  searchParams: Promise<{ error?: string; sent?: string; next?: string }>;
 };
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
@@ -27,6 +27,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
           </p>
         )}
         <form action={requestMagicLink} className="mt-6">
+          <input type="hidden" name="next" value={query.next?.startsWith("/") ? query.next : "/"} />
           <label className="block font-medium" htmlFor="email">Email address</label>
           <input
             autoComplete="email"

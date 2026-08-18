@@ -97,4 +97,9 @@ export const workflowDefinitions: Readonly<Record<CanonicalWorkflowId, WorkflowD
     name: "Workflow Completion",
     steps: ["finalize_mar", "emit_completion_event"],
   },
+  "WF-016": {
+    id: "WF-016",
+    name: "Partner Onboarding",
+    steps: ["application", "identity", "qualification", "compliance", "agreement", "integration", "activation"],
+  },
 };
