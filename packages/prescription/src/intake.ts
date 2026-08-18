@@ -26,7 +26,7 @@ export interface PrescriptionStorage {
     upload: PrescriptionUpload;
     idempotencyKey: string;
     sha256: string;
-  }): Promise<{ bucket: string; path: string }>;
+  }): Promise<{ bucket: string; path: string; created: boolean }>;
   remove(bucket: string, path: string): Promise<void>;
 }
 
@@ -76,6 +76,28 @@ function matchesSignature(upload: PrescriptionUpload): boolean {
   return false;
 }
 
+function matchesFileNamePolicy(upload: PrescriptionUpload): boolean {
+  const name = upload.fileName.trim();
+  if (
+    name.length === 0
+    || name.length > 255
+    || /[\\/]/.test(name)
+    || [...name].some((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || code === 127;
+    })
+    || name === "."
+    || name === ".."
+  ) return false;
+  const extension = name.split(".").at(-1)?.toLowerCase();
+  if (upload.mediaType === "application/pdf") return extension === "pdf";
+  if (upload.mediaType === "image/png") return extension === "png";
+  if (upload.mediaType === "image/jpeg") {
+    return extension === "jpg" || extension === "jpeg";
+  }
+  return false;
+}
+
 export class PrescriptionIntakeService {
   constructor(
     private readonly scanner: PrescriptionScanner,
@@ -100,6 +122,7 @@ export class PrescriptionIntakeService {
       )
       || upload.bytes.byteLength === 0
       || upload.bytes.byteLength > prescriptionMediaPolicy.maximumBytes
+      || !matchesFileNamePolicy(upload)
       || !matchesSignature(upload)
     ) {
       throw new PrescriptionUploadRejectedError(
@@ -138,7 +161,9 @@ export class PrescriptionIntakeService {
         requestId: input.requestId,
       });
     } catch (error) {
-      await this.storage.remove(stored.bucket, stored.path);
+      if (stored.created) {
+        await this.storage.remove(stored.bucket, stored.path);
+      }
       throw error;
     }
   }

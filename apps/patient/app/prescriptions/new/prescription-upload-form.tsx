@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 export function PrescriptionUploadForm() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const idempotencyKey = useRef<string | null>(null);
+
+  function selectFile() {
+    idempotencyKey.current = crypto.randomUUID();
+    setMessage("");
+  }
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -15,12 +21,15 @@ export function PrescriptionUploadForm() {
     try {
       const response = await fetch("/api/v1/prescriptions", {
         method: "POST",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+        headers: {
+          "Idempotency-Key": idempotencyKey.current ??= crypto.randomUUID(),
+        },
         body: form,
       });
       if (!response.ok) throw new Error();
       setMessage("Prescription received and queued for pharmacist review.");
       formElement.reset();
+      idempotencyKey.current = null;
     } catch {
       setMessage("The prescription could not be accepted. Check the file and retry.");
     } finally {
@@ -38,6 +47,7 @@ export function PrescriptionUploadForm() {
           name="file"
           type="file"
           accept="image/jpeg,image/png,application/pdf"
+          onChange={selectFile}
           required
         />
       </div>
