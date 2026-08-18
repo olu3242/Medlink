@@ -71,8 +71,7 @@ export const GET = (request: Request) => runExperienceApi(request, "patient.inve
       execute: () => input.medicineId
         && input.latitude !== undefined
         && input.longitude !== undefined
-        ? application.eligiblePharmacies({
-            organizationId: context.organizationId,
+        ? application.eligiblePharmacies(context, {
             medicineId: input.medicineId,
             latitude: input.latitude,
             longitude: input.longitude,

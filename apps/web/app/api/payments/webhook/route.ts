@@ -83,6 +83,29 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: { code: "payment_event_processing_failed" } }, { status: 503 });
   }
   const result = data as { outcome: string };
+  if (result.outcome === "unknown_payment") {
+    const { error: reconciliationError } = await database.rpc(
+      "open_payment_reconciliation_case",
+      {
+        target_organization_id: null,
+        target_payment_id: null,
+        target_provider_event_reference: parsed.data.eventId,
+        target_provider_payment_reference: parsed.data.providerReference,
+        target_reason: "orphan_provider_transaction",
+        target_provider_evidence: {
+          status: parsed.data.status,
+          amountMinor: parsed.data.amountMinor,
+          currency: parsed.data.currency,
+        },
+      },
+    );
+    if (reconciliationError) {
+      return Response.json(
+        { error: { code: "payment_reconciliation_recording_failed" } },
+        { status: 503 },
+      );
+    }
+  }
   const status = result.outcome === "unknown_payment"
     ? 404
     : result.outcome === "rejected_mismatch"

@@ -1,10 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RuntimeError, type RuntimeContext } from "@medlink/runtime";
-import {
-  classifyMedicationDiscovery,
-  findEligiblePharmacies,
-  type EligibleInventory,
-  type EligiblePharmacyLocation,
+import type {
+  MedicationDiscoveryOption,
+  MedicationDiscoveryResult,
 } from "@medlink/pharmacy";
 
 async function result<T>(
@@ -108,89 +106,56 @@ export class AccessApplication {
     return (rows as InventoryRow[]).map(toMatch);
   }
 
-  async eligiblePharmacies(input: {
-    organizationId: string; medicineId: string; latitude: number;
+  async eligiblePharmacies(context: RuntimeContext, input: {
+    medicineId: string; latitude: number;
     longitude: number; radiusKm: number; locationConsent: boolean;
   }) {
-    const [{ data: locations, error: locationError }, { data: requested, error: requestedError }] =
-      await Promise.all([
-        this.database.from("pharmacy_locations")
-          .select("id,name,latitude,longitude,is_active,is_24_hours,updated_at")
-          .eq("organization_id", input.organizationId).is("deleted_at", null),
-        this.database.from("medicines")
-          .select("id,generic_id,dosage_form,strength_display")
-          .eq("id", input.medicineId).eq("status", "active").single(),
-      ]);
-    if (locationError || requestedError) throw new RuntimeError(
-      "infrastructure", "inventory_discovery_failed",
-      "Nearby inventory could not be loaded", 503, true, "Retry later.",
-      { cause: locationError ?? requestedError },
-    );
-
-    const canonicalLocations: EligiblePharmacyLocation[] = (locations ?? []).map((row) => ({
-        id: row.id, tenantId: input.organizationId, name: row.name,
-        location: { latitude: Number(row.latitude), longitude: Number(row.longitude) },
-        active: row.is_active, open24Hours: row.is_24_hours, updatedAt: row.updated_at,
+    const consent = input.locationConsent
+      ? await result(this.database.rpc("capture_marketplace_location_consent", {
+          target_organization_id: context.organizationId,
+          target_actor_id: context.userId,
+          target_idempotency_key: `${context.requestId}:marketplace-location-consent`,
+          target_policy_version: "marketplace-location-v1",
+        })) as { id: string }
+      : null;
+    const rows = (await result(this.database.rpc("discover_marketplace_inventory", {
+      target_patient_organization_id: context.organizationId,
+      target_medicine_id: input.medicineId,
+      target_latitude: input.latitude,
+      target_longitude: input.longitude,
+      target_radius_km: input.radiusKm,
+      target_quantity: 1,
+      target_consent_id: consent?.id ?? null,
+    })) ?? []) as Record<string, unknown>[];
+    const options = rows.map((row): MedicationDiscoveryOption => ({
+      relationship: row.relationship === "exact" ? "exact" : "generic_related",
+      medicineId: String(row.medicine_id),
+      medicineName: String(row.medicine_name),
+      inventoryId: String(row.inventory_id),
+      pharmacyLocationId: String(row.pharmacy_location_id),
+      pharmacyName: String(row.pharmacy_name),
+      pharmacyLocality: String(row.pharmacy_locality),
+      distanceKm: Number(row.distance_km),
+      stockStatus: String(row.availability_state),
+      inventoryTimestamp: String(row.inventory_timestamp),
+      unitPriceMinor: row.unit_price_minor == null ? null : Number(row.unit_price_minor),
+      currencyCode: row.currency_code == null ? null : String(row.currency_code),
+      priceStatus: row.unit_price_minor == null || row.currency_code == null
+        ? "PRICE_NOT_AVAILABLE" : "AVAILABLE",
+      reservationEligible: Boolean(row.reservation_eligible),
+      pharmacistReviewRequired: Boolean(row.pharmacist_review_required),
     }));
-    let relatedMedicineIds: string[] = [];
-    if (requested.generic_id) {
-      const { data: related, error: relatedError } = await this.database.from("medicines")
-        .select("id")
-        .eq("generic_id", requested.generic_id)
-        .eq("dosage_form", requested.dosage_form)
-        .eq("strength_display", requested.strength_display)
-        .eq("status", "active")
-        .neq("id", input.medicineId)
-        .limit(20);
-      if (relatedError) throw new RuntimeError(
-        "infrastructure", "inventory_discovery_failed",
-        "Nearby inventory could not be loaded", 503, true, "Retry later.",
-        { cause: relatedError },
-      );
-      relatedMedicineIds = (related ?? []).map(({ id }) => id);
-    }
-    const medicineIds = [input.medicineId, ...relatedMedicineIds];
-    const availability = await Promise.all(medicineIds.map(async (medicineId) => {
-      const { data, error } = await this.database.rpc("search_inventory_availability", {
-        target_organization_id: input.organizationId,
-        target_medicine_id: medicineId,
-        target_pharmacy_location_id: null,
-        target_quantity: 1,
-      });
-      if (error) throw new RuntimeError(
-        "infrastructure", "inventory_discovery_failed",
-        "Nearby inventory could not be loaded", 503, true, "Retry later.",
-        { cause: error },
-      );
-      return (data ?? []).map((row: Record<string, unknown>): EligibleInventory => ({
-        inventoryId: String(row.inventory_id),
-        pharmacyLocationId: String(row.pharmacy_location_id),
-        medicineId: String(row.medicine_id),
-        medicineName: String(row.brand_name || row.generic_name),
-        expiresOn: String(row.expires_on),
-        availableQuantity: Number(row.available_quantity),
-        state: String(row.availability_state),
-        observedAt: new Date().toISOString(),
-        unitPriceMinor: row.unit_price_minor == null ? null : Number(row.unit_price_minor),
-        currencyCode: row.currency_code == null ? null : String(row.currency_code),
-      }));
-    }));
-    const eligible = (medicineId: string, inventory: EligibleInventory[]) =>
-      findEligiblePharmacies({
-        tenantId: input.organizationId,
-        medicineId,
-        origin: { latitude: input.latitude, longitude: input.longitude },
-        radiusKm: input.radiusKm,
-        locationConsent: input.locationConsent,
-        locations: canonicalLocations,
-        inventory,
-      });
-    return classifyMedicationDiscovery({
+    const exact = options.filter((option) => option.relationship === "exact");
+    const generic = options.filter((option) => option.relationship === "generic_related");
+    const outcome = exact.length && generic.length ? "BOTH_AVAILABLE"
+      : exact.length ? "EXACT_BRAND_AVAILABLE"
+        : generic.length ? "GENERIC_AVAILABLE" : "NONE_AVAILABLE";
+    return {
       requestedMedicineId: input.medicineId,
-      exact: eligible(input.medicineId, availability[0] ?? []),
-      generic: relatedMedicineIds.flatMap((medicineId, index) =>
-        eligible(medicineId, availability[index + 1] ?? [])),
-    });
+      outcome,
+      exact,
+      generic,
+    } satisfies MedicationDiscoveryResult;
   }
 
   async pharmacies(organizationId: string) {
