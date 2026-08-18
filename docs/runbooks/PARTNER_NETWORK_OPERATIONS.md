@@ -74,4 +74,8 @@ These runbooks preserve domain authority. Never fix an operational symptom by di
 - Escalate: database owner and incident commander.
 - Verify: partner identity continuity, location/inventory, medicines, reservations, payments, fulfillment, audit/outbox, and workflow persistence.
 
-Production backup/restore and rollback remain blocked until deployment-specific policies and executable evidence are supplied (`BACKUP_POLICY_REQUIRED`, `RECOVERY_POLICY_REQUIRED`).
+The canonical continuity requirements are defined in
+`NETWORK_TRANSACTION_CONTINUITY.md`. Production backup certification remains
+blocked until deployment-specific mechanism/frequency/retention, owner-approved
+RPO/RTO, and executable restore evidence are supplied. Recovery policy is
+codified, but certification still requires measured restart/replay evidence.
