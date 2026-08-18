@@ -6,6 +6,10 @@ const sql = readFileSync(join(
   process.cwd(),
   "supabase/migrations/202607300016_mvp_prescription_intake.sql",
 ), "utf8").toLowerCase();
+const documentAccessSql = readFileSync(join(
+  process.cwd(),
+  "supabase/migrations/202608180065_secure_prescription_document_access.sql",
+), "utf8").toLowerCase();
 
 describe("ML-WF-001 prescription intake migration", () => {
   it("uses private tenant-scoped storage and immutable file evidence", () => {
@@ -30,5 +34,13 @@ describe("ML-WF-001 prescription intake migration", () => {
     expect(sql).toContain("idempotency key was already used for another prescription");
     expect(sql).toContain("f.sha256 = target_sha256");
     expect(sql).toContain("f.storage_object_path = target_path");
+  });
+
+  it("keeps raw clinical documents inaccessible to pharmacy fulfillment roles", () => {
+    expect(documentAccessSql).toContain("'platform_admin', 'tenant_admin', 'pharmacist'");
+    expect(documentAccessSql).not.toContain("'pharmacy_owner'");
+    expect(documentAccessSql).not.toContain("'pharmacy_staff'");
+    expect(documentAccessSql).toContain("p.patient_id = auth.uid()");
+    expect(documentAccessSql).toContain("bucket_id = 'prescriptions-private'");
   });
 });
