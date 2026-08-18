@@ -13,6 +13,8 @@ export interface AuthE2EFixture {
   readonly pharmacyStaff: AuthE2EPersona;
   readonly otherTenantPharmacist: AuthE2EPersona;
   readonly multiPersona: AuthE2EPersona;
+  readonly partnerApplicant: AuthE2EPersona;
+  readonly partnerReviewer: AuthE2EPersona;
 }
 
 // Deterministic tenant + one real, magic-link-addressable identity per
@@ -39,7 +41,7 @@ export async function provisionAuthE2EFixture(
     return { email, userId: created.data.user.id };
   }
 
-  const [patient, pharmacist, pharmacyStaff, otherTenantPharmacist, multiPersona] = await Promise.all([
+  const [patient, pharmacist, pharmacyStaff, otherTenantPharmacist, multiPersona, partnerApplicant, partnerReviewer] = await Promise.all([
     createPersona("patient"),
     createPersona("pharmacist"),
     createPersona("pharmacy-staff"),
@@ -47,6 +49,8 @@ export async function provisionAuthE2EFixture(
     // Same person holding two legitimate roles in the same organization
     // -- one identity, multiple memberships (Section 14).
     createPersona("multi-persona"),
+    createPersona("partner-applicant"),
+    createPersona("partner-reviewer"),
   ]);
 
   const organizationId = crypto.randomUUID();
@@ -69,6 +73,8 @@ export async function provisionAuthE2EFixture(
     { id: pharmacyStaff.userId, display_name: "E2E Pharmacy Staff" },
     { id: otherTenantPharmacist.userId, display_name: "E2E Other Tenant Pharmacist" },
     { id: multiPersona.userId, display_name: "E2E Multi Persona" },
+    { id: partnerApplicant.userId, display_name: "E2E Partner Applicant" },
+    { id: partnerReviewer.userId, display_name: "E2E Partner Reviewer" },
   ]);
   if (profilesError) throw profilesError;
 
@@ -86,8 +92,9 @@ export async function provisionAuthE2EFixture(
     { organization_id: otherOrganizationId, user_id: otherTenantPharmacist.userId, role: "pharmacist" },
     { organization_id: organizationId, user_id: multiPersona.userId, role: "pharmacist" },
     { organization_id: otherOrganizationId, user_id: multiPersona.userId, role: "pharmacy_staff" },
+    { organization_id: organizationId, user_id: partnerReviewer.userId, role: "platform_admin" },
   ]);
   if (membershipsError) throw membershipsError;
 
-  return { organizationId, otherOrganizationId, patient, pharmacist, pharmacyStaff, otherTenantPharmacist, multiPersona };
+  return { organizationId, otherOrganizationId, patient, pharmacist, pharmacyStaff, otherTenantPharmacist, multiPersona, partnerApplicant, partnerReviewer };
 }

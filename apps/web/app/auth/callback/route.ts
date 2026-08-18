@@ -3,7 +3,9 @@ import { createSupabaseServerClient } from "../../../lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
-  const destination = new URL("/", request.url);
+  const requestedNext = request.nextUrl.searchParams.get("next");
+  const safeNext = requestedNext?.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
+  const destination = new URL(safeNext, request.url);
 
   if (!code) {
     destination.pathname = "/auth/sign-in";
