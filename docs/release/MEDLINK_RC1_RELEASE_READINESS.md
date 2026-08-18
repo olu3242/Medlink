@@ -1,68 +1,178 @@
-# MedLink Medication Access RC1 — Release Readiness
+# MedLink RC1 MVP release readiness
 
-Canonical base: `main` @ `a008d41` (PR #27 merged). This branch (`feat/medication-access-rc1-browser-e2e`, PR #28) adds the scheduled notification worker, the reservation-expiry audit trail, and an outbox-claim-race proof on top of that base.
+Canonical certification baseline: `3f93092ba90369a6e4921fedcf7ef0236d503fcd`
+(PR #37 merged). This document classifies the assembled product separately
+from external-provider production certification. A simulator, fixture, local
+Supabase stack, or deterministic adapter is never treated as live-provider
+evidence.
 
-## Certified transaction foundation (do not redesign)
+## Release verdict
 
-- **MERDP**: 9,008 products / 8,994 canonical medicines / 5,429 certified+published / 1,389 manufacturers / 11,707 relationships / 2,700 off-list evidence / 0 unsafe NRN merges. Diff vs `main` = 0 (verified this round; not re-acquired).
-- **Medication transaction**: `reviewed → searching → matched → reserved`.
-- **Reservation**: `pending → confirmed → ready → collected`, or `pending → cancelled`, or (this round) any of `pending/confirmed/ready → expired`.
-- **Inventory lock**: `active → consumed`, `active → released` (cancel), `active → expired` (this round).
-- **Pickup credential**: patient-issued, client-side generated (Web Crypto), hash-only persistence, tenant/patient isolated, non-rotating, consumed (hash nulled) on collection, never sent over WhatsApp/outbox/audit.
-- **Notifications**: `reservation.{confirmed,cancelled,ready,collected}.v1`, tenant-scoped recipient resolution, durable outbox with retry/dead-letter, transaction-independent (failure never rolls back the domain transaction).
-- **Live baseline**: 21/21 (PR #27) → 23 tests collected on this branch (+2: expiry proof, outbox-claim-race proof); pending live CI confirmation on the pushed commit.
+**RC1_FUNCTIONALLY_CERTIFIED — LIVE_PROVIDER_CERTIFICATION_REQUIRED**
 
-## This round's changes
+The assembled three-persona medication-access product is E2E certified. A
+production release is not yet `MVP_RELEASE_READY` because no evidence in this
+repository proves execution against the intended hosted Supabase deployment,
+payment provider, Meta WhatsApp account, Anthropic account, production OCR and
+prescription-structure providers, or production notification delivery path.
+Managed backup/restore, environment-parity, target-deployment smoke, and
+rollback exercises also remain deployment gates.
 
-1. **Notification dispatch worker** (`POST /api/internal/notification-dispatch`, `apps/web`): closes the gap where dispatch only advanced opportunistically on reservation-route HTTP traffic. Reuses the exact bearer-token pattern already established by `/api/internal/inventory-expiry` and `/api/internal/clinical-pipeline`.
-2. **Reservation expiry audit trail**: `release_expired_inventory_holds` already atomically expired overdue reservations/locks/MARs (`FOR UPDATE OF lock SKIP LOCKED`) — this was previously uncertified by any test. Added a `fulfillment_transitions` row per expiry (matching every other lifecycle RPC) and a live-DB proof.
-3. **Outbox claim-race proof**: live test confirming two concurrent workers calling `claim_runtime_outbox_events` against the same eligible event never both own it.
+## Status model
 
-## Authentication prerequisite: RESOLVED (PR #29)
+- `NOT_IMPLEMENTED`: no usable implementation exists.
+- `FUNCTIONALLY_IMPLEMENTED`: implementation and focused tests exist.
+- `E2E_CERTIFIED`: the assembled path has deterministic application/database
+  evidence, including real PostgreSQL where transaction semantics matter.
+- `LIVE_PROVIDER_CERTIFIED`: the actual production provider path was exercised
+  with retained evidence.
 
-`apps/patient`, `apps/pharmacist`, and `apps/pharmacy` each now extend `apps/web`'s own already-accepted magic-link pattern (self-contained sign-in/callback/logout, no cross-app cookie-domain sharing), rather than requiring a novel production auth-topology decision. Certified via real browser E2E (Playwright + Mailpit, real magic-link flow, no session bypass): patient/pharmacist/pharmacy auth, multi-persona (one identity, multiple memberships, ambiguous context fails closed), tenant isolation, RLS, and session security all PASS — 9/9 browser auth tests, live medication regression intact at 23/23. Full detail and the architectural chain: `docs/mvp-integration/AUTHENTICATION.md`.
+## Product release matrix
 
-Three previously-latent defects were found and fixed while certifying this: `requestDatabase()` was forcing an empty `Authorization` header for cookie-based sessions (silently downgrading every authenticated data query to Postgres role `anon`); several identity/clinical/pharmacy tables had RLS policies but no table-level `GRANT`; and the E2E harness's magic-link parsing/redirect-allowlisting needed to match GoTrue's actual verify-link shape and every app's real callback origin. See `docs/mvp-integration/AUTHENTICATION.md` for the invariants these established.
+| Capability | Status | Release critical | Evidence |
+| --- | --- | --- | --- |
+| Authentication | E2E_CERTIFIED | Yes | `packages/e2e/tests/auth.spec.ts`; real magic-link, cookie session, GRANT, and RLS in CI |
+| Patient browser | E2E_CERTIFIED | Yes | `packages/e2e/tests/golden-loop.spec.ts` |
+| Pharmacist browser | E2E_CERTIFIED | Yes | governed review and cross-persona denial in the golden loop |
+| Pharmacy-staff browser | E2E_CERTIFIED | Yes | confirmation, READY, credential verification, and collection in the golden loop |
+| Assistant API | E2E_CERTIFIED | Yes | authenticated Alice call, escalation persistence, and zero-reservation authority proof |
+| Agent/AI runtime | E2E_CERTIFIED | Yes | governed executor identity/capability/persona/action evidence; PR #37 |
+| Medication identity | E2E_CERTIFIED | Yes | canonical medicine continuity through review, discovery, inventory, and reservation |
+| NAFDAC/MERDP registry | E2E_CERTIFIED | Yes | published/quarantine boundaries and source lineage tests; no reacquisition in this phase |
+| Geo consent and distance | E2E_CERTIFIED | Yes | browser geolocation plus missing-consent and 1–200 km boundary tests |
+| Discovery matrix | E2E_CERTIFIED | Yes | exact/generic/both/none deterministic classification tests |
+| Pharmacist governance | E2E_CERTIFIED | Yes | generic protection and authority-bypass escalation |
+| Inventory and price | E2E_CERTIFIED | Yes | authoritative batch/medicine/tenant binding and price assertions |
+| Reservation | E2E_CERTIFIED | Yes | atomic lock, revalidation, duplicate submission, race, expiry, and tenant tests |
+| Payment and refund | E2E_CERTIFIED | Yes | signed webhook, amount/reference binding, failure/retry, expiry, and refund E2E |
+| Fulfillment | E2E_CERTIFIED | Yes | authorized confirmation/READY/COLLECTED and invalid-transition denial |
+| Notifications | E2E_CERTIFIED | Yes | domain event → outbox → simulated WhatsApp delivery; credential exclusion |
+| WhatsApp channel | E2E_CERTIFIED | Yes | signature, verification token, replay, persona resolution, and browser continuity |
+| Audit/reconciliation | E2E_CERTIFIED | Yes | persisted agent, MAR, reservation, payment, fulfillment, and outbox chain |
+| Tenant/persona isolation | E2E_CERTIFIED | Yes | browser, API, RLS, cross-tenant, and forged-context denial |
+| Observability | FUNCTIONALLY_IMPLEMENTED | Yes | structured logs, correlation IDs, health, runtime evidence, diagnostics, and metrics |
+| Recovery/runbooks | FUNCTIONALLY_IMPLEMENTED | Yes | deterministic schema recovery and runbooks; production data recovery remains unproved |
 
-The remaining browser certification target is the **authenticated medication access golden loop**: Patient → Pharmacist → Patient match/reserve → Pharmacy confirm → Pharmacy ready → Patient pickup credential → Pharmacy collect, now that all three personas can authenticate for real. Not yet certified.
+## Provider certification
 
-Local execution is separately constrained: Docker is unreachable in this sandbox, so live/browser suites only execute in CI — consistent with the whole program's established pattern.
+Each dependency receives exactly one status. These classifications describe
+provider evidence, not whether the product integration is release-critical.
 
-## Observability: partial, one item deferred by design
+| Provider/dependency | Status | Evidence and remaining live gate |
+| --- | --- | --- |
+| Supabase/PostgreSQL | E2E_CERTIFIED | Real local PostgreSQL/Supabase, migrations, auth, RLS, locking, and replay run in CI. Certify the intended hosted project, network, secrets, backups, and restore. |
+| NAFDAC/MERDP data | E2E_CERTIFIED | Canonical imported dataset, provenance, publication, quarantine, manufacturer, and identity compatibility are certified. No live upstream acquisition was executed in this phase. |
+| Geo | E2E_CERTIFIED | Internal coordinate/distance mode is assembled and certified. Google/Mapbox are optional and not live-certified. |
+| Payment | E2E_CERTIFIED | Provider contract and complete signed-webhook lifecycle run against the deterministic simulator. Certify the selected production processor, credentials, webhook registration, currency, and settlement/reconciliation. |
+| Meta WhatsApp | E2E_CERTIFIED | Graph API adapter, signature verification, verification-token flow, replay protection, and delivery lifecycle run against the simulator. Certify the production Meta app, number, webhook, templates, and delivery receipts. |
+| Agent/AI | E2E_CERTIFIED | Anthropic-compatible adapter and governed Alice loop run through a deterministic endpoint. Certify the approved production model/account, safety configuration, quotas, and outage behavior. |
+| Notification | E2E_CERTIFIED | Transactional outbox and WhatsApp delivery consequence are E2E certified. Live status depends on Meta certification and production scheduler execution. |
+| OCR | E2E_CERTIFIED | Clinical pipeline calls an HTTP OCR provider through the deterministic E2E endpoint. Certify the selected production OCR provider and data-processing controls. |
+| Prescription structure | E2E_CERTIFIED | Parser contract and clinical pipeline run through the deterministic E2E endpoint. Certify the selected production provider and data-processing controls. |
 
-Existing coverage (reused, not rebuilt): `/health/{live,ready,startup,details}`, `/runtime/{diagnostics,evidence,anomalies,certification}` — outbox reachability is one of the existing health check dimensions.
+## Assembled business evidence
 
-**Not added this round**: outbox backlog counts (pending/retrying/dead-letter) and worker last-run visibility. `runtime_outbox_events` has zero RLS policies, and `apps/web`'s own ADR-documented policy restricts service-role client construction to one exception (the WhatsApp webhook) — "no other request handler in this app may construct or use this client." Building cross-tenant backlog visibility safely needs a new admin-scoped SECURITY DEFINER RPC (a small, real schema decision), not a quick route using the service-role client. Deferred rather than rushed past that documented boundary.
+The CI `medication-golden-loop-e2e` job uses isolated authenticated patient,
+pharmacist, and pharmacy contexts; real Postgres, migrations, RLS, RPCs, and
+locks; and deterministic external adapters. It proves:
 
-## Security/privacy audit (this round)
+```text
+signed WhatsApp intent
+→ patient assistant escalation boundary
+→ prescription and canonical medication identity
+→ pharmacist review
+→ geo-consented BOTH_AVAILABLE discovery
+→ authoritative inventory and price
+→ duplicate-safe reservation and inventory lock
+→ pharmacy confirmation
+→ verified payment failure, retry, and success
+→ READY notification without pickup credential
+→ patient-only credential issuance
+→ pharmacy collection
+→ tenant/persona denial and audit reconstruction
+```
 
-Grepped changed and relevant runtime paths for hardcoded secrets, unsafe `NEXT_PUBLIC_*` exposure, plaintext-credential logging, disabled RLS, debug routes. Clean — no findings.
+The same CI job runs the payment/refund E2E, including reservation expiry,
+inventory-lock release, provider refund intent, signed callback, duplicate
+delivery, and reconciliation.
 
-## Environment requirements (worker tokens)
+Focused regression suites cover the remaining product-level matrix and
+negative outcomes: `EXACT_AVAILABLE`, `GENERIC_AVAILABLE`, `BOTH_AVAILABLE`,
+`NONE_AVAILABLE`, missing geo consent, invalid radius, unapproved generic,
+stale inventory, constrained-stock races, payment after expiry, invalid amount,
+invalid fulfillment transitions, cross-tenant access, unauthorized personas,
+webhook forgery, and prompt-injection attempts.
 
-- `MEDLINK_NOTIFICATION_WORKER_TOKEN` (≥32 chars) — new, for `/api/internal/notification-dispatch`.
-- `MEDLINK_INVENTORY_WORKER_TOKEN`, `MEDLINK_CLINICAL_WORKER_TOKEN` — pre-existing siblings, same pattern.
-- `WHATSAPP_ACCESS_TOKEN`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — required by all three worker routes.
+## Release configuration
 
-All three internal worker routes must be scheduled externally (this repository has no in-process cron); operations must configure a scheduler (e.g. platform cron) to POST each on a fixed cadence with its bearer token.
+`.env.example` is the canonical placeholder inventory. It contains no usable
+credential. Production values belong in approved secret management. In
+addition to application/provider variables, operations must configure external
+schedulers for:
 
-## Known limitations / post-RC1 backlog
+- `/api/internal/clinical-pipeline`
+- `/api/internal/inventory-expiry`
+- `/api/internal/notification-dispatch`
+- `/api/internal/payment-refund-dispatch`
 
-- Authenticated medication access golden loop (Patient → Pharmacist → Pharmacy, browser E2E) not yet certified — the next slice, now unblocked by PR #29.
-- Mailpit polling/event synchronization: 3/9 browser auth tests needed one CI retry from email-indexing timing; classified non-blocking test reliability debt (all passed within the configured retry policy). Target: zero retry-dependent browser passes.
-- Outbox/expiry operational backlog visibility deferred pending an admin RPC decision.
-- Expiry notification (`reservation.expired.v1`) not implemented — no consumer registered; flagged POST_RC1 rather than inventing a template.
+Each worker fails closed when its provider configuration or minimum-length
+bearer token is missing. E2E-only loopback endpoint overrides reject real
+provider credentials.
 
-## Program backlog (classified, not implemented here)
+## Operations classification
 
-| Track | Scope |
-|---|---|
-| A | Medication Discovery — geo + brand/generic + pharmacy discovery |
-| B | Payment E2E — `PAYMENT_REQUIRED → PAYMENT_CONFIRMED` insertion between confirmation and preparation; needs its own governed convergence, not a quiet RC1 addition |
-| C | WhatsApp identity + persona runtime |
-| D | Conversation ↔ Workflow convergence |
-| E | Agent registry + router + governed execution |
-| F | Workflow-mediated agent handoffs |
-| G | Exception/recovery expansion |
-| H | Named-agent admission |
-| I | Governed learning/evaluation |
+| Area | Status | Classification |
+| --- | --- | --- |
+| Structured logging, correlation, runtime evidence | Source-tested | POST_MVP_HARDENING for production alert/dashboard tuning |
+| Idempotency, webhook replay, notification retry/dead-letter | E2E certified | No product blocker |
+| Reservation expiry and payment recovery | E2E certified | No product blocker |
+| Dependency outage queue preservation | Runbook/source-tested | Production exercise required |
+| Deterministic schema rebuild | CI certified | No migration blocker |
+| Hosted database backup/PITR/restore | Not live certified | RELEASE_BLOCKER for production promotion |
+| Deployment rollback and target smoke | Not live certified | RELEASE_BLOCKER for production promotion |
+| Environment/secret/provider parity | Not live certified | RELEASE_BLOCKER for production promotion |
+
+## Validation
+
+At canonical baseline `3f93092`:
+
+- Agent/AI: 108/108 passed.
+- Migration-focused regressions: 203/203 passed.
+- Full Vitest: 975 passed, 42 skipped live/integration tests.
+- Browser CI: auth and medication golden-loop jobs passed.
+- Builds: 8/8 passed.
+- Lint and typecheck: passed.
+- Migrations: 81 unique versions, 0 duplicates.
+- Required CI: 10/10 jobs passed.
+
+On the RC1 readiness branch after adding the release-configuration guard:
+
+- Agent/AI: 108/108 passed.
+- Security/RLS: 81/81 passed.
+- Migration-focused regressions: 203/203 passed.
+- Full Vitest: 977 passed, 42 skipped live/integration tests.
+- Python: 12/12 passed.
+- Builds: 8/8 passed.
+- Lint and typecheck: passed.
+
+## Exact release limitations
+
+Before production promotion, retain evidence for:
+
+1. intended hosted Supabase project deployment, migrations, RLS, tenant tests,
+   backup/PITR, isolated restore, and approved RTO/RPO;
+2. selected payment processor intent/webhook/refund/reconciliation lifecycle;
+3. production Meta WhatsApp app, phone number, webhook, templates, outbound
+   delivery, receipt persistence, and operational ownership;
+4. approved Anthropic model/account invocation, safety/usage policy, quota,
+   telemetry, and provider-outage handling;
+5. selected OCR and prescription-structure providers, including privacy and
+   data-processing controls;
+6. production notification and worker schedules, queue monitoring, retries,
+   dead-letter recovery, and alerting;
+7. environment-parity review, target-deployment smoke, rollback exercise, and
+   release/operations approval.
+
+Until those gates are executed, the correct verdict remains
+`RC1_FUNCTIONALLY_CERTIFIED — LIVE_PROVIDER_CERTIFICATION_REQUIRED`, not
+`MVP_RELEASE_READY`.
