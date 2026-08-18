@@ -162,7 +162,7 @@ export async function listReservations(
       pharmacy_location:pharmacy_locations(id, name),
       inventory_locks(quantity, inventory_batch:inventory_batches(medicine:medicines(brand_name, generic_name)))
     `)
-    .eq("organization_id", context.organizationId)
+    .eq("pharmacy_organization_id", context.organizationId)
     .order("created_at", { ascending: false })
     .limit(query.limit ?? 20);
   if (query.status) statement = statement.eq("status", query.status);

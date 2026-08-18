@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 import { signInWithMagicLink } from "../lib/auth";
 import type { AuthE2EFixture } from "../lib/fixture";
 
-const webUrl=process.env.MEDLINK_E2E_PATIENT_URL ?? "http://localhost:3000";
+const webUrl=process.env.MEDLINK_E2E_WEB_URL ?? "http://localhost:3004";
 const mailpitUrl=process.env.MEDLINK_E2E_MAILPIT_URL ?? "http://127.0.0.1:54324";
 const supabaseUrl=process.env.MEDLINK_E2E_SUPABASE_URL!;
 const serviceKey=process.env.MEDLINK_E2E_SUPABASE_SERVICE_KEY!;
@@ -48,17 +48,18 @@ test("authenticated applicant and reviewer activate the same canonical pharmacy 
   await reviewAction("Certify integration");
 
   const service=createClient(supabaseUrl,serviceKey,{auth:{persistSession:false}});
-  const {data:application,error:applicationError}=await service.from("partner_applications").select("organization_id").eq("id",applicationId).single();
-  expect(applicationError).toBeNull(); expect(application?.organization_id).toBeTruthy();
-  const {data:location,error:locationError}=await service.from("pharmacy_locations").insert({organization_id:application!.organization_id,name:`Network Location ${nonce}`,license_number:`PCN-${nonce}`,address_line_1:"1 Network Way",locality:"Lagos",country_code:"NG",latitude:6.5244,longitude:3.3792}).select("id").single();
-  expect(locationError).toBeNull();
+  const {data:locationFixture,error:fixtureError}=await service.rpc("certify_partner_browser_location_fixture",{
+    target_application_id:applicationId,target_reviewer_id:fixture.partnerReviewer.userId,target_nonce:nonce,
+  });
+  expect(fixtureError).toBeNull();
+  const locationId=String((locationFixture as {locationId:string}).locationId);
   const now=new Date().toISOString();
-  const evidence=await reviewer.request.post(`${webUrl}/api/v1/partner/applications/${applicationId}/location-capability`,{data:{locationId:location!.id,credentialStatus:"verified",inventoryIntegrationStatus:"healthy",inventoryFreshnessStatus:"current",medicationMappingStatus:"eligible",paymentCapabilityStatus:"ready",fulfillmentCapabilityStatus:"ready",freshnessPolicyReference:"approved://inventory-freshness/mvp",sourceUpdatedAt:now,lastSuccessfulSync:now,evidenceReference:`certification://browser/${nonce}`}});
+  const evidence=await reviewer.request.post(`${webUrl}/api/v1/partner/applications/${applicationId}/location-capability`,{data:{locationId,credentialStatus:"verified",inventoryIntegrationStatus:"healthy",inventoryFreshnessStatus:"current",medicationMappingStatus:"eligible",paymentCapabilityStatus:"ready",fulfillmentCapabilityStatus:"ready",freshnessPolicyReference:"approved://inventory-freshness/mvp",sourceUpdatedAt:now,lastSuccessfulSync:now,evidenceReference:`certification://browser/${nonce}`}});
   expect(evidence.status()).toBe(200);
   await reviewAction("Activate partner");
   await reviewer.goto(`${webUrl}/partner/review`);
   await expect(reviewer.locator("article",{hasText:legalName})).toContainText("active");
-  const network=await reviewer.request.post(`${webUrl}/api/v1/partner/applications/${applicationId}/location-readiness`,{data:{locationId:location!.id}});
+  const network=await reviewer.request.post(`${webUrl}/api/v1/partner/applications/${applicationId}/location-readiness`,{data:{locationId}});
   expect(network.status()).toBe(200); expect((await network.json()).result).toMatchObject({networkReady:true,legacyNetwork:false,blockers:[]});
   await applicantContext.close(); await reviewerContext.close();
 });

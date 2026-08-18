@@ -159,7 +159,7 @@ describe("listReservations", () => {
       inventory_locks: [{ quantity: 2, inventory_batch: { medicine: { brand_name: "Amoxil", generic_name: null } } }],
     }]);
     const rows = await listReservations(context, database, reservationListQuerySchema.parse({}));
-    expect(calls).toContain(`eq:organization_id=${context.organizationId}`);
+    expect(calls).toContain(`eq:pharmacy_organization_id=${context.organizationId}`);
     expect(rows).toEqual([{
       id: reservationId, status: "confirmed", patientId: "patient-1",
       medicineName: "Amoxil", pharmacyLocationName: "Main Street", quantity: 2,

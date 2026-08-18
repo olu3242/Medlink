@@ -277,7 +277,7 @@ jobs:
           WHATSAPP_ACCESS_TOKEN= PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
           PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
           WHATSAPP_ACCESS_TOKEN= PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
-          PORT=3004 MEDLINK_API_URL=http://localhost:3004 npm run start --workspace=apps/web &
+          MEDLINK_APP_URL=http://localhost:3004 PORT=3004 MEDLINK_API_URL=http://localhost:3004 npm run start --workspace=apps/web &
 
           for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in http://localhost:3004/health/live; do
             for _ in $(seq 1 30); do
@@ -310,6 +310,12 @@ jobs:
           MEDLINK_E2E_PAYMENT_REFUND_WORKER_TOKEN="$MEDLINK_PAYMENT_REFUND_WORKER_TOKEN" \
           MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
           npm run test:payment-refund --workspace=packages/e2e
+
+          MEDLINK_E2E_SUPABASE_URL="$API_URL" \
+          MEDLINK_E2E_SUPABASE_SERVICE_KEY="$SECRET_KEY" \
+          MEDLINK_E2E_WEB_URL=http://localhost:3004 \
+          MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
+          npm run test:partner --workspace=packages/e2e
       - if: always()
         run: npx supabase stop
       - if: always()
