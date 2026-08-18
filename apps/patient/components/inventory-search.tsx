@@ -22,6 +22,7 @@ export function InventorySearch({ query, marId, medicineId }: {
     }
     setLoading(true);
     setFailed(false);
+    setOutcome(undefined);
     const params = new URLSearchParams({ q: query });
     if (marId) params.set("marId", marId);
     fetch(`/api/v1/inventory?${params}`, {
@@ -35,8 +36,12 @@ export function InventorySearch({ query, marId, medicineId }: {
   }, [marId, query]);
 
   function searchNearby() {
-    if (!medicineId || !navigator.geolocation) {
-      setLocationMessage("Location search is unavailable for this request.");
+    if (!medicineId) {
+      setLocationMessage("Start from a medication request before searching nearby.");
+      return;
+    }
+    if (!("geolocation" in navigator)) {
+      setLocationMessage("This browser does not support location. General tenant availability remains visible.");
       return;
     }
     setLoading(true);
@@ -66,9 +71,11 @@ export function InventorySearch({ query, marId, medicineId }: {
       } finally {
         setLoading(false);
       }
-    }, () => {
+    }, (error) => {
       setLoading(false);
-      setLocationMessage("Location was not shared. General tenant availability remains visible.");
+      setLocationMessage(error.code === error.PERMISSION_DENIED
+        ? "Location permission was denied. General tenant availability remains visible."
+        : "Your location could not be determined. General tenant availability remains visible.");
     }, { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 });
   }
 
@@ -99,7 +106,7 @@ export function InventorySearch({ query, marId, medicineId }: {
     {!failed && !loading && query ? <section aria-label="Search results" className="grid" style={{ marginTop: "1rem" }}>
       {outcome ? <p className="muted">Availability outcome: <strong>{outcome}</strong></p> : null}
       {matches.length ? matches.map((match) => <article className="card" key={match.inventoryId}>
-        <span className="status">{match.stockStatus}</span>
+        <span className="status">{match.relationship === "generic_related" ? "Generic option" : "Exact medicine"}</span>
         <h2>{match.medicineName}</h2>
         <p>{match.pharmacyName}</p>
         <p className="muted">{match.pharmacyLocality ?? "Location unavailable"}</p>
@@ -110,7 +117,7 @@ export function InventorySearch({ query, marId, medicineId }: {
             ? <p className="muted">Price not available</p>
             : null}
         {match.relationship === "generic_related" ? <p className="muted">
-          Related generic option — pharmacist review is required before selection.
+          Governance: pharmacist review required before reservation.
         </p> : null}
         {marId && match.reservationEligible !== false ? <MatchInventoryButton
           marId={marId}
@@ -120,8 +127,8 @@ export function InventorySearch({ query, marId, medicineId }: {
           ? null
           : <p className="muted">Start from your medication request to reserve.</p>}
       </article>) : <div className="card">
-        <h2>No nearby matches</h2>
-        <p className="muted">Try a generic name or wider search area.</p>
+        <h2>{outcome === "NONE_AVAILABLE" ? "No medicine available nearby" : "No nearby matches"}</h2>
+        <p className="muted">No reservation can be created from this result. Try a wider search area or check again later.</p>
       </div>}
     </section> : null}
   </>;

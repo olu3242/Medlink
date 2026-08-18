@@ -15,7 +15,6 @@ const createSchema = z.object({
   inventoryBatchId: z.string().uuid(),
   quantity: z.number().int().positive(),
   idempotencyKey: z.string().min(8).max(200),
-  expiresAt: z.string().datetime(),
 });
 
 export const GET = (request: Request) => runExperienceApi(request, "patient.reservation.list", {
@@ -74,7 +73,7 @@ export const POST = async (request: Request) => {
             pharmacyLocationId: input.pharmacyLocationId,
             inventoryBatchId: input.inventoryBatchId,
             quantity: input.quantity,
-            expiresAt: input.expiresAt,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           },
         ),
       });

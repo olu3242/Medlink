@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 export function PaymentAction({ reservationId, captured }: {
   readonly reservationId: string;
@@ -9,6 +9,7 @@ export function PaymentAction({ reservationId, captured }: {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(captured ? "Payment confirmed" : "");
   const [hostedUrl, setHostedUrl] = useState("");
+  const idempotencyKey = useRef(`payment-${reservationId}-${crypto.randomUUID()}`);
 
   async function pay(): Promise<void> {
     setBusy(true);
@@ -19,7 +20,7 @@ export function PaymentAction({ reservationId, captured }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reservationId,
-          idempotencyKey: `payment-${reservationId}-${crypto.randomUUID()}`,
+          idempotencyKey: idempotencyKey.current,
         }),
       });
       if (!response.ok) throw new Error("Payment unavailable");
@@ -35,7 +36,7 @@ export function PaymentAction({ reservationId, captured }: {
 
   if (captured) return <p className="status">Payment confirmed</p>;
   return <div className="actions">
-    <button className="button" disabled={busy} onClick={pay}>Pay securely</button>
+    <button className="button" disabled={busy || Boolean(hostedUrl)} onClick={pay}>Pay securely</button>
     {hostedUrl ? <a className="secondary" href={hostedUrl}>Continue to payment provider</a> : null}
     {message ? <p role="status" className="muted">{message}</p> : null}
   </div>;

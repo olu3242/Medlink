@@ -20,6 +20,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       { label: "Add prescription", href: "/prescriptions/new" },
       { label: "Medicine catalogue", href: "/medicines" },
       { label: "Find nearby", href: "/search" },
+      { label: "Ask Alice", href: "/assistant" },
       { label: "My profile", href: "/profile" },
     ]}
     header={<form action={signOut}><button type="submit">Log out</button></form>}

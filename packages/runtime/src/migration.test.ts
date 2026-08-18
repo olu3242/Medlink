@@ -1316,3 +1316,38 @@ describe("inventory_locks service_role update grant migration", () => {
     expect(sql).not.toContain("enable row level security");
   });
 });
+
+describe("frontend discovery browser certification fixture migration", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608180066_frontend_discovery_browser_fixture.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("is callable only by service_role", () => {
+    expect(sql).toContain("auth.role() <> 'service_role'");
+    expect(sql).toContain("from public, anon, authenticated;");
+    expect(sql).toContain("to service_role;");
+  });
+
+  it("limits changes to validated inventory rows in the requested tenant", () => {
+    expect(sql).toContain("organization_id = target_organization_id");
+    expect(sql).toContain("id in (target_exact_inventory_batch_id, target_generic_inventory_batch_id)");
+    expect(sql).toContain("deleted_at is null");
+  });
+
+  it("accepts only the four canonical discovery outcomes", () => {
+    for (const outcome of [
+      "exact_brand_available",
+      "generic_available",
+      "both_available",
+      "none_available",
+    ]) {
+      expect(sql).toContain(`'${outcome}'`);
+    }
+  });
+});
