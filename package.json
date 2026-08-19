@@ -23,6 +23,7 @@
     "test:platform-evolution": "vitest run packages/governance/src/enterprise-portfolio.test.ts packages/platform/src/architecture-governance.test.ts packages/ai/src/model-governance.test.ts packages/integrations/src/partner-trust.test.ts packages/analytics/src/digital-twin.test.ts packages/certification/src/platform-evolution.test.ts",
     "test:architecture": "vitest run packages/platform/src/experience-conformance.test.ts packages/api/src/experience-contracts.test.ts packages/platform/src/portal-architecture.test.ts",
     "test:agent-governance": "vitest run packages/agents/src packages/agent-runtime/src apps/web/lib/workflow-invoker.test.ts",
+    "test:deployment-contract": "vitest run packages/platform/src/vercel-deployment-contract.test.ts",
     "test:whatsapp-provider": "vitest run packages/whatsapp/src apps/web/lib/whatsapp-webhook.test.ts apps/web/lib/conversation-store.test.ts",
     "test:provider-conformance": "vitest run packages/integrations/src/conformance.test.ts packages/integrations/src/provider-certification.test.ts packages/integrations/src/operational-adapters.test.ts packages/prescription/src/clinical-pipeline.test.ts",
     "test:security": "vitest run packages/security/src packages/runtime/src/rls-matrix.test.ts packages/runtime/src/live-rls-migration.test.ts",

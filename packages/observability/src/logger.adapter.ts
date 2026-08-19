@@ -1,8 +1,10 @@
 import type { Logger } from "pino";
 import type { LogAdapter, LogEntry } from "@medlink/runtime";
 
+type PinoLogTarget = Pick<Logger, "trace" | "debug" | "info" | "warn" | "error" | "fatal">;
+
 export class PinoLogAdapter implements LogAdapter {
-  constructor(private readonly target: Logger) {}
+  constructor(private readonly target: PinoLogTarget) {}
 
   write(entry: LogEntry): void {
     const {

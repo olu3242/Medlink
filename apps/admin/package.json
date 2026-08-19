@@ -17,9 +17,11 @@
     "@medlink/platform": "*",
     "@medlink/runtime": "*",
     "@medlink/observability": "*",
-    "@medlink/search": "*",
     "@supabase/supabase-js": "^2.52.0",
     "zod": "^3.25.0",
-    "@medlink/ui": "*"
+    "@medlink/ui": "*",
+    "next": "^15.4.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   }
 }
