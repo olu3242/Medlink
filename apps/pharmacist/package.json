@@ -17,6 +17,9 @@
     "@medlink/medicine": "*",
     "@medlink/runtime": "*",
     "@supabase/supabase-js": "^2.52.0",
+    "next": "^15.4.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "zod": "^3.25.0"
   }
 }
