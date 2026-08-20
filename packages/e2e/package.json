@@ -6,6 +6,7 @@
   "scripts": {
     "test:auth": "playwright test tests/auth.spec.ts",
     "test:golden-loop": "playwright test tests/golden-loop.spec.ts",
+    "test:portals": "playwright test tests/portal-interface-certification.spec.ts",
     "test:whatsapp-golden-loop": "playwright test tests/golden-loop.spec.ts",
     "test:payment-refund": "playwright test tests/payment-refund.spec.ts",
     "test:partner": "playwright test tests/partner-engine.spec.ts"
