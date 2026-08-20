@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../fixtures/certification-test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { signInWithMagicLink } from "../lib/auth";
 import type { GoldenLoopFixture } from "../lib/golden-fixture";

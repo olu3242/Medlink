@@ -2,6 +2,7 @@ export * from "./components/primitives";
 export * from "./components/overlays";
 export * from "./components/data";
 export * from "./components/FormSubmitButton";
+export * from "./components/AuthForms";
 export * from "./icons";
 export * from "./navigation";
 export * from "./providers";

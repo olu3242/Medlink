@@ -1,6 +1,6 @@
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "../fixtures/certification-test";
 import { signInWithMagicLink } from "../lib/auth";
 import type { AuthE2EFixture } from "../lib/fixture";
 
@@ -82,7 +82,8 @@ async function openAndCheck(page: Page, url: string, heading: string): Promise<v
 
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
-  { name: "tablet", width: 1024, height: 768 },
+  { name: "small-desktop", width: 1024, height: 768 },
+  { name: "tablet", width: 768, height: 1024 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
   test(`portal interfaces remain usable at ${viewport.name}`, async ({ browser }) => {
@@ -97,7 +98,7 @@ for (const viewport of [
       path: path.join(artifactDirectory, `${viewport.name}-web.png`),
       fullPage: true,
     });
-    await openAndCheck(webPage, `${webUrl}/auth/sign-in`, "Sign in");
+    await openAndCheck(webPage, `${webUrl}/auth/sign-in`, "Welcome back");
     await webContext.close();
 
     const patientContext = await browser.newContext({ viewport });

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "../fixtures/certification-test";
 import { signInWithMagicLink } from "../lib/auth";
 import type { AuthE2EFixture } from "../lib/fixture";
 

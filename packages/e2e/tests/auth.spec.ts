@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { expect, test } from "@playwright/test";
-import { signInWithMagicLink } from "../lib/auth";
-import type { AuthE2EFixture } from "../lib/fixture";
+import { expect, test } from "../fixtures/certification-test";
+import { signInWithMagicLink, signInWithPassword } from "../lib/auth";
+import type { AuthE2EFixture, AuthE2EPersona } from "../lib/fixture";
 
 const patientUrl = process.env.MEDLINK_E2E_PATIENT_URL ?? "http://localhost:3000";
 const pharmacistUrl = process.env.MEDLINK_E2E_PHARMACIST_URL ?? "http://localhost:3003";
@@ -13,10 +13,15 @@ async function loadFixture(): Promise<AuthE2EFixture> {
   return JSON.parse(raw) as AuthE2EFixture;
 }
 
+async function passwordLogin(page: Parameters<typeof signInWithPassword>[0], baseUrl: string, persona: AuthE2EPersona) {
+  if (!persona.password) throw new Error(`Fixture ${persona.email} has no password`);
+  await signInWithPassword(page, baseUrl, persona.email, persona.password);
+}
+
 test.describe("patient authentication", () => {
-  test("logs in through the real magic-link flow and reaches an authenticated API", async ({ page }) => {
+  test("logs in through the real password flow and reaches an authenticated API", async ({ page }) => {
     const fixture = await loadFixture();
-    await signInWithMagicLink(page, patientUrl, mailpitUrl, fixture.patient.email);
+    await passwordLogin(page, patientUrl, fixture.patient);
     await expect(page).toHaveURL(new RegExp(`^${patientUrl}/?$`));
 
     const response = await page.request.get(`${patientUrl}/api/v1/mar`, {
@@ -27,7 +32,7 @@ test.describe("patient authentication", () => {
 
   test("cannot reach a pharmacist-only permission even against its own app's session cookie", async ({ page }) => {
     const fixture = await loadFixture();
-    await signInWithMagicLink(page, patientUrl, mailpitUrl, fixture.patient.email);
+    await passwordLogin(page, patientUrl, fixture.patient);
 
     // Patient's own app has no clinical:review-gated route to hit
     // directly, so this proves the negative the other direction: the
@@ -44,7 +49,7 @@ test.describe("patient authentication", () => {
 
   test("logout through the real UI control ends the session -- a subsequent authenticated call fails", async ({ page }) => {
     const fixture = await loadFixture();
-    await signInWithMagicLink(page, patientUrl, mailpitUrl, fixture.patient.email);
+    await passwordLogin(page, patientUrl, fixture.patient);
 
     await page.getByRole("button", { name: "Log out" }).click();
     await page.waitForURL(/\/auth\/sign-in$/);
@@ -53,13 +58,48 @@ test.describe("patient authentication", () => {
       headers: { Accept: "application/json" },
     });
     expect(response.status()).toBe(401);
+
+    await passwordLogin(page, patientUrl, fixture.patient);
+    await page.reload();
+    await expect(page).toHaveURL(new RegExp(`^${patientUrl}/?$`));
+    const restored = await page.request.get(`${patientUrl}/api/v1/mar`, {
+      headers: { Accept: "application/json" },
+    });
+    expect(restored.status()).toBe(200);
+  });
+
+  test("optional email-link fallback remains available", async ({ page }) => {
+    const fixture = await loadFixture();
+    await signInWithMagicLink(page, patientUrl, mailpitUrl, fixture.patient.email);
+    await expect(page).toHaveURL(new RegExp(`^${patientUrl}/?$`));
+  });
+
+  test("incorrect password returns a safe error without establishing a session", async ({ page }) => {
+    const fixture = await loadFixture();
+    await page.goto(`${patientUrl}/auth/sign-in`);
+    await page.getByLabel("Email address", { exact: true }).fill(fixture.patient.email);
+    await page.getByLabel("Password", { exact: true }).fill("Incorrect-password!9");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/error=invalid_credentials/);
+    await expect(page.locator(".error[role=alert]")).toHaveText("Email or password is incorrect.");
+    expect((await page.context().cookies(patientUrl)).some(({ name }) => name.includes("auth-token"))).toBe(false);
+  });
+
+  test("password confirmation mismatch is rejected before account creation", async ({ page }) => {
+    await page.goto(`${patientUrl}/auth/sign-up`);
+    await page.getByLabel("Email address", { exact: true }).fill(`mismatch-${Date.now()}@medlink.test`);
+    await page.getByLabel("Password", { exact: true }).fill("MedLink-correct!9");
+    await page.getByLabel("Confirm password", { exact: true }).fill("MedLink-different!9");
+    await page.getByRole("button", { name: "Create account", exact: true }).click();
+    await expect(page).toHaveURL(/error=password_mismatch/);
+    await expect(page.locator(".error[role=alert]")).toHaveText("Passwords do not match.");
   });
 });
 
 test.describe("pharmacist authentication", () => {
   test("logs in and reaches the clinical review queue", async ({ page }) => {
     const fixture = await loadFixture();
-    await signInWithMagicLink(page, pharmacistUrl, mailpitUrl, fixture.pharmacist.email);
+    await passwordLogin(page, pharmacistUrl, fixture.pharmacist);
 
     const response = await page.request.get(`${pharmacistUrl}/api/v1/review`, {
       headers: { Accept: "application/json" },
@@ -69,7 +109,7 @@ test.describe("pharmacist authentication", () => {
 
   test("a pharmacist from another tenant is denied without an explicit context", async ({ page }) => {
     const fixture = await loadFixture();
-    await signInWithMagicLink(page, pharmacistUrl, mailpitUrl, fixture.otherTenantPharmacist.email);
+    await passwordLogin(page, pharmacistUrl, fixture.otherTenantPharmacist);
 
     const response = await page.request.get(`${pharmacistUrl}/api/v1/review`, {
       headers: { Accept: "application/json" },
@@ -87,7 +127,7 @@ test.describe("pharmacist authentication", () => {
 test.describe("pharmacy staff authentication", () => {
   test("logs in and reaches the reservation inbox", async ({ page }) => {
     const fixture = await loadFixture();
-    await signInWithMagicLink(page, pharmacyUrl, mailpitUrl, fixture.pharmacyStaff.email);
+    await passwordLogin(page, pharmacyUrl, fixture.pharmacyStaff);
 
     const response = await page.request.get(`${pharmacyUrl}/api/v1/reservations`, {
       headers: { Accept: "application/json" },
@@ -121,7 +161,7 @@ test.describe("negative paths", () => {
     // multiPersona holds two legitimate memberships (pharmacist in the
     // primary org, pharmacy_staff in the other) -- Section 4 requires
     // ambiguous context to fail closed, not guess.
-    await signInWithMagicLink(page, pharmacistUrl, mailpitUrl, fixture.multiPersona.email);
+    await passwordLogin(page, pharmacistUrl, fixture.multiPersona);
 
     const response = await page.request.get(`${pharmacistUrl}/api/v1/review`, {
       headers: { Accept: "application/json" },
@@ -131,7 +171,7 @@ test.describe("negative paths", () => {
 
   test("an explicit tenant header lets a multi-membership identity choose a specific context", async ({ page }) => {
     const fixture = await loadFixture();
-    await signInWithMagicLink(page, pharmacistUrl, mailpitUrl, fixture.multiPersona.email);
+    await passwordLogin(page, pharmacistUrl, fixture.multiPersona);
 
     const response = await page.request.get(`${pharmacistUrl}/api/v1/review`, {
       headers: { Accept: "application/json", "x-medlink-tenant-id": fixture.organizationId },

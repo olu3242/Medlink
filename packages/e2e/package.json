@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:auth": "playwright test tests/auth.spec.ts",
+    "test:auth": "playwright test tests/auth.spec.ts tests/password-auth.spec.ts",
+    "test:persona": "playwright test tests/persona-engine.spec.ts tests/auth.spec.ts tests/password-auth.spec.ts tests/production-onboarding.spec.ts tests/partner-engine.spec.ts tests/portal-interface-certification.spec.ts",
     "test:golden-loop": "playwright test tests/golden-loop.spec.ts",
+    "test:deployment": "playwright test tests/deployment-parity.spec.ts",
+    "test:certify": "playwright test",
     "test:onboarding": "playwright test tests/production-onboarding.spec.ts",
     "test:portals": "playwright test tests/portal-interface-certification.spec.ts",
     "test:whatsapp-golden-loop": "playwright test tests/golden-loop.spec.ts",

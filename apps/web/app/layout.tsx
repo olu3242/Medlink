@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import "@medlink/ui/styles.css";
+import "@medlink/ui/accessibility.css";
 
 export const metadata: Metadata = {
   title: "MedLink — Verified medicine near you",

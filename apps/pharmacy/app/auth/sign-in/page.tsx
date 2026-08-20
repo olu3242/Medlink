@@ -1,29 +1,22 @@
-import { requestMagicLink } from "./actions";
-import { FormSubmitButton } from "@medlink/ui";
+import { PasswordSignInForm } from "@medlink/ui";
+import { requestMagicLink, signInWithPassword } from "./actions";
 
-type SignInPageProps = {
-  searchParams: Promise<{ error?: string; sent?: string }>;
+type Props = { searchParams: Promise<{ error?: string; next?: string; password_updated?: string; sent?: string }> };
+const messages: Record<string, string> = {
+  email_unverified: "Verify your email before signing in.",
+  invalid_credentials: "Email or password is incorrect.",
+  rate_limited: "Too many attempts. Wait a moment and try again.",
 };
-
-export default async function SignInPage({ searchParams }: SignInPageProps) {
+export default async function SignInPage({ searchParams }: Props) {
   const query = await searchParams;
-
-  return (
-    <section className="card" style={{ maxWidth: "26rem", margin: "3rem auto" }}>
-      <div className="eyebrow">MedLink Pharmacy</div>
-      <h1>Sign in securely</h1>
-      <p className="muted">We will email you a one-time sign-in link. No password is stored.</p>
-      {query.sent === "true" && (
-        <p role="status">Check your email for your secure sign-in link.</p>
-      )}
-      {query.error && (
-        <p className="error" role="alert">We could not start sign-in. Check your email address and try again.</p>
-      )}
-      <form action={requestMagicLink}>
-        <label htmlFor="email">Email address</label>
-        <input id="email" name="email" type="email" autoComplete="email" required />
-        <FormSubmitButton pendingLabel="Sending sign-in link…">Email me a sign-in link</FormSubmitButton>
-      </form>
-    </section>
-  );
+  const next = query.next?.startsWith("/") && !query.next.startsWith("//") ? query.next : "/";
+  return <section className="card" style={{ maxWidth: "28rem", margin: "3rem auto" }}>
+    <div className="eyebrow">MedLink Pharmacy</div>
+    <h1>Welcome back</h1>
+    <p className="muted">Sign in with your email and password. Workspace access still requires an authorized membership.</p>
+    {query.password_updated === "true" && <p role="status">Password updated. Sign in with your new password.</p>}
+    {query.sent === "true" && <p role="status">Check your email for your secure sign-in link.</p>}
+    {query.error && <p className="error" role="alert">{messages[query.error] ?? "We couldn't sign you in. Try again."}</p>}
+    <PasswordSignInForm action={signInWithPassword} magicLinkAction={requestMagicLink} next={next} />
+  </section>;
 }

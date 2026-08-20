@@ -21,6 +21,8 @@ jobs:
       - run: python -m pip install -e ".[test]"
       - run: python -m pytest
       - run: npm run check
+      - name: Validate persona E2E certification framework
+        run: npm run test:e2e:framework
       - name: Enforce architecture conformance
         run: npm run test:architecture
       - name: Validate production operations framework
@@ -170,15 +172,15 @@ jobs:
         working-directory: packages/e2e
       - run: npx supabase start
       - run: npx supabase db reset
-      - name: Build patient, pharmacist, and pharmacy against the local Supabase instance
+      - name: Build patient, pharmacist, pharmacy, and web against the local Supabase instance
         shell: bash
         run: |
           set -euo pipefail
           eval "$(npx supabase status -o env)"
           NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
           NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
-          npm run build --workspace=apps/patient --workspace=apps/pharmacist --workspace=apps/pharmacy
-      - name: Start patient, pharmacist, and pharmacy, then run the auth E2E suite
+          npm run build --workspace=apps/patient --workspace=apps/pharmacist --workspace=apps/pharmacy --workspace=apps/web
+      - name: Start patient, pharmacist, pharmacy, and web, then run the auth E2E suite
         shell: bash
         run: |
           set -euo pipefail
@@ -186,11 +188,12 @@ jobs:
           export NEXT_PUBLIC_SUPABASE_URL="$API_URL"
           export NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY"
 
-          PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
-          PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
-          PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
+          MEDLINK_APP_URL=http://localhost:3000 PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
+          MEDLINK_APP_URL=http://localhost:3003 PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
+          MEDLINK_APP_URL=http://localhost:3002 PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
+          MEDLINK_APP_URL=http://localhost:3004 MEDLINK_PATIENT_APP_URL=http://localhost:3000 PORT=3004 MEDLINK_API_URL=http://localhost:3004 npm run start --workspace=apps/web &
 
-          for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in; do
+          for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in http://localhost:3004/auth/sign-in; do
             for _ in $(seq 1 30); do
               if curl -sf "$url" > /dev/null; then break; fi
               sleep 1
@@ -203,6 +206,7 @@ jobs:
           MEDLINK_E2E_PATIENT_URL=http://localhost:3000 \
           MEDLINK_E2E_PHARMACIST_URL=http://localhost:3003 \
           MEDLINK_E2E_PHARMACY_URL=http://localhost:3002 \
+          MEDLINK_E2E_WEB_URL=http://localhost:3004 \
           MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
           npm run test:auth --workspace=packages/e2e
       - if: always()
@@ -274,10 +278,10 @@ jobs:
           export ANTHROPIC_ENDPOINT="http://127.0.0.1:4010/anthropic/messages"
 
           node packages/e2e/provider-simulator.mjs &
-          WHATSAPP_ACCESS_TOKEN= PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
-          PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
-          WHATSAPP_ACCESS_TOKEN= PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
-          MEDLINK_APP_URL=http://localhost:3004 PORT=3004 MEDLINK_API_URL=http://localhost:3004 npm run start --workspace=apps/web &
+          WHATSAPP_ACCESS_TOKEN= MEDLINK_APP_URL=http://localhost:3000 PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
+          MEDLINK_APP_URL=http://localhost:3003 PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
+          WHATSAPP_ACCESS_TOKEN= MEDLINK_APP_URL=http://localhost:3002 PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
+          MEDLINK_APP_URL=http://localhost:3004 MEDLINK_PATIENT_APP_URL=http://localhost:3000 PORT=3004 MEDLINK_API_URL=http://localhost:3004 npm run start --workspace=apps/web &
 
           for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in http://localhost:3004/health/live; do
             for _ in $(seq 1 30); do
