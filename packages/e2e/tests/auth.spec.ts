@@ -97,6 +97,18 @@ test.describe("pharmacy staff authentication", () => {
 });
 
 test.describe("negative paths", () => {
+  test("a stale browser session redirects to a global actionable sign-in alert", async ({ context, page }) => {
+    await context.addCookies([{
+      name: "sb-stale-auth-token",
+      value: "invalidated-session",
+      domain: new URL(patientUrl).hostname,
+      path: "/",
+    }]);
+    await page.goto(`${patientUrl}/prescriptions`);
+    await expect(page).toHaveURL(/\/auth\/sign-in\?.*error=session_expired/);
+    await expect(page.locator(".error[role=alert]")).toContainText("session expired");
+  });
+
   test("an unauthenticated request to a protected API is rejected", async ({ page }) => {
     const response = await page.request.get(`${patientUrl}/api/v1/mar`, {
       headers: { Accept: "application/json" },

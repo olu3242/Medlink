@@ -1,4 +1,4 @@
-import { Button } from "@medlink/ui";
+import { FormSubmitButton } from "@medlink/ui";
 import { requestMagicLink } from "./actions";
 
 type SignInPageProps = {
@@ -37,7 +37,9 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             required
             type="email"
           />
-          <Button className="mt-4 w-full" type="submit">Email me a sign-in link</Button>
+          <FormSubmitButton className="mt-4 w-full" pendingLabel="Sending sign-in link…">
+            Email me a sign-in link
+          </FormSubmitButton>
         </form>
       </section>
     </main>

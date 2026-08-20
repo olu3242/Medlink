@@ -3,9 +3,12 @@
 import Link from "next/link";
 import {
   useRef,
+  useEffect,
   useState,
   type FormEvent,
 } from "react";
+
+const localDraftKey = "medlink:patient:manual-prescription-draft:v1";
 
 interface MedicineMatch {
   id: string;
@@ -34,14 +37,54 @@ export function ManualPrescriptionForm() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [createdId, setCreatedId] = useState("");
+  const dirty = useRef(false);
 
-  async function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function saveLocalDraft(nextQuery = query, nextItems = items) {
+    const fields = formRef.current
+      ? Object.fromEntries(Array.from(new FormData(formRef.current).entries())
+        .filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+      : {};
+    localStorage.setItem(localDraftKey, JSON.stringify({ query: nextQuery, items: nextItems, fields }));
+    dirty.current = true;
+  }
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(localDraftKey);
+      if (raw) {
+        const draft = JSON.parse(raw) as { query?: string; items?: ManualItem[]; fields?: Record<string, string> };
+        setQuery(draft.query ?? "");
+        setItems(draft.items ?? []);
+        dirty.current = true;
+        setTimeout(() => {
+          for (const [name, value] of Object.entries(draft.fields ?? {})) {
+            const control = formRef.current?.elements.namedItem(name);
+            if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) control.value = value;
+          }
+        });
+      }
+    } catch { localStorage.removeItem(localDraftKey); }
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!dirty.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  useEffect(() => {
+    if (query.trim().length < 2) { setMatches([]); return; }
+    const timer = window.setTimeout(() => { void searchCatalogue(query); }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  async function searchCatalogue(searchQuery: string) {
     setSearching(true);
     setMessage("");
     try {
       const response = await fetch(
-        `/api/v1/medicines/search?q=${encodeURIComponent(query)}`,
+        `/api/v1/medicines/search?q=${encodeURIComponent(searchQuery)}`,
       );
       if (!response.ok) throw new Error();
       const body = await response.json() as {
@@ -57,7 +100,8 @@ export function ManualPrescriptionForm() {
 
   function addMedicine(medicine: MedicineMatch) {
     if (items.some(({ id }) => id === medicine.id)) return;
-    setItems((current) => [...current, {
+    setItems((current) => {
+      const next = [...current, {
       ...medicine,
       dosage: "",
       frequency: "",
@@ -65,7 +109,12 @@ export function ManualPrescriptionForm() {
       quantity: "",
       quantityUnit: medicine.dosageForm,
       directions: "",
-    }]);
+      }];
+      saveLocalDraft("", next);
+      return next;
+    });
+    setQuery("");
+    setMatches([]);
   }
 
   function updateItem(
@@ -73,8 +122,12 @@ export function ManualPrescriptionForm() {
     field: keyof ManualItem,
     value: string,
   ) {
-    setItems((current) => current.map((item) =>
-      item.id === id ? { ...item, [field]: value } : item));
+    setItems((current) => {
+      const next = current.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item);
+      saveLocalDraft(query, next);
+      return next;
+    });
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -135,6 +188,8 @@ export function ManualPrescriptionForm() {
         : "Manual prescription saved as a draft.");
       setItems([]);
       formRef.current?.reset();
+      localStorage.removeItem(localDraftKey);
+      dirty.current = false;
     } catch {
       setMessage(
         "The manual prescription could not be saved. Review every required field and retry.",
@@ -151,26 +206,30 @@ export function ManualPrescriptionForm() {
         Select canonical catalogue medicines. A licensed pharmacist must still
         verify the original prescription before any fulfillment begins.
       </p>
-      <form className="inline-search" onSubmit={search}>
+      <div className="prescription-combobox">
         <div className="field grow">
           <label htmlFor="medicine-query">Medicine name</label>
           <input
+            aria-autocomplete="list"
+            aria-controls="medicine-matches"
+            aria-expanded={matches.length > 0}
+            aria-required="true"
+            autoComplete="off"
             id="medicine-query"
+            role="combobox"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { setQuery(event.target.value); saveLocalDraft(event.target.value, items); }}
             minLength={2}
             maxLength={100}
             required
           />
+          <small className="muted" role="status">{searching ? "Searching the canonical catalogue…" : "Type at least two characters, then choose a verified medicine."}</small>
         </div>
-        <button className="secondary-button" type="submit" disabled={searching}>
-          {searching ? "Searching..." : "Search catalogue"}
-        </button>
-      </form>
+      </div>
       {matches.length > 0 && (
-        <ul className="result-list" aria-label="Medicine matches">
+        <ul className="result-list" id="medicine-matches" role="listbox" aria-label="Medicine matches">
           {matches.map((medicine) => (
-            <li key={medicine.id}>
+            <li key={medicine.id} role="option" aria-selected={false}>
               <span>
                 <strong>{medicine.brandName}</strong>
                 {" — "}
@@ -187,7 +246,7 @@ export function ManualPrescriptionForm() {
           ))}
         </ul>
       )}
-      <form ref={formRef} onSubmit={save}>
+      <form className="manual-prescription-fields" ref={formRef} onInput={() => saveLocalDraft()} onSubmit={save}>
         <div className="grid">
           <div className="field">
             <label htmlFor="prescriberName">Prescriber</label>
@@ -199,11 +258,11 @@ export function ManualPrescriptionForm() {
           </div>
           <div className="field">
             <label htmlFor="prescribedAt">Prescription date</label>
-            <input id="prescribedAt" name="prescribedAt" type="datetime-local" />
+            <input id="prescribedAt" name="prescribedAt" type="date" />
           </div>
           <div className="field">
             <label htmlFor="expiresAt">Expiry date</label>
-            <input id="expiresAt" name="expiresAt" type="datetime-local" />
+            <input id="expiresAt" name="expiresAt" type="date" />
           </div>
         </div>
         {items.map((item) => (
@@ -220,6 +279,7 @@ export function ManualPrescriptionForm() {
                   onChange={(event) =>
                     updateItem(item.id, "strength", event.target.value)}
                   maxLength={100}
+                  aria-required="true"
                   required
                 />
               </div>
@@ -232,6 +292,7 @@ export function ManualPrescriptionForm() {
                     updateItem(item.id, "dosage", event.target.value)}
                   placeholder="For example: one tablet"
                   maxLength={500}
+                  aria-required="true"
                   required
                 />
               </div>
@@ -281,8 +342,11 @@ export function ManualPrescriptionForm() {
             <button
               className="link-button danger-text"
               type="button"
-              onClick={() => setItems((current) =>
-                current.filter(({ id }) => id !== item.id))}
+              onClick={() => setItems((current) => {
+                const next = current.filter(({ id }) => id !== item.id);
+                saveLocalDraft(query, next);
+                return next;
+              })}
             >
               Remove medicine
             </button>
@@ -299,7 +363,7 @@ export function ManualPrescriptionForm() {
             value="submit"
             disabled={busy || items.length === 0}
           >
-            {busy ? "Saving..." : "Submit for review"}
+            {busy ? "Submitting for review…" : "Submit for review"}
           </button>
           <button
             className="secondary-button"

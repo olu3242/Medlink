@@ -31,7 +31,20 @@ export async function middleware(request: NextRequest) {
       },
     },
   });
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
+  if (!user && !path.startsWith("/auth/") && !path.startsWith("/api/")) {
+    const signIn = request.nextUrl.clone();
+    signIn.pathname = "/auth/sign-in";
+    signIn.search = "";
+    signIn.searchParams.set("next", `${path}${request.nextUrl.search}`);
+    const hadSessionCookie = request.cookies.getAll()
+      .some(({ name }) => name.startsWith("sb-") && name.includes("auth-token"));
+    if (hadSessionCookie) signIn.searchParams.set("error", "session_expired");
+    const redirect = NextResponse.redirect(signIn);
+    redirect.headers.set("x-correlation-id", correlationId);
+    return redirect;
+  }
   response.headers.set("x-correlation-id", correlationId);
   return response;
 }

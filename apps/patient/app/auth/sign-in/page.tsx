@@ -1,4 +1,4 @@
-import { Button, Input } from "@medlink/ui";
+import { FormSubmitButton, Input } from "@medlink/ui";
 import { requestMagicLink } from "./actions";
 
 type SignInPageProps = {
@@ -17,11 +17,15 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
         <p role="status">Check your email for your secure sign-in link.</p>
       )}
       {query.error && (
-        <p className="error" role="alert">We could not start sign-in. Check your email address and try again.</p>
+        <p className="error" role="alert">{query.error === "session_expired"
+          ? "Your session expired or is no longer valid. Sign in again to continue safely."
+          : "We could not start sign-in. Check your email address and try again."}</p>
       )}
       <form action={requestMagicLink}>
         <Input label="Email address" id="email" name="email" type="email" autoComplete="email" required />
-        <Button type="submit">Email me a sign-in link</Button>
+        <FormSubmitButton className="button" pendingLabel="Sending sign-in link…">
+          Email me a sign-in link
+        </FormSubmitButton>
       </form>
     </section>
   );

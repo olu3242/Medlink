@@ -36,7 +36,7 @@ export function PaymentAction({ reservationId, captured }: {
 
   if (captured) return <p className="status">Payment confirmed</p>;
   return <div className="actions">
-    <button className="button" disabled={busy || Boolean(hostedUrl)} onClick={pay}>Pay securely</button>
+    <button aria-busy={busy} className="button" disabled={busy || Boolean(hostedUrl)} onClick={pay} type="button">{busy ? "Starting secure payment…" : "Pay securely"}</button>
     {hostedUrl ? <a className="secondary" href={hostedUrl}>Continue to payment provider</a> : null}
     {message ? <p role="status" className="muted">{message}</p> : null}
   </div>;

@@ -304,8 +304,7 @@ test("signed WhatsApp medication access golden loop: WhatsApp -> patient -> phar
     await patientPage.getByLabel("Choose a prescription").setInputFiles({
       name: "empty.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(0),
     });
-    await patientPage.getByRole("button", { name: "Upload prescription" }).click();
-    await expect(patientPage.getByText("This file is invalid.", { exact: false })).toBeVisible();
+    await expect(patientPage.getByText("Choose a genuine PDF", { exact: false })).toBeVisible();
 
     for (const invalid of [
       { name: "empty.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(0), status: 400 },
@@ -327,7 +326,7 @@ test("signed WhatsApp medication access golden loop: WhatsApp -> patient -> phar
       mimeType: "application/pdf",
       buffer: adversarialPdf,
     });
-    await patientPage.getByRole("button", { name: "Upload prescription" }).click();
+    await patientPage.getByRole("button", { name: "Submit prescription for review" }).click();
     const accepted = await uploadResponse;
     expect(accepted.status(), await accepted.text()).toBe(201);
     const acceptedBody = await accepted.json() as {

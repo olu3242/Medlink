@@ -16,6 +16,14 @@ export async function GET(request: NextRequest) {
   if (error) {
     destination.pathname = "/auth/sign-in";
     destination.searchParams.set("error", "callback_failed");
+    return NextResponse.redirect(destination);
+  }
+
+  const { error: onboardingError } = await supabase.rpc("bootstrap_patient_workspace");
+  if (onboardingError) {
+    await supabase.auth.signOut();
+    destination.pathname = "/auth/sign-in";
+    destination.searchParams.set("error", "onboarding_failed");
   }
 
   return NextResponse.redirect(destination);

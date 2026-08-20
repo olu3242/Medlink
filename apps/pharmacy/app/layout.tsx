@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@medlink/ui";
 import { signOut } from "./auth/sign-in/actions";
 import "@medlink/ui/styles.css";
+import "@medlink/ui/accessibility.css";
 import "../app/globals.css";
 
 export default function Layout({ children }: { children: ReactNode }) {

@@ -1,4 +1,5 @@
 import { requestMagicLink } from "./actions";
+import { FormSubmitButton } from "@medlink/ui";
 
 type SignInPageProps = {
   searchParams: Promise<{ error?: string; sent?: string }>;
@@ -21,7 +22,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
       <form action={requestMagicLink}>
         <label htmlFor="email">Email address</label>
         <input id="email" name="email" type="email" autoComplete="email" required />
-        <button type="submit">Email me a sign-in link</button>
+        <FormSubmitButton pendingLabel="Sending sign-in link…">Email me a sign-in link</FormSubmitButton>
       </form>
     </section>
   );

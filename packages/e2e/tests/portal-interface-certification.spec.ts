@@ -35,10 +35,49 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
     .toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
+async function expectAccessibleTextContrast(page: Page): Promise<void> {
+  const failures = await page.evaluate(() => {
+    const channels = (color: string) => (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const luminance = (color: string) => {
+      const [red = 0, green = 0, blue = 0] = channels(color).map((value) => {
+        const channel = value / 255;
+        return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+      });
+      return .2126 * red + .7152 * green + .0722 * blue;
+    };
+    const background = (element: Element) => {
+      let current: Element | null = element;
+      while (current) {
+        const color = getComputedStyle(current).backgroundColor;
+        if (color !== "rgba(0, 0, 0, 0)" && color !== "transparent") return color;
+        current = current.parentElement;
+      }
+      return "rgb(255, 255, 255)";
+    };
+    return Array.from(document.querySelectorAll(".ml-main label, .ml-main h2, .ml-main h3"))
+      .flatMap((element) => {
+        const style = getComputedStyle(element);
+        if (style.display === "none" || style.visibility === "hidden" || !element.textContent?.trim()) return [];
+        const foregroundLuminance = luminance(style.color);
+        const backgroundLuminance = luminance(background(element));
+        const ratio = (Math.max(foregroundLuminance, backgroundLuminance) + .05)
+          / (Math.min(foregroundLuminance, backgroundLuminance) + .05);
+        const large = Number.parseFloat(style.fontSize) >= 24
+          || (Number.parseFloat(style.fontSize) >= 18.66 && Number(style.fontWeight) >= 700);
+        const required = large ? 3 : 4.5;
+        return ratio + .01 < required
+          ? [{ tag: element.tagName, text: element.textContent.trim().slice(0, 80), ratio, required }]
+          : [];
+      });
+  });
+  expect(failures).toEqual([]);
+}
+
 async function openAndCheck(page: Page, url: string, heading: string): Promise<void> {
   await page.goto(url);
   await expect(page.getByRole("heading", { name: heading })).toBeVisible();
   await expectNoHorizontalOverflow(page);
+  await expectAccessibleTextContrast(page);
 }
 
 for (const viewport of [
@@ -73,6 +112,28 @@ for (const viewport of [
     await openAndCheck(patientPage, `${patientUrl}/search`, "Find medicine nearby");
     await openAndCheck(patientPage, `${patientUrl}/medicines`, "Medicine catalogue");
     await openAndCheck(patientPage, `${patientUrl}/reservations`, "Your reservations");
+    await openAndCheck(patientPage, `${patientUrl}/prescriptions/new`, "Add a prescription");
+    await expect(patientPage.getByRole("button", { name: "Submit prescription for review" })).toBeDisabled();
+    if (viewport.name === "desktop") {
+      await patientPage.getByLabel("Choose a prescription").setInputFiles({
+        name: "staged-prescription.pdf",
+        mimeType: "application/pdf",
+        buffer: Buffer.from("%PDF-1.4\n% MedLink staged UX fixture\n%%EOF"),
+      });
+      await expect(patientPage.locator(".prescription-dropzone span")).toContainText("staged-prescription.pdf");
+      await expect(patientPage.getByRole("button", { name: "Submit prescription for review" })).toBeEnabled();
+      await patientPage.getByLabel("Prescriber").fill("Dr Draft Recovery");
+      await expect.poll(() => patientPage.evaluate(() =>
+        localStorage.getItem("medlink:patient:manual-prescription-draft:v1")))
+        .toContain("Dr Draft Recovery");
+      await patientPage.getByLabel("Medicine name").fill("Golden Loop");
+      const option = patientPage.getByRole("option").first();
+      await expect(option).toBeVisible();
+      await option.getByRole("button", { name: "Add" }).click();
+      await expect(patientPage.getByRole("button", { name: "Submit for review" })).toHaveClass(/button/);
+      await expect(patientPage.getByRole("button", { name: "Save draft" })).toHaveClass(/secondary-button/);
+      await patientPage.evaluate(() => localStorage.removeItem("medlink:patient:manual-prescription-draft:v1"));
+    }
     await patientContext.close();
 
     const pharmacyContext = await browser.newContext({ viewport });
