@@ -48,6 +48,22 @@ const medicineColumns = `
   updated_at
 `;
 
+const medicineSummaryColumns = `
+  id,
+  brand_name,
+  generic_name,
+  dosage_form,
+  route,
+  strength_display,
+  strength_normalized,
+  manufacturer_name,
+  controlled_substance,
+  status,
+  catalog_version,
+  created_at,
+  updated_at
+`;
+
 const medicineRowSchema = z.object({
   id: z.string().uuid(),
   brand_name: z.string(),
@@ -85,6 +101,22 @@ const medicineRowSchema = z.object({
   })),
   created_at: z.string(),
   updated_at: z.string(),
+});
+
+const medicineSummaryRowSchema = medicineRowSchema.pick({
+  id: true,
+  brand_name: true,
+  generic_name: true,
+  dosage_form: true,
+  route: true,
+  strength_display: true,
+  strength_normalized: true,
+  manufacturer_name: true,
+  controlled_substance: true,
+  status: true,
+  catalog_version: true,
+  created_at: true,
+  updated_at: true,
 });
 
 const searchRowSchema = z.object({
@@ -195,6 +227,25 @@ function mapMedicine(row: unknown) {
   });
 }
 
+function mapMedicineSummary(row: unknown) {
+  const value = medicineSummaryRowSchema.parse(row);
+  return catalogMedicineSummarySchema.parse({
+    id: value.id,
+    brandName: value.brand_name,
+    genericName: value.generic_name,
+    dosageForm: value.dosage_form,
+    route: value.route,
+    strength: value.strength_display,
+    normalizedStrength: value.strength_normalized,
+    manufacturer: value.manufacturer_name,
+    controlled: value.controlled_substance,
+    status: value.status,
+    version: value.catalog_version,
+    createdAt: value.created_at,
+    updatedAt: value.updated_at,
+  });
+}
+
 export class SupabaseCanonicalMedicineRepository
 implements CanonicalMedicineRepository {
   constructor(private readonly database: SupabaseClient) {}
@@ -245,7 +296,7 @@ implements CanonicalMedicineRepository {
 
   async list(input: Parameters<CanonicalMedicineRepository["list"]>[0]) {
     let statement = this.database.from("medicines")
-      .select(medicineColumns, { count: "exact" })
+      .select(medicineSummaryColumns, { count: "exact" })
       .is("deleted_at", null)
       .order("brand_name")
       .limit(input.limit);
@@ -260,8 +311,7 @@ implements CanonicalMedicineRepository {
     if (error) databaseFailure(error);
     return {
       items: z.array(z.unknown()).parse(data ?? [])
-        .map(mapMedicine).map((medicine) =>
-          catalogMedicineSummarySchema.parse(medicine)),
+        .map(mapMedicineSummary),
       total: count ?? 0,
     };
   }
