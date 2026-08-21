@@ -1,6 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { getPublicEnvironment, getServerEnvironment } from "../env";
+import {
+  getPublicEnvironment,
+  getSupabaseServiceRoleEnvironment,
+} from "../env";
 
 // The one narrow exception ADR 0001's amendment (ADR 0004) documents: a
 // service-role client, used only by the Conversation Runtime's WhatsApp
@@ -13,7 +16,7 @@ import { getPublicEnvironment, getServerEnvironment } from "../env";
 // through createSupabaseServerClient's session-scoped, RLS-evaluated client.
 export function createSupabaseServiceRoleClient() {
   const { NEXT_PUBLIC_SUPABASE_URL } = getPublicEnvironment();
-  const { SUPABASE_SERVICE_ROLE_KEY } = getServerEnvironment();
+  const { SUPABASE_SERVICE_ROLE_KEY } = getSupabaseServiceRoleEnvironment();
   return createClient(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
