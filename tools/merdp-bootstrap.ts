@@ -3,7 +3,7 @@ import { dirname,isAbsolute,resolve } from "node:path";
 import { createClient,type SupabaseClient } from "@supabase/supabase-js";
 import { applyBootstrap,bootstrapManifestSchema,SupabaseMerdpRepository,validateBootstrap,type TargetState } from "../packages/merdp/src/index";
 
-type Arguments={manifest:string;environment:string;projectRef:string;mode:"dry-run"|"apply";allowProduction:boolean;approveDriftSha256?:string};
+type Arguments={manifest:string;environment:string;projectRef:string;mode:"dry-run"|"apply";allowProduction:boolean;approveDriftSha256?:string;authorizeBaselineSha256?:string};
 
 function parseArguments(values:string[]):Arguments{
   const options=new Map<string,string>();let mode:Arguments["mode"]|undefined;let allowProduction=false;
@@ -16,7 +16,7 @@ function parseArguments(values:string[]):Arguments{
   }
   const manifest=options.get("--manifest"),environment=options.get("--environment"),projectRef=options.get("--project-ref");
   if(!manifest||!environment||!projectRef||!mode)throw new Error("Required: --manifest PATH --environment NAME --project-ref REF and exactly one of --dry-run/--apply");
-  return {manifest:resolve(manifest),environment,projectRef,mode,allowProduction,approveDriftSha256:options.get("--approve-drift-sha256")};
+  return {manifest:resolve(manifest),environment,projectRef,mode,allowProduction,approveDriftSha256:options.get("--approve-drift-sha256"),authorizeBaselineSha256:options.get("--authorize-baseline")};
 }
 
 function sourcePath(manifestPath:string,path:string):string{return isAbsolute(path)?path:resolve(dirname(manifestPath),path);}
@@ -37,7 +37,7 @@ async function main():Promise<void>{
   const serviceRoleKey=process.env.MEDLINK_MERDP_SUPABASE_SERVICE_ROLE_KEY??(args.mode==="dry-run"?process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY:undefined)??requireEnvironment("MEDLINK_MERDP_SUPABASE_SERVICE_ROLE_KEY");
   verifyTargetUrl(url,args.projectRef);
   const db=createClient(url,serviceRoleKey,{auth:{persistSession:false,autoRefreshToken:false}}),before=await inspect(db);
-  const validated=validateBootstrap({manifest,sources:{products:readFileSync(sourcePath(args.manifest,manifest.sources.products.path),"utf8"),manufacturers:readFileSync(sourcePath(args.manifest,manifest.sources.manufacturers.path),"utf8")},mode:args.mode,projectRef:args.projectRef,environment:args.environment,targetState:before,approveDriftSha256:args.approveDriftSha256,allowProduction:args.allowProduction,productionAuthorization:process.env.MEDLINK_MERDP_PRODUCTION_AUTHORIZATION});
+  const validated=validateBootstrap({manifest,sources:{products:readFileSync(sourcePath(args.manifest,manifest.sources.products.path),"utf8"),manufacturers:readFileSync(sourcePath(args.manifest,manifest.sources.manufacturers.path),"utf8")},mode:args.mode,projectRef:args.projectRef,environment:args.environment,targetState:before,approveDriftSha256:args.approveDriftSha256,authorizeBaselineSha256:args.authorizeBaselineSha256,allowProduction:args.allowProduction,productionAuthorization:process.env.MEDLINK_MERDP_PRODUCTION_AUTHORIZATION});
   if(args.mode==="dry-run"){
     console.log(JSON.stringify({status:"DRY_RUN_COMPLETE",mutations:0,targetBefore:before,plan:validated.plan},null,2));return;
   }

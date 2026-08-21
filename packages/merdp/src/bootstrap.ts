@@ -26,6 +26,14 @@ export const bootstrapManifestSchema=z.object({
     z.object({status:z.literal("none")}),
     z.object({status:z.literal("review_required"),reportSha256:sha256Schema,reasons:z.array(z.string().min(1)).min(1)}),
   ]),
+  freshBaselineAuthorization:z.object({
+    certificationMode:z.literal("FRESH_AUTHORITATIVE_BASELINE"),certificationSha256:sha256Schema,
+    products:z.object({rowCount:z.number().int().positive(),sha256:sha256Schema}),
+    manufacturers:z.object({rowCount:z.number().int().positive(),sha256:sha256Schema}),
+    canonicalMedicines:z.number().int().nonnegative(),registrations:z.number().int().nonnegative(),quarantines:z.number().int().nonnegative(),
+    registrationCollisionGroups:z.number().int().nonnegative(),registrationCollisionRows:z.number().int().nonnegative(),
+    unsafeMedicineCollapses:z.literal(0),unsafeRegistrationAssignments:z.literal(0),unsafeManufacturerMerges:z.literal(0),
+  }).optional(),
 });
 
 export type BootstrapManifest=z.infer<typeof bootstrapManifestSchema>;
@@ -34,7 +42,7 @@ export interface TargetState {readonly medicines:number;readonly manufacturers:n
 export interface BootstrapSources {readonly products:string;readonly manufacturers:string;}
 export interface BootstrapTarget {
   persist(result:EtlRunResult<CsvRecord>,artifactUri:string):Promise<PersistedRun>;
-  converge():Promise<ConvergenceResult>;
+  converge(failureStage:undefined,manufacturerSha256:string,expectedManufacturers:number):Promise<ConvergenceResult>;
 }
 
 export interface BootstrapPlan {
@@ -61,7 +69,7 @@ function validateSource(label:"products"|"manufacturers",content:string,expected
   }
 }
 
-export function validateBootstrap(input:{manifest:unknown;sources:BootstrapSources;mode:BootstrapMode;projectRef:string;environment:string;targetState:TargetState;approveDriftSha256?:string;allowProduction?:boolean;productionAuthorization?:string}):ValidatedBootstrap{
+export function validateBootstrap(input:{manifest:unknown;sources:BootstrapSources;mode:BootstrapMode;projectRef:string;environment:string;targetState:TargetState;approveDriftSha256?:string;authorizeBaselineSha256?:string;allowProduction?:boolean;productionAuthorization?:string}):ValidatedBootstrap{
   const manifest=bootstrapManifestSchema.parse(input.manifest);
   if(input.projectRef!==manifest.target.projectRef) throw new Error("TARGET_PROJECT_MISMATCH");
   if(input.environment!==manifest.target.environment) throw new Error("TARGET_ENVIRONMENT_MISMATCH");
@@ -79,7 +87,6 @@ export function validateBootstrap(input:{manifest:unknown;sources:BootstrapSourc
   const registrationCollisionRows=[...registrationGroups.values()].filter(count=>count>1).reduce((total,count)=>total+count,0);
   const rejectedRows=products.rejected+manufacturers.rejected;
   if(input.mode==="apply"&&rejectedRows>0) throw new Error("SOURCE_REJECTED_ROWS_PRESENT");
-  if(input.mode==="apply"&&manifest.drift.status==="review_required"&&input.approveDriftSha256!==manifest.drift.reportSha256) throw new Error("SOURCE_DRIFT_NOT_AUTHORIZED");
   const emptyTarget=input.targetState.medicines===0&&input.targetState.manufacturers===0&&input.targetState.registrations===0&&input.targetState.rawRecords===0;
   const plan:BootstrapPlan={mode:input.mode,projectRef:input.projectRef,environment:manifest.target.environment,
     sourceProducts:products.manifest.rowCount,sourceManufacturers:manufacturers.manifest.rowCount,rawRecordsExpected:products.manifest.rowCount+manufacturers.manifest.rowCount,
@@ -91,6 +98,17 @@ export function validateBootstrap(input:{manifest:unknown;sources:BootstrapSourc
     eligibleMedicineRows:eligibleProducts.length,nonCanonicalProductRows:products.manifest.rowCount-eligibleProducts.length,
     duplicateOrCollapsedProductRows:0,registrationCollisionGroups:[...registrationGroups.values()].filter(count=>count>1).length,registrationCollisionRows,
     rowsWithoutCanonicalRegistration:eligibleProducts.length-registrationsToInsert,unaccountedProductRows:0};
+  if(input.mode==="apply"){
+    const approval=manifest.freshBaselineAuthorization;
+    if(approval){
+      if(input.authorizeBaselineSha256!==approval.certificationSha256) throw new Error("FRESH_BASELINE_NOT_AUTHORIZED");
+      const approvedTuple={productRows:approval.products.rowCount,productSha:approval.products.sha256,manufacturerRows:approval.manufacturers.rowCount,manufacturerSha:approval.manufacturers.sha256,canonicalMedicines:approval.canonicalMedicines,registrations:approval.registrations,quarantines:approval.quarantines,collisionGroups:approval.registrationCollisionGroups,collisionRows:approval.registrationCollisionRows};
+      const actualTuple={productRows:manifest.sources.products.rowCount,productSha:manifest.sources.products.sha256,manufacturerRows:manifest.sources.manufacturers.rowCount,manufacturerSha:manifest.sources.manufacturers.sha256,canonicalMedicines:plan.eligibleMedicineRows,registrations:plan.registrationsToInsert??registrationsToInsert,quarantines:plan.quarantines,collisionGroups:plan.registrationCollisionGroups,collisionRows:plan.registrationCollisionRows};
+      for(const key of Object.keys(approvedTuple) as Array<keyof typeof approvedTuple>){if(approvedTuple[key]!==actualTuple[key])throw new Error(`FRESH_BASELINE_TUPLE_MISMATCH:${key}`);}
+    }else if(manifest.drift.status==="review_required"&&input.approveDriftSha256!==manifest.drift.reportSha256){
+      throw new Error("SOURCE_DRIFT_NOT_AUTHORIZED");
+    }
+  }
   return {manifest,products,manufacturers,plan};
 }
 
@@ -98,6 +116,6 @@ export async function applyBootstrap(validated:ValidatedBootstrap,target:Bootstr
   if(validated.plan.mode!=="apply") throw new Error("DRY_RUN_CANNOT_MUTATE");
   const products=await target.persist(validated.products,validated.manifest.sources.products.artifactUri);
   const manufacturers=await target.persist(validated.manufacturers,validated.manifest.sources.manufacturers.artifactUri);
-  const convergence=await target.converge();
+  const convergence=await target.converge(undefined,validated.manifest.sources.manufacturers.sha256,validated.manifest.sources.manufacturers.rowCount);
   return {products,manufacturers,convergence};
 }
