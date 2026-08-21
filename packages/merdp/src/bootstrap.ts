@@ -44,6 +44,8 @@ export interface BootstrapPlan {
   readonly registrationsToInsert:number|null;readonly quarantines:number;readonly qualityFindings:number;
   readonly rejectedRows:number;readonly unsafeMerges:0;readonly duplicateNafdacConflicts:number;
   readonly ingredientConflictGroups:number;readonly unresolvedManufacturers:number;readonly sourceDrift:BootstrapManifest["drift"]["status"];
+  readonly eligibleMedicineRows:number;readonly nonCanonicalProductRows:number;readonly duplicateOrCollapsedProductRows:0;
+  readonly registrationCollisionGroups:number;readonly registrationCollisionRows:number;readonly rowsWithoutCanonicalRegistration:number;readonly unaccountedProductRows:0;
 }
 
 export interface ValidatedBootstrap {
@@ -69,18 +71,26 @@ export function validateBootstrap(input:{manifest:unknown;sources:BootstrapSourc
   validateSource("products",input.sources.products,manifest.sources.products,products);
   validateSource("manufacturers",input.sources.manufacturers,manifest.sources.manufacturers,manufacturers);
   const resolution=resolveProducts(products.records.map(record=>record.raw),manufacturers.records.map(record=>record.raw));
-  const registrations=new Set(products.records.map(record=>record.raw.NAFDAC).filter((value):value is string=>Boolean(value)));
+  const eligibleProducts=products.records.filter(record=>!record.findings.some(finding=>finding.severity==="QUARANTINE"||finding.severity==="REJECT"));
+  const eligibleManufacturers=manufacturers.records.filter(record=>!record.findings.some(finding=>finding.severity==="QUARANTINE"||finding.severity==="REJECT"));
+  const registrationGroups=new Map<string,number>();
+  for(const record of eligibleProducts){const registration=record.raw.NAFDAC?.trim();if(registration)registrationGroups.set(registration,(registrationGroups.get(registration)??0)+1);}
+  const registrationsToInsert=[...registrationGroups.values()].filter(count=>count===1).length;
+  const registrationCollisionRows=[...registrationGroups.values()].filter(count=>count>1).reduce((total,count)=>total+count,0);
   const rejectedRows=products.rejected+manufacturers.rejected;
   if(input.mode==="apply"&&rejectedRows>0) throw new Error("SOURCE_REJECTED_ROWS_PRESENT");
   if(input.mode==="apply"&&manifest.drift.status==="review_required"&&input.approveDriftSha256!==manifest.drift.reportSha256) throw new Error("SOURCE_DRIFT_NOT_AUTHORIZED");
   const emptyTarget=input.targetState.medicines===0&&input.targetState.manufacturers===0&&input.targetState.registrations===0&&input.targetState.rawRecords===0;
   const plan:BootstrapPlan={mode:input.mode,projectRef:input.projectRef,environment:manifest.target.environment,
     sourceProducts:products.manifest.rowCount,sourceManufacturers:manufacturers.manifest.rowCount,rawRecordsExpected:products.manifest.rowCount+manufacturers.manifest.rowCount,
-    medicinesToInsert:emptyTarget?resolution.canonicalProductCandidates:null,medicinesToUpdate:emptyTarget?0:null,
-    manufacturersToInsert:emptyTarget?manufacturers.manifest.rowCount:null,registrationsToInsert:emptyTarget?registrations.size:null,
+    medicinesToInsert:emptyTarget?eligibleProducts.length:null,medicinesToUpdate:emptyTarget?0:null,
+    manufacturersToInsert:emptyTarget?eligibleManufacturers.length:null,registrationsToInsert:emptyTarget?registrationsToInsert:null,
     quarantines:products.quarantined+manufacturers.quarantined,qualityFindings:products.findings.length+manufacturers.findings.length,
     rejectedRows,unsafeMerges:0,duplicateNafdacConflicts:resolution.nrnCollisionGroups,ingredientConflictGroups:resolution.ingredientConflictGroups,
-    unresolvedManufacturers:resolution.unresolvedManufacturer.length,sourceDrift:manifest.drift.status};
+    unresolvedManufacturers:resolution.unresolvedManufacturer.length,sourceDrift:manifest.drift.status,
+    eligibleMedicineRows:eligibleProducts.length,nonCanonicalProductRows:products.manifest.rowCount-eligibleProducts.length,
+    duplicateOrCollapsedProductRows:0,registrationCollisionGroups:[...registrationGroups.values()].filter(count=>count>1).length,registrationCollisionRows,
+    rowsWithoutCanonicalRegistration:eligibleProducts.length-registrationsToInsert,unaccountedProductRows:0};
   return {manifest,products,manufacturers,plan};
 }
 
