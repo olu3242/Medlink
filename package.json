@@ -33,6 +33,7 @@
     "test:e2e:golden": "npm run test:golden-loop --workspace @medlink/e2e",
     "test:e2e:deployment": "npm run test:deployment --workspace @medlink/e2e",
     "test:e2e:certify": "npm run test:certify --workspace @medlink/e2e",
+    "merdp:bootstrap": "vite-node tools/merdp-bootstrap.ts",
     "check": "npm run lint && npm run typecheck && npm run test",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
@@ -64,6 +65,7 @@
     "tailwindcss": "^4.1.0",
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.37.0",
+    "vite-node": "^3.2.4",
     "vitest": "^3.2.0"
   },
   "overrides": {

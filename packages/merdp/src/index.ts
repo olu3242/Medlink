@@ -4,3 +4,4 @@ export * from "./source-diff";
 export * from "./pipeline";
 export * from "./database";
 export * from "./database-job";
+export * from "./bootstrap";
