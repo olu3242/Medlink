@@ -22,6 +22,16 @@ const serverEnvironmentSchema = z.object({
   WHATSAPP_VERIFY_TOKEN: z.string().min(1),
 });
 
+const supabaseServiceRoleEnvironmentSchema = serverEnvironmentSchema.pick({
+  SUPABASE_SERVICE_ROLE_KEY: true,
+});
+
+export function getSupabaseServiceRoleEnvironment() {
+  return supabaseServiceRoleEnvironmentSchema.parse({
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  });
+}
+
 export function getServerEnvironment() {
   return serverEnvironmentSchema.parse({
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,

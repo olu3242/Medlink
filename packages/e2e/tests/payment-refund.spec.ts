@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../fixtures/certification-test";
 import { createClient } from "@supabase/supabase-js";
 import { signInWithMagicLink } from "../lib/auth";
 

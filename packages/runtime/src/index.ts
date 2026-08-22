@@ -196,6 +196,9 @@ export function createRuntime(dependencies: RuntimeDependencies) {
     const id = dependencies.id ?? randomUUID;
     const now = dependencies.now ?? Date.now;
     const correlationId = requestValue(request, "x-correlation-id") ?? id();
+    const requestedLocale = requestValue(request, "accept-language")
+      ?.split(",")[0]
+      ?.trim();
     const startedAt = now();
     let context: RuntimeContext | undefined;
     try {
@@ -206,7 +209,7 @@ export function createRuntime(dependencies: RuntimeDependencies) {
         requestId: requestValue(request, "x-request-id") ?? id(),
         conversationId: requestValue(request, "x-conversation-id"),
         workflowId: requestValue(request, "x-workflow-id"),
-        locale: requestValue(request, "accept-language")?.split(",")[0] ?? "en",
+        locale: requestedLocale && requestedLocale !== "*" ? requestedLocale : "en",
         timezone: requestValue(request, "x-timezone") ?? "UTC",
         channel: requestValue(request, "x-medlink-channel") ?? "api",
         apiVersion: "v1",
@@ -289,3 +292,4 @@ export function createRuntime(dependencies: RuntimeDependencies) {
     }
   };
 }
+export * from "./auth-policy";

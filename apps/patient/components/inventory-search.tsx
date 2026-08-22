@@ -95,8 +95,8 @@ export function InventorySearch({ query, marId, medicineId }: {
       </div>
       <button className="button" type="submit">Search availability</button>
       {medicineId ? (
-        <button className="button secondary" type="button" onClick={searchNearby}>
-          Use my location
+        <button aria-busy={loading} className="button secondary" disabled={loading} type="button" onClick={searchNearby}>
+          {loading ? "Finding nearby pharmacies…" : "Use my location"}
         </button>
       ) : null}
       <p aria-live="polite" className="muted">{locationMessage}</p>

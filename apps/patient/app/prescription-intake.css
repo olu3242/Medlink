@@ -1,0 +1,60 @@
+.prescription-file-section,
+.manual-prescription-fields {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 1.25rem;
+}
+
+.prescription-dropzone {
+  align-items: center;
+  background: #f8fafc;
+  border: 2px dashed var(--border-default);
+  border-radius: .75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: grid;
+  gap: .4rem;
+  justify-items: center;
+  min-height: 9rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.prescription-dropzone:hover,
+.prescription-dropzone.is-dragging {
+  background: #ecfdf5;
+  border-color: #0f766e;
+}
+
+.prescription-dropzone:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.prescription-file-input {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.prescription-submit-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  justify-content: space-between;
+  margin-top: 1.25rem;
+}
+
+.prescription-combobox {
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 600px) {
+  .prescription-submit-row { align-items: stretch; flex-direction: column; }
+  .prescription-submit-row .button { width: 100%; }
+}

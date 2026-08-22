@@ -690,6 +690,47 @@ describe("conversation runtime system identity migration (ADR 0004)", () => {
   });
 });
 
+describe("conversation runtime system identity Auth compatibility repair", () => {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "202608210077_conversation_runtime_system_identity_auth_compatibility.sql",
+    ),
+    "utf8",
+  ).toLowerCase();
+
+  it("fails closed unless the exact governed system identity is present", () => {
+    expect(sql).toContain("target_count <> 1");
+    expect(sql).toContain("'11111111-1111-4111-8111-111111111111'");
+    expect(sql).toContain("'whatsapp-webhook@system.medlink.internal'");
+    expect(sql).toContain("raw_app_meta_data ->> 'provider' = 'system'");
+  });
+
+  it("normalizes only GoTrue non-null string fields", () => {
+    for (const field of [
+      "confirmation_token",
+      "recovery_token",
+      "email_change_token_current",
+      "email_change_token_new",
+      "email_change",
+      "phone_change_token",
+      "phone_change",
+      "reauthentication_token",
+    ]) {
+      expect(sql).toContain(`${field} = coalesce(${field}, '')`);
+    }
+  });
+
+  it("does not mint login or authorization state", () => {
+    expect(sql).not.toContain("insert into auth.identities");
+    expect(sql).not.toContain("insert into auth.sessions");
+    expect(sql).not.toContain("insert into public.organization_memberships");
+    expect(sql).not.toMatch(/set\s+encrypted_password/);
+  });
+});
+
 describe("prescription file storage migration (G05, Engine 26)", () => {
   const sql = readFileSync(
     join(

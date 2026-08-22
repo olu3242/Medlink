@@ -7,7 +7,7 @@ const chunks=<T>(values:readonly T[],size:number)=>Array.from({length:Math.ceil(
 function fail(error:{message:string}|null):void { if(error) throw new Error(error.message); }
 
 export interface PersistedRun { readonly runId:string; readonly snapshotId:string; readonly replay:boolean; readonly rawPersisted:number; readonly findingsPersisted:number; }
-export interface ConvergenceResult { readonly durationMs:number; readonly reviewCases:number; readonly productMappings:number; readonly manufacturerMappings:number; readonly provenance:number; readonly certifications:number; readonly publications:number; readonly events:number; }
+export interface ConvergenceResult { readonly durationMs:number; readonly reviewCases:number; readonly productMappings:number; readonly manufacturerMappings:number; readonly manufacturerIdentities?:number; readonly manufacturerSnapshotStates?:number; readonly provenance:number; readonly certifications:number; readonly publications:number; readonly events:number; }
 
 export class SupabaseMerdpRepository {
   constructor(private readonly db:SupabaseClient) {}
@@ -36,8 +36,10 @@ export class SupabaseMerdpRepository {
     const completed=await this.db.from("etl_runs").update({status:"completed",completed_at:new Date().toISOString(),rows_valid:result.records.length-result.rejected,rows_warning:result.warnings,rows_quarantined:result.quarantined,rows_rejected:result.rejected,rows_staged:rawPersisted,metrics:{durationMs:result.durationMs}}).eq("id",runId);fail(completed.error);
     return {runId,snapshotId,replay:false,rawPersisted,findingsPersisted};
   }
-  async converge(failureStage?:"after_mappings"):Promise<ConvergenceResult>{
+  async converge(failureStage?:"after_mappings",manufacturerSha256?:string,expectedManufacturers?:number):Promise<ConvergenceResult>{
     const result=await this.db.rpc("run_merdp_wave1_convergence",{failure_stage:failureStage??null}); fail(result.error);
-    return result.data as ConvergenceResult;
+    if(!manufacturerSha256||expectedManufacturers===undefined)return result.data as ConvergenceResult;
+    const identities=await this.db.rpc("run_merdp_fresh_manufacturer_identity_convergence",{directory_sha256:manufacturerSha256,expected_row_count:expectedManufacturers}); fail(identities.error);
+    return {...result.data,...identities.data} as ConvergenceResult;
   }
 }

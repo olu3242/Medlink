@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.tsx",
     "./styles.css": "./src/foundation/styles.css",
+    "./accessibility.css": "./src/foundation/accessibility.css",
     "./tokens": "./src/tokens/index.ts"
   }
 }

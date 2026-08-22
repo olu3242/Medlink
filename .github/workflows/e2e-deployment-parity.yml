@@ -1,0 +1,49 @@
+name: E2E deployment parity
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment tier to probe
+        required: true
+        type: choice
+        options: [preview, staging]
+
+permissions:
+  contents: read
+
+jobs:
+  deployed-surfaces:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        working-directory: packages/e2e
+      - name: Probe configured deployed origins with the canonical parity suite
+        env:
+          E2E_TARGET: ${{ inputs.target }}
+          MEDLINK_E2E_PROVISION_FIXTURES: "false"
+          MEDLINK_E2E_PREVIEW_PATIENT_URL: ${{ vars.MEDLINK_E2E_PATIENT_URL }}
+          MEDLINK_E2E_PREVIEW_PHARMACY_URL: ${{ vars.MEDLINK_E2E_PHARMACY_URL }}
+          MEDLINK_E2E_PREVIEW_PHARMACIST_URL: ${{ vars.MEDLINK_E2E_PHARMACIST_URL }}
+          MEDLINK_E2E_PREVIEW_WEB_URL: ${{ vars.MEDLINK_E2E_WEB_URL }}
+          MEDLINK_E2E_STAGING_PATIENT_URL: ${{ vars.MEDLINK_E2E_PATIENT_URL }}
+          MEDLINK_E2E_STAGING_PHARMACY_URL: ${{ vars.MEDLINK_E2E_PHARMACY_URL }}
+          MEDLINK_E2E_STAGING_PHARMACIST_URL: ${{ vars.MEDLINK_E2E_PHARMACIST_URL }}
+          MEDLINK_E2E_STAGING_WEB_URL: ${{ vars.MEDLINK_E2E_WEB_URL }}
+        run: npm run test:e2e:deployment
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-deployment-${{ inputs.target }}
+          path: |
+            artifacts/e2e/
+            packages/e2e/playwright-report/
+            packages/e2e/artifacts/
+          retention-days: 30

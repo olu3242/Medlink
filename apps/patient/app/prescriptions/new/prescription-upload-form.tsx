@@ -1,8 +1,11 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type DragEvent, type FormEvent } from "react";
 
 interface ProblemDetails { code?: string; detail?: string; recovery?: string }
+
+const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+const maximumBytes = 10 * 1024 * 1024;
 
 function uploadFailure(status: number, problem: ProblemDetails | null): string {
   if (status === 401) return "Your session has expired. Sign in again before uploading.";
@@ -24,33 +27,49 @@ function uploadFailure(status: number, problem: ProblemDetails | null): string {
 
 export function PrescriptionUploadForm() {
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const idempotencyKey = useRef<string | null>(null);
 
-  function selectFile() {
+  function stageFile(file: File | undefined) {
+    if (!file || file.size === 0 || file.size > maximumBytes || !allowedTypes.includes(file.type)) {
+      setSelectedFile(null);
+      setMessage("Choose a genuine PDF, JPEG, or PNG no larger than 10 MB.");
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+    if (inputRef.current && inputRef.current.files?.[0] !== file) {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      inputRef.current.files = transfer.files;
+    }
     idempotencyKey.current = crypto.randomUUID();
-    setMessage("");
+    setSelectedFile(file);
+    setMessage(`${file.name} is staged. Submit when you are ready to send it for pharmacist review.`);
+  }
+
+  function drop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setDragging(false);
+    stageFile(event.dataTransfer.files[0]);
   }
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const file = form.get("file");
-    if (!(file instanceof File) || file.size === 0 || file.size > 10 * 1024 * 1024
-      || !["image/jpeg", "image/png", "application/pdf"].includes(file.type)) {
-      setMessage("This file is invalid. Choose a genuine PDF, JPEG, or PNG under 10 MB.");
-      setBusy(false);
+    if (!selectedFile) {
+      setMessage("Choose or drop a prescription file before submitting for review.");
       return;
     }
+    setBusy(true);
+    setMessage("Scanning and securely uploading your prescription…");
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     try {
       const response = await fetch("/api/v1/prescriptions", {
         method: "POST",
-        headers: {
-          "Idempotency-Key": idempotencyKey.current ??= crypto.randomUUID(),
-        },
+        headers: { "Idempotency-Key": idempotencyKey.current ??= crypto.randomUUID() },
         body: form,
       });
       if (!response.ok) {
@@ -58,7 +77,8 @@ export function PrescriptionUploadForm() {
         setMessage(uploadFailure(response.status, problem));
         return;
       }
-      setMessage("Prescription received and queued for pharmacist review.");
+      setMessage("Prescription uploaded and queued for pharmacist review. You can track it in Prescription history.");
+      setSelectedFile(null);
       formElement.reset();
       idempotencyKey.current = null;
     } catch {
@@ -69,28 +89,50 @@ export function PrescriptionUploadForm() {
   }
 
   return (
-    <form className="card" onSubmit={upload}>
-      <h2>Prescription file</h2>
-      <div className="field">
-        <label htmlFor="file">Choose a prescription</label>
+    <form className="card prescription-file-section" onSubmit={upload}>
+      <h2>Upload the prescription file</h2>
+      <label
+        className={`prescription-dropzone${dragging ? " is-dragging" : ""}`}
+        htmlFor="file"
+        onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={drop}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        <strong>{selectedFile ? "Prescription ready to submit" : "Drop a prescription here"}</strong>
+        <span>{selectedFile
+          ? `${selectedFile.name} · ${(selectedFile.size / 1024).toFixed(1)} KB`
+          : "or choose a JPEG, PNG, or PDF up to 10 MB"}</span>
         <input
+          aria-label="Choose a prescription"
+          aria-describedby="file-guidance"
+          aria-required="true"
+          className="prescription-file-input"
           id="file"
           name="file"
           type="file"
           accept="image/jpeg,image/png,application/pdf"
-          onChange={selectFile}
+          onChange={(event) => stageFile(event.target.files?.[0])}
+          ref={inputRef}
           required
         />
-      </div>
-      <p className="muted">
-        Files are malware-scanned before private storage. Uploading does not
-        constitute clinical approval.
+      </label>
+      <p className="muted" id="file-guidance">
+        Files are malware-scanned before private storage. Nothing is uploaded until you submit.
       </p>
-      <div className="actions">
-        <button className="button" type="submit" disabled={busy}>
-          {busy ? "Scanning and uploading..." : "Upload prescription"}
+      <div className="prescription-submit-row">
+        <button aria-busy={busy} className="button" type="submit" disabled={busy || !selectedFile}>
+          {busy ? "Submitting for review…" : "Submit prescription for review"}
         </button>
-        {message && <span role="status">{message}</span>}
+        {message && <span aria-live="polite" role="status">{message}</span>}
       </div>
     </form>
   );
