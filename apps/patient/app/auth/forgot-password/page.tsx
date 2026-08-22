@@ -6,6 +6,7 @@ export default async function ForgotPasswordPage({ searchParams }: Props) {
   const query = await searchParams;
   const error = query.error === "rate_limited" ? "Too many requests. Wait and try again."
     : query.error === "recovery_failed" ? "We couldn't send a reset link. Try again."
+      : query.error === "recovery_expired" ? "This password reset link has expired or is invalid. Request a new password reset email."
       : "Enter a valid email address.";
   return (
     <section className="card" style={{ maxWidth: "28rem", margin: "3rem auto" }}>

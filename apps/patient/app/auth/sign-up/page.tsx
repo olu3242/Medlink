@@ -5,6 +5,7 @@ import { resendVerification, signUpWithPassword } from "../sign-in/actions";
 type Props = { searchParams: Promise<{ error?: string; resent?: string; sent?: string }> };
 const errors: Record<string, string> = {
   account_exists: "An account already exists for this email. Sign in or reset your password.",
+  confirmation_expired: "This confirmation link has expired or is invalid. Request a new verification email.",
   invalid_email: "Enter a valid email address.",
   password_mismatch: "Passwords do not match.",
   rate_limited: "Too many requests. Wait a moment and try again.",

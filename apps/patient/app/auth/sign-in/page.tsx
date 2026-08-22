@@ -15,6 +15,7 @@ const errors: Record<string, string> = {
   invalid_credentials: "Email or password is incorrect.",
   rate_limited: "Too many attempts. Wait a moment and try again.",
   session_expired: "Your session expired or is no longer valid. Sign in again to continue safely.",
+  sign_in_link_expired: "This sign-in link has expired or is invalid. Request a new secure sign-in link.",
   sign_in_failed: "We couldn't sign you in. Try again.",
 };
 
