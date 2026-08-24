@@ -78,8 +78,8 @@ begin
   -- patient [8] (1-indexed 9) belongs only to the other organization, for
   -- the cross-tenant rejection case.
   insert into public.organization_memberships(organization_id, user_id, role)
-  select organization_id, patient_ids[idx], 'patient'
-  from generate_series(1, 8) as idx;
+  select organization_id, patient_ids[member_index], 'patient'
+  from generate_series(1, 8) as member_index;
   insert into public.organization_memberships(organization_id, user_id, role) values
     (other_organization_id, patient_ids[9], 'patient');
 

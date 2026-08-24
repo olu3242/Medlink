@@ -1,0 +1,15 @@
+-- Same gap class as 202608160038 (inventory_locks) and 202608170060's own
+-- refunds fix: 202608160040 granted service_role SELECT on
+-- pharmacy_locations, but no test had ever needed to UPDATE the table
+-- directly via PostgREST until the active-location-guard live test's
+-- fixture setup (deactivating a location to certify reserve_inventory
+-- fails closed, then reactivating it), which surfaced "42501: permission
+-- denied for table pharmacy_locations" in CI. Every production mutation
+-- of this table still goes through a SECURITY DEFINER RPC or an
+-- authenticated pharmacy-owner/staff-facing path (none of which exist
+-- for is_active today -- there is no governed activation/deactivation
+-- RPC yet, a separately tracked gap), which would run as its owner and
+-- never needed this grant; this only unblocks service-role test
+-- fixtures and operational tooling, not a new mutation path for
+-- authenticated callers.
+grant update on public.pharmacy_locations to service_role;
