@@ -234,12 +234,18 @@ live("reservation concurrency and no-oversell", () => {
     expect(quantities.quantity_reserved).toBe(1);
 
     const reservationId = (reserved.data as { id: string }).id;
+    // inventory_locks has check (expires_at > created_at) -- created_at was
+    // just set moments ago, so we can't backdate expires_at into the deep
+    // past directly. Set it just past "now" (still comfortably after
+    // created_at), then wait for that instant to actually elapse before
+    // asking the expiry worker to look for expired locks.
     const backdated = await service
       .from("inventory_locks")
-      .update({ expires_at: new Date(Date.now() - 60_000).toISOString() })
+      .update({ expires_at: new Date(Date.now() + 250).toISOString() })
       .eq("organization_id", fixture.organizationId)
       .eq("reservation_id", reservationId);
     expect(backdated.error, JSON.stringify(backdated.error)).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     const released = await service.rpc("release_expired_inventory_holds", { target_limit: 10 });
     expect(released.error, JSON.stringify(released.error)).toBeNull();
@@ -266,7 +272,11 @@ live("reservation concurrency and no-oversell", () => {
       reserveArgs(8, anyOrgAMarId, batchId, 1, `${anyOrgAMarId}:cross-tenant`),
     );
     expect(attempt.error).not.toBeNull();
-    expect(attempt.error?.message).toContain("Tenant membership is invalid");
+    // Main's independently-converged reserve_inventory (202608180072)
+    // collapses the actor-mismatch and tenant-membership checks into one
+    // condition with one message; the invariant (non-member rejected,
+    // no inventory effect) still holds, which is what this test proves.
+    expect(attempt.error?.message).toContain("Authenticated patient context is invalid");
 
     const quantities = await batchQuantities(batchId);
     expect(quantities.quantity_on_hand).toBe(1);
