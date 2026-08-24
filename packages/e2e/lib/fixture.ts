@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export interface AuthE2EPersona {
   readonly email: string;
+  readonly password?: string;
   readonly userId: string;
 }
 
@@ -17,7 +18,7 @@ export interface AuthE2EFixture {
   readonly partnerReviewer: AuthE2EPersona;
 }
 
-// Deterministic tenant + one real, magic-link-addressable identity per
+// Deterministic tenant + one real Supabase identity per
 // persona -- the smallest fixture this slice needs (Section 15's
 // "who is acting" gate). It does not seed medicine/MAR/reservation data;
 // that belongs to the next slice's full golden-loop certification, which
@@ -32,13 +33,18 @@ export async function provisionAuthE2EFixture(
   const service = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-  async function createPersona(label: string): Promise<AuthE2EPersona> {
+  async function createPersona(label: string, withPassword = true): Promise<AuthE2EPersona> {
     const email = `auth-e2e-${label}-${nonce}@medlink.test`;
-    const created = await service.auth.admin.createUser({ email, email_confirm: true });
+    const password = `MedLink-${label}-${nonce}!9`;
+    const created = await service.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      ...(withPassword ? { password } : {}),
+    });
     if (created.error || !created.data.user) {
       throw created.error ?? new Error(`could not create persona "${label}"`);
     }
-    return { email, userId: created.data.user.id };
+    return { email, userId: created.data.user.id, ...(withPassword ? { password } : {}) };
   }
 
   const [patient, pharmacist, pharmacyStaff, otherTenantPharmacist, multiPersona, partnerApplicant, partnerReviewer] = await Promise.all([
@@ -49,7 +55,9 @@ export async function provisionAuthE2EFixture(
     // Same person holding two legitimate roles in the same organization
     // -- one identity, multiple memberships (Section 14).
     createPersona("multi-persona"),
-    createPersona("partner-applicant"),
+    // Represents an existing OTP-only identity that must be able to set a
+    // password without creating a duplicate Supabase/MedLink user.
+    createPersona("partner-applicant", false),
     createPersona("partner-reviewer"),
   ]);
 

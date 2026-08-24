@@ -14,8 +14,14 @@ npm-debug.log*
 .artifacts/
 packages/e2e/.fixture.json
 packages/e2e/.golden-loop-fixture.json
+packages/e2e/.persona-fixture.json
+packages/e2e/.certification-run.json
 packages/e2e/playwright-report/
 packages/e2e/test-results/
+packages/e2e/artifacts/
+packages/e2e/packages/
+packages/e2e/portal-certification-artifacts/
+artifacts/e2e/
 *.egg-info/
 __pycache__/
 .pytest_cache/

@@ -13,7 +13,7 @@ export async function signInWithMagicLink(
   email: string,
 ): Promise<void> {
   await page.goto(`${baseUrl}/auth/sign-in`);
-  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Email address for sign-in link", { exact: true }).fill(email);
   await page.getByRole("button", { name: /email me a sign-in link/i }).click();
   await page.waitForURL(/sent=true/);
 
@@ -29,5 +29,22 @@ export async function signInWithMagicLink(
   const sessionCookies = await page.context().cookies(baseUrl);
   if (!sessionCookies.some(({ name }) => name.includes("auth-token"))) {
     throw new Error("Magic-link callback completed without a Supabase session cookie");
+  }
+}
+
+export async function signInWithPassword(
+  page: Page,
+  baseUrl: string,
+  email: string,
+  password: string,
+): Promise<void> {
+  await page.goto(`${baseUrl}/auth/sign-in`);
+  await page.getByLabel("Email address", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.waitForURL((url) => url.origin === new URL(baseUrl).origin && url.pathname !== "/auth/sign-in");
+  const sessionCookies = await page.context().cookies(baseUrl);
+  if (!sessionCookies.some(({ name }) => name.includes("auth-token"))) {
+    throw new Error("Password sign-in completed without a Supabase session cookie");
   }
 }

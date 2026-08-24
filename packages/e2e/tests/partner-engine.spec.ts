@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../fixtures/certification-test";
 import { signInWithMagicLink } from "../lib/auth";
 import type { AuthE2EFixture } from "../lib/fixture";
 
@@ -28,7 +28,7 @@ test("authenticated applicant and reviewer activate the same canonical pharmacy 
   await applicant.getByRole("button",{name:"Start application"}).click();
   await applicant.waitForURL(/\/partner\/portal\/[0-9a-f-]+$/);
   const applicationId=applicant.url().split("/").at(-1)!;
-  await applicant.getByRole("button",{name:"Submit for review"}).click();
+  await applicant.getByRole("button",{name:"Submit pharmacy application"}).click();
   await expect(applicant.getByText("Saved")).toBeVisible();
 
   const reviewerContext=await browser.newContext(); const reviewer=await reviewerContext.newPage();

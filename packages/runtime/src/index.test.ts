@@ -79,6 +79,29 @@ describe("enterprise runtime", () => {
     });
   });
 
+  it("uses the default locale for an HTTP Accept-Language wildcard", async () => {
+    let locale = "";
+    const response = await createRuntime(dependencies())(
+      new Request("https://medlink.test/api/v1/example", {
+        headers: { "accept-language": "*" },
+      }),
+      {
+        name: "example.read",
+        permission: "mar:read",
+        schema: z.object({}),
+        input: async () => ({}),
+        execute: async (_input, context) => {
+          locale = context.locale;
+          return { ok: true };
+        },
+        success: (output) => Response.json(output),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(locale).toBe("en");
+  });
+
   it("rejects mismatched tenant and organization context", async () => {
     const deps = dependencies({
       authenticate: async () => ({

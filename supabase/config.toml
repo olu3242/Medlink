@@ -27,8 +27,18 @@ additional_redirect_urls = [
   "http://127.0.0.1:3002",
   "http://localhost:3003",
   "http://127.0.0.1:3003",
+  "http://localhost:3004",
+  "http://127.0.0.1:3004",
+  "http://localhost:3014",
+  "http://127.0.0.1:3014",
 ]
 jwt_expiry = 3600
+minimum_password_length = 8
+password_requirements = ""
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
 
 # The auth E2E suite signs the same handful of fixture personas in
 # repeatedly across several tests in one run (patient.email alone across

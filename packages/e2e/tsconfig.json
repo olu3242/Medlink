@@ -1,4 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["lib/**/*.ts", "tests/**/*.ts", "global-setup.ts", "playwright.config.ts"]
+  "include": [
+    "assertions/**/*.ts",
+    "config/**/*.ts",
+    "fixtures/**/*.ts",
+    "helpers/**/*.ts",
+    "lib/**/*.ts",
+    "personas/**/*.ts",
+    "reports/**/*.ts",
+    "tests/**/*.ts",
+    "global-setup.ts",
+    "playwright.config.ts"
+  ]
 }

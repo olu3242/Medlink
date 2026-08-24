@@ -1,0 +1,37 @@
+:root {
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --border-default: #cbd5e1;
+  --focus-ring: #0f766e;
+}
+
+.ml-main h1,
+.ml-main h2,
+.ml-main h3 { color: var(--text-primary); }
+
+.ml-main label,
+.ml-main legend,
+.ml-main .field > span {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.ml-main input,
+.ml-main select,
+.ml-main textarea {
+  background: #fff;
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.ml-main input::placeholder,
+.ml-main textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.ml-main :is(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
