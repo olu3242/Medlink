@@ -1,0 +1,15 @@
+-- Same gap class as 202608160038 (inventory_locks) and 202608180081
+-- (pharmacy_locations): 202608150033 granted service_role SELECT on
+-- inventory_batches, but no test had ever needed to INSERT a batch
+-- directly via PostgREST until the reservation-concurrency live suite's
+-- fixture setup, which creates several batches at specific starting
+-- quantities (stock=1, stock=2, ...) to exercise no-oversell scenarios --
+-- every existing fixture that seeds inventory_batches does so from
+-- inside a SECURITY DEFINER function, which runs as its owner and never
+-- needed this grant. Every production mutation of this table still goes
+-- through create_inventory_batch/update_inventory_batch/
+-- change_inventory_stock (all SECURITY DEFINER RPCs, insert/update/
+-- delete already revoked from authenticated); this only unblocks
+-- service-role test fixtures, not a new mutation path for authenticated
+-- callers.
+grant insert on public.inventory_batches to service_role;
