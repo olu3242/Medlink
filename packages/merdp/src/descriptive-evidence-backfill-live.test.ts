@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -19,55 +18,27 @@ live("MERDP descriptive evidence backfill (P1 live proof)", () => {
   const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   let service: SupabaseClient;
   let medicineId: string;
+  let sourceRecordId: string;
   const productDescription = `Certification-only synthetic description ${nonce} -- not real NAFDAC data.`;
   const smpcReference = `smpc-reference-${nonce}`;
 
   beforeAll(async () => {
     service = createClient(url!, serviceKey!, { auth: { persistSession: false } });
 
-    const medicine = await service.from("medicines").insert({
-      brand_name: `Descriptive Backfill Fixture ${nonce}`,
-      generic_name: `descriptive-backfill-fixture-generic-${nonce}`,
-      dosage_form: "tablet", route: "oral", strength_display: "500 mg",
-      status: "active",
-    }).select("id").single();
-    if (medicine.error) throw medicine.error;
-    medicineId = medicine.data.id as string;
-
-    const source = await service.from("etl_sources").select("id")
-      .eq("source_code", "NAFDAC_GREENBOOK").single();
-    if (source.error) throw source.error;
-
-    const snapshot = await service.from("etl_snapshots").insert({
-      source_id: source.data.id, artifact_name: `descriptive-backfill-fixture-${nonce}.csv`,
-      artifact_uri: `certification://descriptive-backfill-fixture/${nonce}`,
-      sha256: createHash("sha256").update(nonce).digest("hex"),
-      byte_size: 1, schema_fingerprint: `descriptive-backfill-fixture-${nonce}`,
-      row_count: 1, column_count: 1,
-    }).select("id").single();
-    if (snapshot.error) throw snapshot.error;
-
-    const run = await service.from("etl_runs").insert({
-      source_id: source.data.id, snapshot_id: snapshot.data.id, status: "completed",
-      started_at: new Date().toISOString(), completed_at: new Date().toISOString(),
-      rows_read: 1, rows_valid: 1, rows_staged: 1,
-    }).select("id").single();
-    if (run.error) throw run.error;
-
-    const rawPayload = { product_description: productDescription, smpc: smpcReference };
-    const sourceRecord = await service.from("etl_source_records").insert({
-      source_id: source.data.id, snapshot_id: snapshot.data.id, run_id: run.data.id,
-      source_record_id: `descriptive-backfill-fixture-${nonce}`, schema_version: "greenbook-product-v1",
-      raw_payload: rawPayload,
-      raw_payload_sha256: createHash("sha256").update(JSON.stringify(rawPayload)).digest("hex"),
-    }).select("id").single();
-    if (sourceRecord.error) throw sourceRecord.error;
-
-    const mapping = await service.from("merdp_source_mappings").insert({
-      source_record_id: sourceRecord.data.id, canonical_product_id: medicineId,
-      resolution: "distinct", evidence: { method: "descriptive-backfill-fixture" },
+    // medicines has no direct service_role table grant (matching the
+    // established pattern: fixtures that need to write a table service_role
+    // cannot reach directly do so from inside a SECURITY DEFINER function --
+    // see 202608240005). Only the fixture's own medicine/ETL/mapping rows
+    // are created this way; the RPC under test is invoked directly below.
+    const fixture = await service.rpc("certify_descriptive_evidence_backfill_fixture", {
+      fixture_key: `desc-backfill-${nonce}`,
+      target_product_description: productDescription,
+      target_smpc_reference: smpcReference,
     });
-    if (mapping.error) throw mapping.error;
+    if (fixture.error) throw fixture.error;
+    const result = fixture.data as { medicineId: string; sourceRecordId: string };
+    medicineId = result.medicineId;
+    sourceRecordId = result.sourceRecordId;
   }, 60_000);
 
   it("projects Greenbook product_description verbatim onto the canonical medicine, records smpc as NEEDS_REVIEW storage evidence, is idempotent on replay, and is audited", async () => {
@@ -121,8 +92,7 @@ live("MERDP descriptive evidence backfill (P1 live proof)", () => {
     const promoted = await service.from("medicine_storage_guidance")
       .update({
         extraction_state: "SOURCE_STRUCTURED", raw_text: "Store below 30C, do not freeze.",
-        winning_source_record_id: (await service.from("etl_source_records")
-          .select("id").eq("source_record_id", `descriptive-backfill-fixture-${nonce}`).single()).data!.id,
+        winning_source_record_id: sourceRecordId,
         reviewed_by: (await service.auth.admin.createUser({
           email: `descriptive-backfill-reviewer-${nonce}@medlink.test`,
           password: `DescriptiveBackfillReviewer-${nonce}-Strong!`, email_confirm: true,
