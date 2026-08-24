@@ -1,4 +1,3 @@
-import pino from "pino";
 import {
   EnterpriseLogger,
   MetricsRegistry,
@@ -25,16 +24,11 @@ import {
   type RuntimeTelemetry,
 } from "@medlink/runtime";
 import { PinoLogAdapter } from "./logger.adapter";
+import { createMedLinkLogger } from "./logger";
 export * from "./enterprise-certification";
+export * from "./logger";
 
-const logger = pino({
-  level: process.env.LOG_LEVEL ?? "info",
-  base: { service: "medlink" },
-  redact: {
-    paths: ["password", "token", "authorization", "*.password"],
-    censor: "[REDACTED]",
-  },
-});
+const logger = createMedLinkLogger();
 
 const enterpriseAdapter = new PinoLogAdapter(logger);
 const enterpriseMetrics = new MetricsRegistry();

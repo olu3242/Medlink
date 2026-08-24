@@ -33,6 +33,11 @@ export const permissions = [
   "mar:read",
   "mar:create",
   "mar:transition",
+  "assistant:use",
+  "partner:read",
+  "partner:apply",
+  "partner:review",
+  "partner:manage",
 ] as const;
 
 export type Permission = (typeof permissions)[number];

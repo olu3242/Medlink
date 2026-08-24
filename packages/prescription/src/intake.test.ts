@@ -16,6 +16,7 @@ function dependencies(scanStatus: "clean" | "rejected" = "clean") {
   const store = vi.fn(async () => ({
     bucket: "prescriptions-private",
     path: "tenant/patient/file.jpg",
+    created: true,
   }));
   const create = vi.fn(async () => ({
     prescriptionId: "prescription-1",
@@ -96,6 +97,26 @@ describe("prescription intake", () => {
     expect(malware.spies.store).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { fileName: "prescription.pdf", mediaType: "image/jpeg" },
+    { fileName: "../prescription.jpg", mediaType: "image/jpeg" },
+    { fileName: "prescription.exe", mediaType: "image/jpeg" },
+    { fileName: "prescription\u0000.jpg", mediaType: "image/jpeg" },
+  ])("rejects an unsafe or mismatched file name before scanning: $fileName", async (change) => {
+    const value = dependencies();
+    await expect(new PrescriptionIntakeService(
+      value.scanner,
+      value.storage,
+      value.repository,
+      value.integrity,
+    ).intake({
+      ...command,
+      upload: { ...jpeg, ...change },
+    })).rejects.toBeInstanceOf(PrescriptionUploadRejectedError);
+    expect(value.scanner.scan).not.toHaveBeenCalled();
+    expect(value.spies.store).not.toHaveBeenCalled();
+  });
+
   it("removes an orphaned object when the database command fails", async () => {
     const value = dependencies();
     value.repository.create.mockRejectedValueOnce(new Error("database"));
@@ -109,5 +130,22 @@ describe("prescription intake", () => {
       "prescriptions-private",
       "tenant/patient/file.jpg",
     );
+  });
+
+  it("does not remove a pre-existing retry object when the database command fails", async () => {
+    const value = dependencies();
+    value.spies.store.mockResolvedValueOnce({
+      bucket: "prescriptions-private",
+      path: "tenant/patient/file.jpg",
+      created: false,
+    });
+    value.repository.create.mockRejectedValueOnce(new Error("database"));
+    await expect(new PrescriptionIntakeService(
+      value.scanner,
+      value.storage,
+      value.repository,
+      value.integrity,
+    ).intake(command)).rejects.toThrow("database");
+    expect(value.spies.remove).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { PrescriptionIntakeApplication } from "../../../../../../lib/prescription-intake";
-import { SupabasePrescriptionFileStore } from "../../../../../../lib/prescription-storage";
+import { SupabasePrescriptionDocumentAccess } from "../../../../../../lib/prescription-intake";
 import { runApi } from "../../../../../../lib/api-server";
 
 const idSchema = z.string().uuid();
@@ -15,10 +14,8 @@ export const GET = async (request: Request, route: Context) => {
     schema: z.object({ id: idSchema }),
     input: async () => ({ id }),
     execute: async (input, _context, database) => {
-      const url = await new PrescriptionIntakeApplication(
-        database,
-        new SupabasePrescriptionFileStore(database),
-      ).getFileUrl(input.id);
+      const url = await new SupabasePrescriptionDocumentAccess(database)
+        .createSignedUrl(input.id);
       return { url };
     },
   });

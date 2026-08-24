@@ -20,9 +20,10 @@ export interface MedicationDiscoveryOption {
   readonly inventoryId: string;
   readonly pharmacyLocationId: string;
   readonly pharmacyName: string;
+  readonly pharmacyLocality?: string;
   readonly distanceKm: number;
   readonly stockStatus: string;
-  readonly expiresOn: string;
+  readonly expiresOn?: string;
   readonly inventoryTimestamp: string;
   readonly unitPriceMinor: number | null;
   readonly currencyCode: string | null;

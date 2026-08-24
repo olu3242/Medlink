@@ -1,6 +1,6 @@
 import type { RuntimeContext } from "@medlink/runtime";
 import { describe, expect, it } from "vitest";
-import { authorizeAgentCapability } from "./policy";
+import { authorizeAgentCapability, authorizeAgentTask } from "./policy";
 import type { AgentIdentity } from "./registry";
 
 const baseContext: RuntimeContext = {
@@ -96,5 +96,41 @@ describe("authorizeAgentCapability", () => {
     const context = { ...baseContext, role: "patient" };
     expect(authorizeAgentCapability(context, "conversation", "route_intent"))
       .toEqual({ allowed: true });
+  });
+});
+
+describe("authorizeAgentTask", () => {
+  it("allows only the declared persona and runtime action for a capability", () => {
+    expect(authorizeAgentTask({
+      agentId: "reservation-coordinator",
+      capabilityName: "reserve_matched_inventory",
+      action: "reserve_inventory",
+      role: "patient",
+    })).toEqual({ allowed: true });
+
+    expect(authorizeAgentTask({
+      agentId: "reservation-coordinator",
+      capabilityName: "reserve_matched_inventory",
+      action: "reserve_inventory",
+      role: "pharmacy_staff",
+    })).toEqual({ allowed: false, reason: "role_not_permitted" });
+
+    expect(authorizeAgentTask({
+      agentId: "reservation-coordinator",
+      capabilityName: "reserve_matched_inventory",
+      action: "collect_reservation",
+      role: "patient",
+    })).toEqual({ allowed: false, reason: "action_not_permitted" });
+  });
+
+  it("does not map payment or fulfillment authority to any agent capability", () => {
+    for (const action of ["create_payment", "mark_ready", "collect_reservation"]) {
+      expect(authorizeAgentTask({
+        agentId: "conversation",
+        capabilityName: "route_intent",
+        action,
+        role: "patient",
+      })).toEqual({ allowed: false, reason: "action_not_permitted" });
+    }
   });
 });

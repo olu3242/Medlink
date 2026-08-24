@@ -7,7 +7,7 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "organization:read", "organization:manage", "member:manage",
     "patient:read", "patient:manage", "medicine:read", "medicine:manage",
     "prescription:read",
-    "inventory:read", "reservation:read", "mar:read",
+    "inventory:read", "reservation:read", "mar:read", "partner:read",
   ]),
   pharmacist: new Set([
     "organization:read", "patient:read", "clinical:review", "inventory:read",
@@ -18,7 +18,7 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
   pharmacy_owner: new Set([
     "organization:read", "member:manage", "inventory:read",
     "inventory:manage", "medicine:read", "prescription:read",
-    "reservation:read", "mar:read",
+    "reservation:read", "mar:read", "partner:read", "partner:apply",
   ]),
   pharmacy_staff: new Set([
     "organization:read", "inventory:read", "inventory:manage",
@@ -38,7 +38,8 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "inventory:read", "reservation:read", "reservation:create",
     "reservation:credential",
     "payment:read", "payment:create",
-    "mar:read", "mar:create",
+    "mar:read", "mar:create", "assistant:use",
+    "partner:apply",
   ]),
 };
 

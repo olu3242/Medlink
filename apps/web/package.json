@@ -16,6 +16,7 @@
     "@medlink/notifications": "*",
     "@medlink/observability": "*",
     "@medlink/payments": "*",
+    "@medlink/partner": "*",
     "@medlink/platform": "*",
     "@medlink/prescription": "*",
     "@medlink/runtime": "*",
@@ -23,6 +24,9 @@
     "@medlink/ui": "*",
     "@medlink/workflows": "*",
     "@supabase/supabase-js": "^2.52.0",
+    "next": "^15.4.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "zod": "^3.25.0"
   }
 }

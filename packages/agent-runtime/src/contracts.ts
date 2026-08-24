@@ -81,7 +81,15 @@ export interface AgentPolicy {
   evaluate(
     task: Pick<
       AgentTask<unknown, unknown>,
-      "action" | "actor" | "capability" | "context" | "engine" | "tenantId"
+      | "action"
+      | "actor"
+      | "agentId"
+      | "capability"
+      | "context"
+      | "engine"
+      | "persona"
+      | "requiresHumanApproval"
+      | "tenantId"
     >,
   ): AgentPolicyDecision;
 }

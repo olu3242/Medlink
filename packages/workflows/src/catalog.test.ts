@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { canonicalWorkflows } from "./service";
 
 describe("canonical workflow contract", () => {
-  it("preserves all fifteen stable workflow identities", () => {
-    expect(canonicalWorkflows).toHaveLength(15);
-    expect(new Set(canonicalWorkflows.map(([id]) => id)).size).toBe(15);
+  it("preserves all sixteen stable workflow identities", () => {
+    expect(canonicalWorkflows).toHaveLength(16);
+    expect(new Set(canonicalWorkflows.map(([id]) => id)).size).toBe(16);
     expect(Object.fromEntries(canonicalWorkflows)).toMatchObject({
       "WF-006": "Medication Access Request",
       "WF-015": "Workflow Completion",
+      "WF-016": "Partner Onboarding",
     });
   });
 

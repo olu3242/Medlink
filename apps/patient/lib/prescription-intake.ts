@@ -150,7 +150,7 @@ export class SupabasePrescriptionStorage implements PrescriptionStorage {
         limit: 1,
       });
       if (!existing.error && existing.data.some((item) => item.name === objectName)) {
-        return { bucket, path };
+        return { bucket, path, created: false };
       }
       throw new RuntimeError(
         "infrastructure",
@@ -162,7 +162,7 @@ export class SupabasePrescriptionStorage implements PrescriptionStorage {
         { cause: error },
       );
     }
-    return { bucket, path };
+    return { bucket, path, created: true };
   }
 
   async remove(bucket: string, path: string) {
@@ -178,6 +178,56 @@ export class SupabasePrescriptionStorage implements PrescriptionStorage {
         { cause: error },
       );
     }
+  }
+}
+
+export class SupabasePrescriptionDocumentAccess {
+  constructor(private readonly database: SupabaseClient) {}
+
+  async createSignedUrl(prescriptionId: string): Promise<string> {
+    const { data, error } = await this.database.from("prescription_files")
+      .select("storage_bucket,storage_object_path")
+      .eq("prescription_id", prescriptionId)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle<{
+        storage_bucket: string;
+        storage_object_path: string;
+      }>();
+    if (error) {
+      throw new RuntimeError(
+        "infrastructure",
+        "prescription_document_lookup_failed",
+        "The prescription document could not be opened",
+        503,
+        true,
+        "Retry later.",
+        { cause: error },
+      );
+    }
+    if (!data || data.storage_bucket !== "prescriptions-private") {
+      throw new RuntimeError(
+        "business_rule",
+        "prescription_document_not_found",
+        "The prescription document was not found",
+        404,
+        false,
+      );
+    }
+    const signed = await this.database.storage.from(data.storage_bucket)
+      .createSignedUrl(data.storage_object_path, 300);
+    if (signed.error || !signed.data) {
+      throw new RuntimeError(
+        "infrastructure",
+        "prescription_document_signing_failed",
+        "The prescription document could not be opened",
+        503,
+        true,
+        "Retry later.",
+        { cause: signed.error },
+      );
+    }
+    return signed.data.signedUrl;
   }
 }
 
