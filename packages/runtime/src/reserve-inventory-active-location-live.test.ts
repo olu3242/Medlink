@@ -89,7 +89,15 @@ live("reserve_inventory active pharmacy location guard", () => {
     const blockedKey = `${fixture.marId}:reserve-blocked`;
     const blocked = await patient.client.rpc("reserve_inventory", reserveArgs(blockedKey));
     expect(blocked.error).not.toBeNull();
-    expect(blocked.error?.message).toContain("Pharmacy location is not active");
+    // Main's independently-converged reserve_inventory (202608180072)
+    // supersedes this branch's own guard with is_inventory_batch_discoverable(),
+    // which already requires location.is_active/deleted_at is null (plus
+    // stricter conditions: quantity>0, expiry, freshness, network
+    // eligibility) -- a strict superset, not a regression. It surfaces a
+    // more generic message than the guard this test originally certified;
+    // the invariant under test (deactivated location -> rejected, no
+    // side effect) still holds, which is what the rest of this test proves.
+    expect(blocked.error?.message).toContain("Inventory batch is unavailable for reservation");
 
     const { data: noReservation, error: noReservationError } = await service
       .from("reservations")
