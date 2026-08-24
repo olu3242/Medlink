@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const sql = readFileSync(new URL(
   "../../../supabase/migrations/202608170070_pharmacy_catalog_sku_mapping.sql",
   import.meta.url,
-), "utf8").toLowerCase();
+), "utf8").replace(/\r\n/g, "\n").toLowerCase();
 
 describe("pharmacy catalog SKU mapping migration", () => {
   it("never makes a local SKU canonical medicine identity by itself", () => {
