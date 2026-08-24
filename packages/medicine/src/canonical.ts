@@ -44,6 +44,25 @@ export const medicineRegistrationSchema = z.object({
   validUntil: z.string().nullable(),
 }).strict();
 
+export const medicineStorageExtractionStateSchema = z.enum([
+  "SOURCE_STRUCTURED",
+  "EXTRACTED",
+  "NEEDS_REVIEW",
+  "UNAVAILABLE",
+]);
+
+// One row per (medicine, source_system): see 202608240002. NAFDAC Greenbook
+// carries only an SMPC document *reference*, never storage instruction
+// text -- rawText/normalizedText stay null until a real extraction
+// pipeline (SOURCE_STRUCTURED/EXTRACTED) or a human reviewer supplies them.
+export const medicineStorageGuidanceSchema = z.object({
+  extractionState: medicineStorageExtractionStateSchema,
+  rawText: z.string().nullable(),
+  normalizedText: z.string().nullable(),
+  sourceSystem: boundedText(60),
+  sourceReference: z.string().nullable(),
+}).strict();
+
 export const canonicalMedicineSchema = z.object({
   id: z.string().uuid(),
   brandName: boundedText(200),
@@ -62,6 +81,10 @@ export const canonicalMedicineSchema = z.object({
   aliases: z.array(medicineAliasSchema),
   ingredients: z.array(catalogIngredientSchema),
   registrations: z.array(medicineRegistrationSchema),
+  // Verbatim NAFDAC Greenbook product_description, or null when the source
+  // record has none -- never inferred from brand/generic/dosage/strength.
+  productDescription: z.string().nullable(),
+  storageGuidance: z.array(medicineStorageGuidanceSchema),
   createdAt: z.string(),
   updatedAt: z.string(),
 }).strict();
