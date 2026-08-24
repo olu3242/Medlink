@@ -8,6 +8,7 @@ function fail(error:{message:string}|null):void { if(error) throw new Error(erro
 
 export interface PersistedRun { readonly runId:string; readonly snapshotId:string; readonly replay:boolean; readonly rawPersisted:number; readonly findingsPersisted:number; }
 export interface ConvergenceResult { readonly durationMs:number; readonly reviewCases:number; readonly productMappings:number; readonly manufacturerMappings:number; readonly provenance:number; readonly certifications:number; readonly publications:number; readonly events:number; }
+export interface DescriptiveEvidenceBackfillResult { readonly durationMs:number; readonly refreshRunId:string; readonly productSnapshotId:string|null; readonly manufacturerSnapshotId:string|null; readonly descriptionsBackfilled:number; readonly storageRowsUpserted:number; }
 
 export class SupabaseMerdpRepository {
   constructor(private readonly db:SupabaseClient) {}
@@ -39,5 +40,20 @@ export class SupabaseMerdpRepository {
   async converge(failureStage?:"after_mappings"):Promise<ConvergenceResult>{
     const result=await this.db.rpc("run_merdp_wave1_convergence",{failure_stage:failureStage??null}); fail(result.error);
     return result.data as ConvergenceResult;
+  }
+  // Additive freshness step (202608240002): projects the already-ingested
+  // Greenbook product_description/smpc fields onto medicines/
+  // medicine_storage_guidance. Deliberately NOT auto-invoked from converge()
+  // or wired into any scheduler here -- no governed MERDP refresh lifecycle
+  // (cron/job runner) exists anywhere in this codebase today; converge()
+  // itself is only ever called from integration tests, not a production
+  // driver. Exposed as its own method, mirroring converge()'s shape, so the
+  // first such lifecycle that gets built can call both steps symmetrically
+  // without redesigning this class. Until then this remains an
+  // operator/test-triggered capability, invoked directly via
+  // supabase.rpc("run_merdp_descriptive_evidence_backfill").
+  async backfillDescriptiveEvidence(failureStage?:"after_description_backfill"):Promise<DescriptiveEvidenceBackfillResult>{
+    const result=await this.db.rpc("run_merdp_descriptive_evidence_backfill",{failure_stage:failureStage??null}); fail(result.error);
+    return result.data as DescriptiveEvidenceBackfillResult;
   }
 }
