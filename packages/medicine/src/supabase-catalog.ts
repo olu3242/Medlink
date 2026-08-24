@@ -44,6 +44,14 @@ const medicineColumns = `
     valid_from,
     valid_until
   ),
+  product_description,
+  storage_guidance:medicine_storage_guidance(
+    extraction_state,
+    raw_text,
+    normalized_text,
+    source_system,
+    source_reference
+  ),
   created_at,
   updated_at
 `;
@@ -82,6 +90,19 @@ const medicineRowSchema = z.object({
     registration_number: z.string(),
     valid_from: z.string().nullable(),
     valid_until: z.string().nullable(),
+  })),
+  product_description: z.string().nullable(),
+  storage_guidance: z.array(z.object({
+    extraction_state: z.enum([
+      "SOURCE_STRUCTURED",
+      "EXTRACTED",
+      "NEEDS_REVIEW",
+      "UNAVAILABLE",
+    ]),
+    raw_text: z.string().nullable(),
+    normalized_text: z.string().nullable(),
+    source_system: z.string(),
+    source_reference: z.string().nullable(),
   })),
   created_at: z.string(),
   updated_at: z.string(),
@@ -189,6 +210,14 @@ function mapMedicine(row: unknown) {
       registrationNumber: registration.registration_number,
       validFrom: registration.valid_from,
       validUntil: registration.valid_until,
+    })),
+    productDescription: value.product_description,
+    storageGuidance: value.storage_guidance.map((storage) => ({
+      extractionState: storage.extraction_state,
+      rawText: storage.raw_text,
+      normalizedText: storage.normalized_text,
+      sourceSystem: storage.source_system,
+      sourceReference: storage.source_reference,
     })),
     createdAt: value.created_at,
     updatedAt: value.updated_at,
