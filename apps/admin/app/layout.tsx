@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body className="ml-body"><AppShell brand={<a href="/catalog">MedLink <small>Clinical Admin</small></a>} navigation={[{label:"Medicine catalog",href:"/catalog"},{label:"Add medicine",href:"/medicine/new"}]}>{children}</AppShell></body>
+      <body className="ml-body"><AppShell brand={<a href="/control-center">MedLink <small>Clinical Admin</small></a>} navigation={[{label:"Control Center",href:"/control-center"},{label:"Medicine catalog",href:"/catalog"},{label:"Add medicine",href:"/medicine/new"}]}>{children}</AppShell></body>
     </html>
   );
 }

@@ -92,4 +92,41 @@ export async function getMedicine(id: string): Promise<MedicineDetail> {
   );
   return response.data;
 }
+
+export interface DashboardMetric {
+  id: string;
+  label: string;
+  value: number;
+  status: "healthy" | "attention" | "empty" | "unknown";
+  href: string;
+}
+
+export interface PlatformDashboardResponse {
+  data: {
+    generatedAt: string;
+    authorization: { role: string; organizationId: string; actorId: string; subjectId: string; testAsAvailable: false };
+    metrics: DashboardMetric[];
+    workQueue: Array<{ severity: string; title: string; reason: string; href: string }>;
+  };
+}
+
+export function getPlatformDashboard(): Promise<PlatformDashboardResponse> {
+  return apiFetch<PlatformDashboardResponse>("/api/v1/dashboard/platform");
+}
+
+export interface DashboardSectionResponse {
+  data: {
+    generatedAt: string;
+    metrics?: DashboardMetric[];
+    organizations?: Array<{ id: string; name: string; type: string; created_at: string }>;
+    emptyState?: string | null;
+    manufacturerCoverage?: { total: number; present: number; missing: number; percent: number };
+    nafdacCoverage?: { total: number; present: number; missing: number; percent: number };
+    priceAccess?: Record<string, unknown>;
+  };
+}
+
+export function getDashboardSection(section: "organizations" | "catalog" | "pharmacies" | "inventory", query = ""): Promise<DashboardSectionResponse> {
+  return apiFetch<DashboardSectionResponse>(`/api/v1/dashboard/${section}${query ? `?${query}` : ""}`);
+}
 import { headers as requestHeaders } from "next/headers";
