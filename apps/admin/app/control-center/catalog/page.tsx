@@ -1,0 +1,2 @@
+import { ControlCenterSection } from "../../../components/control-center-section";
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) { return <ControlCenterSection section="catalog" title="Catalog intelligence" description="Canonical medicine, ingredient, manufacturer, and regulatory coverage." searchParams={await searchParams} />; }

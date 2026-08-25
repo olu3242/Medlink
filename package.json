@@ -27,6 +27,8 @@
     "test:whatsapp-provider": "vitest run packages/whatsapp/src apps/web/lib/whatsapp-webhook.test.ts apps/web/lib/conversation-store.test.ts",
     "test:provider-conformance": "vitest run packages/integrations/src/conformance.test.ts packages/integrations/src/provider-certification.test.ts packages/integrations/src/operational-adapters.test.ts packages/prescription/src/clinical-pipeline.test.ts",
     "test:security": "vitest run packages/security/src packages/runtime/src/rls-matrix.test.ts packages/runtime/src/live-rls-migration.test.ts",
+    "test:personas:provision": "node tools/provision-test-personas.mjs",
+    "test:personas": "vitest run packages/platform/src/persona-certification.test.ts packages/platform/src/control-center.test.ts packages/platform/src/authorization.test.ts packages/platform/src/portal-architecture.test.ts apps/admin/lib/control-center.test.ts",
     "test:recovery": "vitest run packages/certification/src/recovery-certification.test.ts packages/runtime/src/transaction.test.ts packages/prescription/src/clinical-pipeline.test.ts packages/notifications/src/reservation-outbox.test.ts packages/agent-runtime/src/executor.test.ts",
     "check": "npm run lint && npm run typecheck && npm run test",
     "db:start": "supabase start",
