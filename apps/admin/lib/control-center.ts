@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { activeWorkQueue, createDashboardAuthorizationContext, serializeAuthorizedFields, type DashboardFilters, type Role } from "@medlink/platform";
 import { RuntimeError, type RuntimeContext } from "@medlink/runtime";
 
-type Section = "platform" | "organizations" | "catalog" | "pharmacies" | "inventory" | "security";
+type Section = "platform" | "organizations" | "catalog" | "pharmacies" | "inventory" | "reservations" | "security";
 type Status = "healthy" | "attention" | "empty" | "unknown";
 
 async function count(query: PromiseLike<{ count: number | null; error: { message: string } | null }>): Promise<number> {
@@ -36,6 +36,7 @@ export class ControlCenterService {
       : section === "catalog" ? await this.catalog()
       : section === "pharmacies" ? await this.pharmacies(authorization.role, authorization.organizationId, filters)
       : section === "inventory" ? await this.inventory(authorization.role, authorization.organizationId, filters)
+      : section === "reservations" ? await this.reservations(authorization.role, authorization.organizationId, filters)
       : this.security();
     return { section, authorization, generatedAt, ...data };
   }
@@ -69,9 +70,9 @@ export class ControlCenterService {
       count(this.database.from("inventory_batches").select("id", { count: "exact", head: true }).is("deleted_at", null)),
       count(this.database.from("reservations").select("id", { count: "exact", head: true }).is("deleted_at", null)),
     ]);
-    return { metrics: [
-      metric("organizations", "Organizations", organizations, "/control-center/organizations"),
-      metric("memberships", "Active memberships", memberships, "/control-center/organizations"),
+    return { metricScope: "Authenticated RLS-visible scope", metrics: [
+      metric("organizations", "Visible organizations", organizations, "/control-center/organizations"),
+      metric("memberships", "Visible active memberships", memberships, "/control-center/organizations"),
       metric("medicines", "Medicines", medicines, "/control-center/catalog"),
       metric("active-medicines", "Active medicines", activeMedicines, "/control-center/catalog"),
       metric("locations", "Pharmacy locations", locations, "/control-center/pharmacies"),
@@ -93,12 +94,11 @@ export class ControlCenterService {
 
   private async catalog() {
     const registrationRows = this.database.from("medicine_registrations").select("medicine_id,medicines!inner(status,deleted_at)").eq("authority_code", "NAFDAC").eq("medicines.status", "active").is("medicines.deleted_at", null).is("deleted_at", null).limit(10_000);
-    const [medicines, active, draft, ingredients, manufacturers, registrations, expiredRegistrations, manufacturerPresent, augmentin, registrationResult] = await Promise.all([
+    const [medicines, active, draft, ingredients, registrations, expiredRegistrations, manufacturerPresent, augmentin, registrationResult] = await Promise.all([
       count(this.database.from("medicines").select("id", { count: "exact", head: true }).is("deleted_at", null)),
       count(this.database.from("medicines").select("id", { count: "exact", head: true }).eq("status", "active").is("deleted_at", null)),
       count(this.database.from("medicines").select("id", { count: "exact", head: true }).eq("status", "draft").is("deleted_at", null)),
       count(this.database.from("active_ingredients").select("id", { count: "exact", head: true }).is("deleted_at", null)),
-      count(this.database.from("merdp_manufacturer_identities").select("id", { count: "exact", head: true })),
       count(this.database.from("medicine_registrations").select("id", { count: "exact", head: true }).is("deleted_at", null)),
       count(this.database.from("medicine_registrations").select("id", { count: "exact", head: true }).lt("valid_until", new Date().toISOString().slice(0, 10)).is("deleted_at", null)),
       count(this.database.from("medicines").select("id", { count: "exact", head: true }).eq("status", "active").not("manufacturer_name", "is", null).neq("manufacturer_name", "").is("deleted_at", null)),
@@ -109,7 +109,7 @@ export class ControlCenterService {
     const nafdacPresent = new Set((registrationResult.data ?? []).map((row) => row.medicine_id)).size;
     const percent = (present: number, total: number) => total === 0 ? 0 : Math.round((present / total) * 10_000) / 100;
     return {
-      metrics: [metric("medicines", "Medicines", medicines, "/catalog"), metric("active", "Active medicines", active, "/catalog?status=active"), metric("draft", "Draft medicines", draft, "/catalog?status=draft"), metric("ingredients", "Active ingredients", ingredients, "/control-center/catalog"), metric("manufacturers", "Manufacturers", manufacturers, "/control-center/catalog"), metric("registrations", "Registrations", registrations, "/control-center/catalog"), metric("expired-registrations", "Expired registrations", expiredRegistrations, "/control-center/catalog?registration=expired", expiredRegistrations ? "attention" : "healthy"), metric("augmentin", "Augmentin products", augmentin, "/catalog?q=Augmentin", augmentin ? "healthy" : "attention")],
+      metrics: [metric("medicines", "Medicines", medicines, "/catalog"), metric("active", "Active medicines", active, "/catalog?status=active"), metric("draft", "Draft medicines", draft, "/catalog?status=draft"), metric("ingredients", "Active ingredients", ingredients, "/control-center/catalog"), metric("manufacturer-products", "Active products with manufacturer", manufacturerPresent, "/control-center/catalog"), metric("registrations", "Registrations", registrations, "/control-center/catalog"), metric("expired-registrations", "Expired registrations", expiredRegistrations, "/control-center/catalog?registration=expired", expiredRegistrations ? "attention" : "healthy"), metric("augmentin", "Augmentin products", augmentin, "/catalog?q=Augmentin", augmentin ? "healthy" : "attention")],
       manufacturerCoverage: { total: active, present: manufacturerPresent, missing: Math.max(0, active - manufacturerPresent), percent: percent(manufacturerPresent, active) },
       nafdacCoverage: { total: active, present: nafdacPresent, missing: Math.max(0, active - nafdacPresent), percent: percent(nafdacPresent, active) },
     };
@@ -130,9 +130,40 @@ export class ControlCenterService {
   private async inventory(role: Role, organizationId: string, filters: DashboardFilters) {
     const base = () => this.database.from("inventory_batches").select("id", { count: "exact", head: true }).is("deleted_at", null);
     const selectedOrganization = filters.pharmacyId ?? filters.organizationId ?? organizationId;
-    const scoped = (query: ReturnType<typeof base>) => role === "platform_admin" && !filters.pharmacyId && !filters.organizationId ? query : query.eq("organization_id", selectedOrganization);
-    const [batches, sellable, zero, expired] = await Promise.all([count(scoped(base())), count(scoped(base()).eq("status", "available").gt("available_quantity", 0).gt("expires_on", new Date().toISOString().slice(0, 10))), count(scoped(base()).lte("available_quantity", 0)), count(scoped(base()).lt("expires_on", new Date().toISOString().slice(0, 10)))]);
+    const scoped = (query: ReturnType<typeof base>) => {
+      let result = role === "platform_admin" && !filters.pharmacyId && !filters.organizationId ? query : query.eq("organization_id", selectedOrganization);
+      if (filters.locationId) result = result.eq("pharmacy_location_id", filters.locationId);
+      return result;
+    };
+    const filtered = () => {
+      const query = scoped(base());
+      if (filters.status === "sellable") return query.eq("status", "available").gt("available_quantity", 0).gt("expires_on", new Date().toISOString().slice(0, 10));
+      if (filters.status === "empty") return query.lte("available_quantity", 0);
+      if (filters.status === "expired") return query.lt("expires_on", new Date().toISOString().slice(0, 10));
+      return filters.status ? query.eq("status", filters.status) : query;
+    };
+    const [batches, sellable, zero, expired] = await Promise.all([count(filtered()), count(scoped(base()).eq("status", "available").gt("available_quantity", 0).gt("expires_on", new Date().toISOString().slice(0, 10))), count(scoped(base()).lte("available_quantity", 0)), count(scoped(base()).lt("expires_on", new Date().toISOString().slice(0, 10)))]);
     return { metrics: [metric("batches", "Batches", batches, "/control-center/inventory"), metric("sellable", "Sellable batches", sellable, "/control-center/inventory?status=sellable"), metric("zero", "Zero quantity", zero, "/control-center/inventory?status=empty", zero ? "attention" : "healthy"), metric("expired", "Expired", expired, "/control-center/inventory?status=expired", expired ? "attention" : "healthy")], priceAccess: serializeAuthorizedFields({ priceAuthority: "inventory_batches", unitPrice: "restricted" }, { priceAuthority: "read_only", unitPrice: "hidden" }) };
+  }
+
+  private async reservations(role: Role, organizationId: string, filters: DashboardFilters) {
+    const selectedOrganization = filters.pharmacyId ?? filters.organizationId ?? organizationId;
+    const base = () => this.database.from("reservations").select("id", { count: "exact", head: true }).is("deleted_at", null);
+    const scoped = (query: ReturnType<typeof base>) => {
+      let result = role === "platform_admin" && !filters.pharmacyId && !filters.organizationId ? query : query.eq("organization_id", selectedOrganization);
+      if (filters.locationId) result = result.eq("pharmacy_location_id", filters.locationId);
+      if (filters.dateFrom) result = result.gte("created_at", `${filters.dateFrom}T00:00:00.000Z`);
+      if (filters.dateTo) result = result.lt("created_at", `${filters.dateTo}T23:59:59.999Z`);
+      return result;
+    };
+    const [total, pending, confirmed, ready] = await Promise.all([
+      count(filters.status ? scoped(base()).eq("status", filters.status) : scoped(base())), count(scoped(base()).eq("status", "pending")),
+      count(scoped(base()).eq("status", "confirmed")), count(scoped(base()).eq("status", "ready")),
+    ]);
+    return {
+      metrics: [metric("reservations", "Reservations", total, "/control-center/reservations"), metric("pending", "Pending", pending, "/control-center/reservations?status=pending", pending ? "attention" : "healthy"), metric("confirmed", "Confirmed", confirmed, "/control-center/reservations?status=confirmed"), metric("ready", "Ready for collection", ready, "/control-center/reservations?status=ready")],
+      emptyState: total === 0 ? "No reservations in the authorized scope." : null,
+    };
   }
 
   private security() {

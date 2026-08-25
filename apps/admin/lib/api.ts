@@ -107,6 +107,7 @@ export interface PlatformDashboardResponse {
     authorization: { role: string; organizationId: string; actorId: string; subjectId: string; testAsAvailable: false };
     metrics: DashboardMetric[];
     workQueue: Array<{ severity: string; title: string; reason: string; href: string }>;
+    metricScope: string;
   };
 }
 
@@ -126,7 +127,7 @@ export interface DashboardSectionResponse {
   };
 }
 
-export function getDashboardSection(section: "organizations" | "catalog" | "pharmacies" | "inventory", query = ""): Promise<DashboardSectionResponse> {
+export function getDashboardSection(section: "organizations" | "catalog" | "pharmacies" | "inventory" | "reservations", query = ""): Promise<DashboardSectionResponse> {
   return apiFetch<DashboardSectionResponse>(`/api/v1/dashboard/${section}${query ? `?${query}` : ""}`);
 }
 import { headers as requestHeaders } from "next/headers";

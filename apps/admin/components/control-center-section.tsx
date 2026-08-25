@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getDashboardSection } from "../lib/api";
 import { DashboardFilters } from "./dashboard-filters";
 
-type Section = "organizations" | "catalog" | "pharmacies" | "inventory";
+type Section = "organizations" | "catalog" | "pharmacies" | "inventory" | "reservations";
 interface Props { readonly section: Section; readonly title: string; readonly description: string; readonly searchParams: Record<string, string | undefined>; }
 
 export async function ControlCenterSection({ section, title, description, searchParams }: Props) {

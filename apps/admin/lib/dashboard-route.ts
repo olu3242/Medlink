@@ -2,7 +2,7 @@ import { runApi } from "./api-server";
 import { ControlCenterService } from "./control-center";
 import { dashboardFilterSchema } from "@medlink/platform";
 
-export type DashboardSection = "platform" | "organizations" | "catalog" | "pharmacies" | "inventory" | "security";
+export type DashboardSection = "platform" | "organizations" | "catalog" | "pharmacies" | "inventory" | "reservations" | "security";
 
 export function runApiDashboard(request: Request, section: DashboardSection) {
   return runApi(request, {
