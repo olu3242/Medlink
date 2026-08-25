@@ -15,7 +15,7 @@ export async function requestMagicLink(formData: FormData) {
   const { error } = await supabase.auth.signInWithOtp({
     email: result.data.email,
     options: {
-      emailRedirectTo: `${process.env.MEDLINK_APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3024"}/pharmacist/auth/callback`,
+      emailRedirectTo: `${process.env.MEDLINK_PUBLIC_ORIGIN ?? process.env.MEDLINK_APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3024"}/pharmacist/auth/callback`,
     },
   });
 

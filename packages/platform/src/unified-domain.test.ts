@@ -79,6 +79,9 @@ describe("unified MedLink domain contract", () => {
     expect(read("apps/patient/app/auth/sign-in/actions.ts")).toContain(
       "/patient/auth/callback",
     );
+    expect(read("apps/patient/app/auth/sign-in/actions.ts")).toContain(
+      "process.env.MEDLINK_PUBLIC_ORIGIN",
+    );
     expect(read("apps/pharmacist/app/auth/sign-in/actions.ts")).toContain(
       "/pharmacist/auth/callback",
     );
