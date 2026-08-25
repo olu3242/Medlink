@@ -10,7 +10,7 @@ export function PrescriptionReviewDetail({ id }: { id: string }) {
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/v1/review/${encodeURIComponent(id)}`, {
+    fetch(`/pharmacist/api/v1/review/${encodeURIComponent(id)}`, {
       headers: { Accept: "application/json" },
     }).then(async (response) => {
       if (!response.ok) throw new Error("Review unavailable");

@@ -24,7 +24,7 @@ export function AssistantPanel() {
     const question = String(form.get("question") ?? "").trim();
     const workflowStatus = String(form.get("workflowStatus") ?? "").trim();
     try {
-      const response = await fetch("/api/v1/assistant", {
+      const response = await fetch("/patient/api/v1/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

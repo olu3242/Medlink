@@ -13,7 +13,7 @@ export default function ReservationsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/v1/reservations", { headers: { Accept: "application/json" } });
+      const response = await fetch("/pharmacy/api/v1/reservations", { headers: { Accept: "application/json" } });
       if (!response.ok) throw new Error();
       const body = await response.json() as { data: Reservation[] };
       setRows(body.data);
@@ -54,7 +54,7 @@ export default function ReservationsPage() {
   async function decide(id: string, status: "confirmed" | "declined") {
     const reason = status === "declined" ? window.prompt("Reason for declining this reservation:")?.trim() : undefined;
     if (status === "declined" && !reason) return;
-    await mutate(id, `/api/v1/reservations/${id}`, {
+    await mutate(id, `/pharmacy/api/v1/reservations/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(reason ? { status, reason } : { status }),
@@ -62,13 +62,13 @@ export default function ReservationsPage() {
   }
 
   async function markReady(id: string) {
-    await mutate(id, `/api/v1/reservations/${id}/ready`, { method: "POST" }, "Ready-for-pickup status was persisted.");
+    await mutate(id, `/pharmacy/api/v1/reservations/${id}/ready`, { method: "POST" }, "Ready-for-pickup status was persisted.");
   }
 
   async function collect(id: string) {
     const pickupCode = codeInput[id]?.trim();
     if (!pickupCode) return;
-    await mutate(id, `/api/v1/reservations/${id}/collect`, {
+    await mutate(id, `/pharmacy/api/v1/reservations/${id}/collect`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pickupCode }),

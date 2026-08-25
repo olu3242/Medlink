@@ -25,7 +25,7 @@ export default async function MedicinePage({ params }: MedicinePageProps) {
           <h1>{medicine.brandName}</h1>
           <p className="muted">Review and update the canonical catalog record.</p>
         </div>
-        <Link className="secondary-link" href="/catalog">Back to catalog</Link>
+        <Link className="secondary-link" href="/admin/medicines">Back to catalog</Link>
       </header>
       <section className="card">
         <MedicineForm medicine={medicine} />

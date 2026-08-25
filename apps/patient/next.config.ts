@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
-export default {
+import { withMicrofrontends } from "@vercel/microfrontends/next/config";
+
+const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   transpilePackages: [
@@ -9,4 +11,12 @@ export default {
     "@medlink/runtime",
     "@medlink/observability",
   ],
-} satisfies NextConfig;
+  async rewrites() {
+    return [
+      { source: "/patient", destination: "/" },
+      { source: "/patient/:path*", destination: "/:path*" },
+    ];
+  },
+};
+
+export default withMicrofrontends(nextConfig);

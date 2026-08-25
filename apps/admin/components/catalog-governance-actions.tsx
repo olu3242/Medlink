@@ -36,7 +36,7 @@ export function CatalogGovernanceActions({
     setMergeMessage("");
     const form = new FormData(event.currentTarget);
     try {
-      await command(`/api/v1/medicines/${medicineId}/merge`, {
+      await command(`/admin/api/v1/medicines/${medicineId}/merge`, {
         targetMedicineId: String(form.get("targetMedicineId")),
         expectedSourceVersion: version,
         expectedTargetVersion: Number(form.get("targetVersion")),
@@ -59,7 +59,7 @@ export function CatalogGovernanceActions({
     setAlternativeMessage("");
     const form = new FormData(target);
     try {
-      await command(`/api/v1/medicines/${medicineId}/alternatives`, {
+      await command(`/admin/api/v1/medicines/${medicineId}/alternatives`, {
         alternativeMedicineId: String(form.get("alternativeMedicineId")),
         kind: String(form.get("kind")),
         rationale: String(form.get("rationale")),

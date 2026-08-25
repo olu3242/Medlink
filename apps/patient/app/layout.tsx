@@ -12,16 +12,17 @@ export const metadata: Metadata = {
 
 export default function Layout({ children }: { children: ReactNode }) {
   return <html lang="en"><body className="ml-body"><AppShell
-    brand={<a href="/">MedLink Patient</a>}
+    brand={<a href="/patient">MedLink Patient</a>}
     navigation={[
-      { label: "My requests", href: "/" },
-      { label: "My reservations", href: "/reservations" },
-      { label: "Prescriptions", href: "/prescriptions" },
-      { label: "Add prescription", href: "/prescriptions/new" },
-      { label: "Medicine catalogue", href: "/medicines" },
-      { label: "Find nearby", href: "/search" },
-      { label: "Ask Alice", href: "/assistant" },
-      { label: "My profile", href: "/profile" },
+      { label: "MedLink home", href: "/" },
+      { label: "My requests", href: "/patient" },
+      { label: "My reservations", href: "/patient/reservations" },
+      { label: "Prescriptions", href: "/patient/prescriptions" },
+      { label: "Add prescription", href: "/patient/prescriptions/new" },
+      { label: "Medicine catalogue", href: "/patient/medicines" },
+      { label: "Find nearby", href: "/patient/search" },
+      { label: "Ask Alice", href: "/patient/assistant" },
+      { label: "My profile", href: "/patient/profile" },
     ]}
     header={<form action={signOut}><button type="submit">Log out</button></form>}
   >{children}</AppShell></body></html>;

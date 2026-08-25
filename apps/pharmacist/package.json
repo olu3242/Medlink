@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@vercel/microfrontends": "2.4.0",
     "@medlink/agent-runtime": "*",
     "@medlink/agents": "*",
     "@medlink/api": "*",

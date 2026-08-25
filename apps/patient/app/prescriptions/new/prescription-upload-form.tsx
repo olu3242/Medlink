@@ -46,7 +46,7 @@ export function PrescriptionUploadForm() {
       return;
     }
     try {
-      const response = await fetch("/api/v1/prescriptions", {
+      const response = await fetch("/patient/api/v1/prescriptions", {
         method: "POST",
         headers: {
           "Idempotency-Key": idempotencyKey.current ??= crypto.randomUUID(),

@@ -15,7 +15,7 @@ export function PaymentAction({ reservationId, captured }: {
     setBusy(true);
     setMessage("");
     try {
-      const response = await fetch("/api/v1/payments", {
+      const response = await fetch("/patient/api/v1/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
