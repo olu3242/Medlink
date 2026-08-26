@@ -25,7 +25,7 @@ describe("unified MedLink gateway contract", () => {
   });
 
   it("forwards only server-side, alias-scoped Preview protection credentials", () => {
-    expect(gateway).toContain('headers.set("x-vercel-protection-bypass", bypass)');
+    expect(gateway).toContain('upstream.searchParams.set("_vercel_share", bypass)');
     expect(gateway).toContain("_BYPASS_SECRET");
     expect(gateway).not.toContain("NEXT_PUBLIC_");
   });

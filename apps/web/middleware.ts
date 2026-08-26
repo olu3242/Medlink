@@ -24,7 +24,7 @@ export function middleware(request: NextRequest) {
   const upstream = new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, origin);
   const headers = new Headers(request.headers);
 
-  if (bypass) headers.set("x-vercel-protection-bypass", bypass);
+  if (bypass) upstream.searchParams.set("_vercel_share", bypass);
   return NextResponse.rewrite(upstream, { request: { headers } });
 }
 
