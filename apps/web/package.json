@@ -10,6 +10,9 @@
   "dependencies": {
     "@medlink/agent-runtime": "*",
     "@medlink/agents": "*",
+    "@medlink/ai": "*",
+    "@medlink/api": "*",
+    "@medlink/clinical": "*",
     "@medlink/conversation": "*",
     "@medlink/database": "*",
     "@medlink/inventory": "*",
@@ -18,6 +21,8 @@
     "@medlink/observability": "*",
     "@medlink/payments": "*",
     "@medlink/partner": "*",
+    "@medlink/patients": "*",
+    "@medlink/pharmacy": "*",
     "@medlink/platform": "*",
     "@medlink/prescription": "*",
     "@medlink/runtime": "*",

@@ -8,7 +8,7 @@ export interface PatientNotification{ id:string; channel:string; template_key:st
 export interface PatientReservation{ id:string; status:string; payment_required:boolean; pickup_code_hash:string|null; expires_at:string; created_at:string; confirmed_at?:string|null; payments?:Array<{id:string;status:string;amount_minor:number;currency_code:string;reconciliation_required:boolean;created_at:string}> }
 import { cookies, headers } from "next/headers";
 import { resolveServerOrigin } from "@medlink/platform";
-const apiOrigin=()=>resolveServerOrigin(["MEDLINK_API_URL"],"http://localhost:3000","patient API calls");
+const apiOrigin=()=>resolveServerOrigin(["MEDLINK_PUBLIC_ORIGIN","MEDLINK_API_URL"],"http://localhost:3000","patient API calls");
 // Server components call this app's own API route via absolute-URL
 // fetch, which -- unlike a browser's same-origin relative fetch -- never
 // automatically carries the incoming request's cookies. Forwarding them
@@ -32,9 +32,9 @@ async function get<T>(path:string):Promise<T>{
   if(!response.ok)throw new Error("API unavailable");
   return response.json() as Promise<T>;
 }
-export async function listMars(){return (await get<{data:Mar[]}>("/api/v1/mar")).data}
-export async function getMar(id:string){return (await get<{data:Mar}>(`/api/v1/mar/${encodeURIComponent(id)}`)).data}
-export async function getTimeline(id:string){return (await get<{data:TimelineEvent[]}>(`/api/v1/mar/${encodeURIComponent(id)}/timeline`)).data}
-export async function listNotifications(){return (await get<{data:PatientNotification[]}>("/api/v1/notifications")).data}
-export async function searchInventory(q:string){return (await get<{data:Match[]}>(`/api/v1/inventory?q=${encodeURIComponent(q)}`)).data}
-export async function listReservations(){return (await get<{data:PatientReservation[]}>("/api/v1/reservations")).data}
+export async function listMars(){return (await get<{data:Mar[]}>("/patient/api/v1/mar")).data}
+export async function getMar(id:string){return (await get<{data:Mar}>(`/patient/api/v1/mar/${encodeURIComponent(id)}`)).data}
+export async function getTimeline(id:string){return (await get<{data:TimelineEvent[]}>(`/patient/api/v1/mar/${encodeURIComponent(id)}/timeline`)).data}
+export async function listNotifications(){return (await get<{data:PatientNotification[]}>("/patient/api/v1/notifications")).data}
+export async function searchInventory(q:string){return (await get<{data:Match[]}>(`/patient/api/v1/inventory?q=${encodeURIComponent(q)}`)).data}
+export async function listReservations(){return (await get<{data:PatientReservation[]}>("/patient/api/v1/reservations")).data}

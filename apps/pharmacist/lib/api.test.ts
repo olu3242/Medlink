@@ -6,7 +6,7 @@ afterEach(() => {
 });
 
 describe("decide", () => {
-  it("PATCHes the real PATCH /api/v1/review/{id} contract, not a nonexistent /decision path", async () => {
+  it("PATCHes the namespaced pharmacist review contract, not a nonexistent /decision path", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -14,7 +14,7 @@ describe("decide", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
-    expect(url.pathname).toBe("/api/v1/review/review-1");
+    expect(url.pathname).toBe("/pharmacist/api/v1/review/review-1");
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(init.body as string)).toEqual({
       decision: "approved",

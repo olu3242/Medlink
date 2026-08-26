@@ -13,7 +13,7 @@ export type ReviewDetail = PharmacistReviewDetail;
 async function get<T>(path: string) {
   const [incoming, cookieStore] = await Promise.all([headers(), cookies()]);
   const origin = resolveServerOrigin(
-    ["MEDLINK_PHARMACIST_URL", "MEDLINK_API_URL"],
+    ["MEDLINK_PUBLIC_ORIGIN", "MEDLINK_PHARMACIST_URL", "MEDLINK_API_URL"],
     "http://localhost:3003",
     "pharmacist API calls",
   );
@@ -40,13 +40,13 @@ async function get<T>(path: string) {
 }
 
 export const queue = () =>
-  get<PharmacistReviewSummary[]>("/api/v1/review");
+  get<PharmacistReviewSummary[]>("/pharmacist/api/v1/review");
 export const review = (id: string) =>
-  get<PharmacistReviewDetail>(`/api/v1/review/${encodeURIComponent(id)}`);
+  get<PharmacistReviewDetail>(`/pharmacist/api/v1/review/${encodeURIComponent(id)}`);
 export const dashboard = () =>
-  get<PharmacistDashboard>("/api/v1/dashboard");
+  get<PharmacistDashboard>("/pharmacist/api/v1/dashboard");
 export const inventoryAlerts = () =>
-  get<InventoryBatch[]>("/api/v1/inventory");
+  get<InventoryBatch[]>("/pharmacist/api/v1/inventory");
 
 export type ReviewDecision = "approved" | "rejected" | "needs_information";
 
@@ -55,12 +55,12 @@ export async function decide(
   input: { decision: ReviewDecision; recommendation: string },
 ): Promise<void> {
   const origin = resolveServerOrigin(
-    ["MEDLINK_PHARMACIST_URL", "MEDLINK_API_URL"],
+    ["MEDLINK_PUBLIC_ORIGIN", "MEDLINK_PHARMACIST_URL", "MEDLINK_API_URL"],
     "http://localhost:3003",
     "pharmacist API calls",
   );
   const response = await fetch(
-    new URL(`/api/v1/review/${encodeURIComponent(id)}`, origin),
+    new URL(`/pharmacist/api/v1/review/${encodeURIComponent(id)}`, origin),
     {
       method: "PATCH",
       headers: {

@@ -1,62 +1,63 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 type PackageManifest = { readonly dependencies?: Readonly<Record<string, string>> };
 const repositoryRoot = join(import.meta.dirname, "..", "..", "..");
-const portals = ["admin", "patient", "pharmacist", "pharmacy"] as const;
+const personas = ["admin", "patient", "pharmacist", "pharmacy"] as const;
 const read = (path: string) => readFileSync(join(repositoryRoot, path), "utf8");
 
-describe("unified MedLink gateway contract", () => {
-  const gateway = read("apps/web/next.config.ts");
+describe("single-app MedLink frontend contract", () => {
+  it("mounts every production-ready persona inside apps/web", () => {
+    for (const persona of personas) {
+      expect(existsSync(join(repositoryRoot, `apps/web/app/${persona}/page.tsx`))).toBe(true);
+      expect(existsSync(join(repositoryRoot, `apps/web/app/${persona}/layout.tsx`))).toBe(true);
+    }
+    expect(existsSync(join(repositoryRoot, "apps/web/app/provider/page.tsx"))).toBe(false);
+  });
 
-  it("keeps web as gateway and canonical API owner", () => {
-    for (const portal of portals) expect(gateway).toContain(`source: "/${portal}/:path*"`);
-    expect(gateway).not.toContain('source: "/api/:path*"');
+  it("keeps shared APIs canonical and persona APIs explicitly owned", () => {
     expect(read("apps/web/app/api/v1/medicines/route.ts")).toContain("SupabaseCanonicalMedicineRepository");
-    expect(read("apps/web/app/api/v1/medicines/[id]/route.ts")).toContain("SupabaseCanonicalMedicineRepository");
-  });
-
-  it("uses environment-owned upstreams and fails closed on Vercel", () => {
-    for (const name of ["ADMIN", "PATIENT", "PHARMACIST", "PHARMACY"]) {
-      expect(gateway).toContain(`MEDLINK_${name}_ORIGIN`);
-    }
-    expect(gateway).toContain('process.env.VERCEL === "1"');
-    expect(gateway).not.toMatch(/https:\/\/[^`"']*vercel\.app/);
-  });
-
-  it("isolates child assets and preserves prefixed standalone routes", () => {
-    for (const portal of portals) {
-      const config = read(`apps/${portal}/next.config.ts`);
-      expect(config).toContain(`assetPrefix: "/${portal}"`);
-      expect(config).toContain(`source: "/${portal}/:path*"`);
-      expect(config).not.toContain("withMicrofrontends");
+    for (const persona of personas) {
+      expect(existsSync(join(repositoryRoot, `apps/web/app/${persona}/api/v1`))).toBe(true);
     }
   });
 
-  it("does not depend on Vercel Microfrontends", () => {
-    for (const app of ["web", ...portals]) {
+  it("uses one auth callback and guarded persona layouts", () => {
+    expect(existsSync(join(repositoryRoot, "apps/web/app/auth/callback/route.ts"))).toBe(true);
+    for (const persona of personas) {
+      expect(read(`apps/web/app/${persona}/layout.tsx`)).toContain(`requirePersonaAccess("${persona}")`);
+    }
+    expect(read("apps/web/lib/role-landing.ts")).not.toMatch(/@|email/i);
+  });
+
+  it("has no external child routing or microfrontends runtime", () => {
+    const config = read("apps/web/next.config.ts");
+    expect(config).not.toContain("MEDLINK_ADMIN_ORIGIN");
+    expect(config).not.toContain("destination:");
+    expect(config).not.toContain("withMicrofrontends");
+    for (const app of ["web", ...personas]) {
       const manifest = JSON.parse(read(`apps/${app}/package.json`)) as PackageManifest;
       expect(manifest.dependencies?.["@vercel/microfrontends"]).toBeUndefined();
     }
   });
 
-  it("uses portal-owned callbacks and browser API paths", () => {
-    for (const portal of ["patient", "pharmacist", "pharmacy"]) {
-      expect(read(`apps/${portal}/app/auth/sign-in/actions.ts`)).toContain(`/${portal}/auth/callback`);
-    }
-    expect(read("packages/platform/src/server-origin.ts")).toContain('process.env.VERCEL === "1"');
+  it("preserves legacy Control Center compatibility without duplicating it", () => {
+    expect(read("apps/web/app/control-center/[[...path]]/page.tsx")).toContain("/admin");
+    expect(read("apps/web/app/admin/page.tsx")).toContain("admin/app/control-center/page");
+  });
+
+  it("uses same-host navigation and browser API paths", () => {
     for (const path of [
       "apps/admin/components/medicine-form.tsx",
       "apps/patient/components/inventory-search.tsx",
       "apps/pharmacist/components/decision-form.tsx",
       "apps/pharmacy/components/inventory-dashboard.tsx",
-    ]) expect(read(path), path).not.toMatch(/fetch\((?:"|'|`)\/api\//);
+    ]) expect(read(path), path).not.toMatch(/https?:\/\/[^`"']*vercel\.app/);
   });
 
-  it("logs safe structured upstream diagnostics", () => {
+  it("retains safe structured Admin diagnostics", () => {
     const api = read("apps/admin/lib/api.ts");
-    expect(api).toContain("MEDLINK_ADMIN_URL");
     for (const field of ["portal", "route", "upstream", "status", "request_id", "correlation_id", "error_class"]) {
       expect(api).toContain(field);
     }

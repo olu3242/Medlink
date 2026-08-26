@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 function files(directory: string): string[] {
@@ -7,6 +7,19 @@ function files(directory: string): string[] {
     const path = join(directory, name);
     return statSync(path).isDirectory() ? files(path) : [path];
   });
+}
+
+function usesCanonicalRuntime(path: string, visited = new Set<string>()): boolean {
+  if (visited.has(path)) return false;
+  visited.add(path);
+  const source = readFileSync(path, "utf8");
+  if (source.includes("runApi") || source.includes("runWebApi") || source.includes("runExperienceApi")) {
+    return true;
+  }
+  const delegatedModule = source.match(/export \* from "([^"]+)"/)?.[1];
+  return delegatedModule?.startsWith(".")
+    ? usesCanonicalRuntime(resolve(dirname(path), `${delegatedModule}.ts`), visited)
+    : false;
 }
 
 describe("API architecture", () => {
@@ -20,12 +33,7 @@ describe("API architecture", () => {
   it("migrates every protected v1 route to the canonical runtime", () => {
     const violations = routes
       .filter((path) => !path.endsWith(join("health", "route.ts")))
-      .filter((path) => {
-        const source = readFileSync(path, "utf8");
-        return !source.includes("runApi")
-          && !source.includes("runWebApi")
-          && !source.includes("runExperienceApi");
-      })
+      .filter((path) => !usesCanonicalRuntime(path))
       .map((path) => relative(process.cwd(), path));
     expect(violations).toEqual([]);
   });

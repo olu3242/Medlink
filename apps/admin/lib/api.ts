@@ -49,7 +49,7 @@ interface ApiList<T> {
 }
 
 function getApiOrigin() {
-  const configured = process.env.MEDLINK_API_URL;
+  const configured = process.env.MEDLINK_PUBLIC_ORIGIN ?? process.env.MEDLINK_API_URL;
   if (configured) return configured;
   if (process.env.VERCEL === "1") {
     throw new Error("MEDLINK_API_URL is required in hosted admin runtime");
@@ -58,10 +58,10 @@ function getApiOrigin() {
 }
 
 function getAdminOrigin() {
-  const configured = process.env.MEDLINK_ADMIN_URL;
+  const configured = process.env.MEDLINK_PUBLIC_ORIGIN ?? process.env.MEDLINK_ADMIN_URL;
   if (configured) return configured;
   if (process.env.VERCEL === "1") {
-    throw new Error("MEDLINK_ADMIN_URL is required for hosted Control Center runtime");
+    throw new Error("MEDLINK_PUBLIC_ORIGIN is required for hosted Control Center runtime");
   }
   return "http://localhost:3001";
 }
@@ -150,7 +150,7 @@ export interface PlatformDashboardResponse {
 }
 
 export function getPlatformDashboard(): Promise<PlatformDashboardResponse> {
-  return apiFetch<PlatformDashboardResponse>("/api/v1/dashboard/platform", undefined, getAdminOrigin());
+  return apiFetch<PlatformDashboardResponse>("/admin/api/v1/dashboard/platform", undefined, getAdminOrigin());
 }
 
 export interface DashboardSectionResponse {
@@ -167,7 +167,7 @@ export interface DashboardSectionResponse {
 
 export function getDashboardSection(section: "organizations" | "catalog" | "pharmacies" | "inventory" | "reservations", query = ""): Promise<DashboardSectionResponse> {
   return apiFetch<DashboardSectionResponse>(
-    `/api/v1/dashboard/${section}${query ? `?${query}` : ""}`,
+    `/admin/api/v1/dashboard/${section}${query ? `?${query}` : ""}`,
     undefined,
     getAdminOrigin(),
   );

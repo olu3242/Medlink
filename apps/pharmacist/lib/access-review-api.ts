@@ -5,7 +5,7 @@ import { resolveServerOrigin } from "@medlink/platform";
 export async function accessReview(id: string): Promise<AccessReviewDetail> {
   const [incoming, cookieStore] = await Promise.all([headers(), cookies()]);
   const origin = resolveServerOrigin(
-    ["MEDLINK_PHARMACIST_URL", "MEDLINK_API_URL"],
+    ["MEDLINK_PUBLIC_ORIGIN", "MEDLINK_PHARMACIST_URL", "MEDLINK_API_URL"],
     "http://localhost:3003",
     "pharmacist access-review API calls",
   );
@@ -18,7 +18,7 @@ export async function accessReview(id: string): Promise<AccessReviewDetail> {
     const value = incoming.get(name);
     if (value) forwarded.set(name, value);
   }
-  const response = await fetch(new URL(`/api/v1/access-reviews/${encodeURIComponent(id)}`, origin), {
+  const response = await fetch(new URL(`/pharmacist/api/v1/access-reviews/${encodeURIComponent(id)}`, origin), {
     cache: "no-store",
     headers: forwarded,
   });

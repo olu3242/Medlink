@@ -34,3 +34,9 @@ export async function requestMagicLink(formData: FormData) {
   if (error) redirect("/auth/sign-in?error=sign_in_failed");
   redirect(`/auth/sign-in?sent=true&next=${encodeURIComponent(next)}`);
 }
+
+export async function signOut() {
+  const supabase = await createSupabaseServerClient();
+  await supabase.auth.signOut();
+  redirect("/");
+}
