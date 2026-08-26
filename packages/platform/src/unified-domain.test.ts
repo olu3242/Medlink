@@ -14,6 +14,7 @@ describe("unified MedLink gateway contract", () => {
     for (const portal of portals) expect(gateway).toContain(`source: "/${portal}/:path*"`);
     expect(gateway).not.toContain('source: "/api/:path*"');
     expect(read("apps/web/app/api/v1/medicines/route.ts")).toContain("SupabaseCanonicalMedicineRepository");
+    expect(read("apps/web/app/api/v1/medicines/[id]/route.ts")).toContain("SupabaseCanonicalMedicineRepository");
   });
 
   it("uses environment-owned upstreams and fails closed on Vercel", () => {
@@ -55,6 +56,7 @@ describe("unified MedLink gateway contract", () => {
 
   it("logs safe structured upstream diagnostics", () => {
     const api = read("apps/admin/lib/api.ts");
+    expect(api).toContain("MEDLINK_ADMIN_URL");
     for (const field of ["portal", "route", "upstream", "status", "request_id", "correlation_id", "error_class"]) {
       expect(api).toContain(field);
     }

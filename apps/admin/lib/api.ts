@@ -57,17 +57,26 @@ function getApiOrigin() {
   return "http://localhost:3000";
 }
 
+function getAdminOrigin() {
+  const configured = process.env.MEDLINK_ADMIN_URL;
+  if (configured) return configured;
+  if (process.env.VERCEL === "1") {
+    throw new Error("MEDLINK_ADMIN_URL is required for hosted Control Center runtime");
+  }
+  return "http://localhost:3001";
+}
+
 function safeErrorClass(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function apiFetch<T>(path: string, init?: RequestInit, origin = getApiOrigin()): Promise<T> {
   const incoming = await requestHeaders();
   const requestId = incoming.get("x-request-id") ?? crypto.randomUUID();
   const correlationId = incoming.get("x-correlation-id") ?? requestId;
   let upstream: URL | undefined;
   try {
-    upstream = new URL(path, getApiOrigin());
+    upstream = new URL(path, origin);
     const response = await fetch(upstream, {
       ...init,
       cache: "no-store",
@@ -141,7 +150,7 @@ export interface PlatformDashboardResponse {
 }
 
 export function getPlatformDashboard(): Promise<PlatformDashboardResponse> {
-  return apiFetch<PlatformDashboardResponse>("/api/v1/dashboard/platform");
+  return apiFetch<PlatformDashboardResponse>("/api/v1/dashboard/platform", undefined, getAdminOrigin());
 }
 
 export interface DashboardSectionResponse {
@@ -157,6 +166,10 @@ export interface DashboardSectionResponse {
 }
 
 export function getDashboardSection(section: "organizations" | "catalog" | "pharmacies" | "inventory" | "reservations", query = ""): Promise<DashboardSectionResponse> {
-  return apiFetch<DashboardSectionResponse>(`/api/v1/dashboard/${section}${query ? `?${query}` : ""}`);
+  return apiFetch<DashboardSectionResponse>(
+    `/api/v1/dashboard/${section}${query ? `?${query}` : ""}`,
+    undefined,
+    getAdminOrigin(),
+  );
 }
 import { headers as requestHeaders } from "next/headers";
