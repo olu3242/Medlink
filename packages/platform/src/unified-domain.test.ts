@@ -8,26 +8,21 @@ const portals = ["admin", "patient", "pharmacist", "pharmacy"] as const;
 const read = (path: string) => readFileSync(join(repositoryRoot, path), "utf8");
 
 describe("unified MedLink gateway contract", () => {
-  const gateway = read("apps/web/middleware.ts");
+  const gateway = read("apps/web/next.config.ts");
 
   it("keeps web as gateway and canonical API owner", () => {
-    for (const portal of portals) expect(gateway).toContain(`"/${portal}/:path*"`);
-    expect(gateway).not.toContain('"/api/:path*"');
+    for (const portal of portals) expect(gateway).toContain(`source: "/${portal}/:path*"`);
+    expect(gateway).not.toContain('source: "/api/:path*"');
     expect(read("apps/web/app/api/v1/medicines/route.ts")).toContain("SupabaseCanonicalMedicineRepository");
     expect(read("apps/web/app/api/v1/medicines/[id]/route.ts")).toContain("SupabaseCanonicalMedicineRepository");
   });
 
   it("uses environment-owned upstreams and fails closed on Vercel", () => {
-    expect(gateway).toContain('`MEDLINK_${portal.toUpperCase()}`');
-    expect(gateway).toContain('`${environmentPrefix}_ORIGIN`');
+    for (const name of ["ADMIN", "PATIENT", "PHARMACIST", "PHARMACY"]) {
+      expect(gateway).toContain(`MEDLINK_${name}_ORIGIN`);
+    }
     expect(gateway).toContain('process.env.VERCEL === "1"');
     expect(gateway).not.toMatch(/https:\/\/[^`"']*vercel\.app/);
-  });
-
-  it("forwards only server-side, alias-scoped Preview protection credentials", () => {
-    expect(gateway).toContain('upstream.searchParams.set("_vercel_share", bypass)');
-    expect(gateway).toContain("_BYPASS_SECRET");
-    expect(gateway).not.toContain("NEXT_PUBLIC_");
   });
 
   it("isolates child assets and preserves prefixed standalone routes", () => {
