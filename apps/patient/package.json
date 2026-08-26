@@ -9,7 +9,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vercel/microfrontends": "2.4.0",
     "@medlink/ui": "*",
     "@medlink/api": "*",
     "@medlink/platform": "*",

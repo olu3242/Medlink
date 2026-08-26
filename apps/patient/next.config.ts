@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
-import { withMicrofrontends } from "@vercel/microfrontends/next/config";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  assetPrefix: "/patient",
   transpilePackages: [
     "@medlink/ui",
     "@medlink/api",
@@ -19,4 +19,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withMicrofrontends(nextConfig);
+export default nextConfig;

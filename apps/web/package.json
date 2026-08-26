@@ -8,12 +8,12 @@
     "start": "next start"
   },
   "dependencies": {
-    "@vercel/microfrontends": "2.4.0",
     "@medlink/agent-runtime": "*",
     "@medlink/agents": "*",
     "@medlink/conversation": "*",
     "@medlink/database": "*",
     "@medlink/inventory": "*",
+    "@medlink/medicine": "*",
     "@medlink/notifications": "*",
     "@medlink/observability": "*",
     "@medlink/payments": "*",
