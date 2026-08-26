@@ -13,6 +13,10 @@ const triplets = {
   provider: "PROVIDER",
 };
 
+const organizationIds = Object.fromEntries(
+  Object.keys(triplets).map((role, index) => [role, `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`]),
+);
+
 function environment(profile = "core", roles: readonly string[] = personaProfiles[profile] ?? []) {
   const env: Record<string, string> = {
     MEDLINK_TEST_PERSONA_PROFILE: profile,
@@ -24,7 +28,7 @@ function environment(profile = "core", roles: readonly string[] = personaProfile
     const key = triplets[role as keyof typeof triplets];
     env[`MEDLINK_TEST_${key}_EMAIL`] = `${role}@tests.medlink.example`;
     env[`MEDLINK_TEST_${key}_PASSWORD`] = `${role}-secret`;
-    env[`MEDLINK_TEST_${key}_ORGANIZATION_ID`] = `organization-${role}`;
+    env[`MEDLINK_TEST_${key}_ORGANIZATION_ID`] = organizationIds[role];
   }
   return env;
 }
@@ -51,6 +55,67 @@ function service() {
 }
 
 describe("release-scoped persona provisioning", () => {
+  it("accepts exact domain mode including Gmail plus-addresses", () => {
+    const env = environment("core");
+    env.MEDLINK_TEST_EMAIL_DOMAIN = "gmail.com";
+    env.MEDLINK_TEST_PLATFORM_ADMIN_EMAIL = "owner+platform@gmail.com";
+    env.MEDLINK_TEST_PATIENT_EMAIL = "owner+patient@gmail.com";
+    env.MEDLINK_TEST_PHARMACIST_EMAIL = "owner+pharmacist@gmail.com";
+    env.MEDLINK_TEST_PHARMACY_OWNER_EMAIL = "owner+pharmacy@gmail.com";
+    expect(resolvePersonaConfiguration(env).personas).toHaveLength(4);
+  });
+
+  it("rejects wildcard domains", () => {
+    const env = environment("core");
+    env.MEDLINK_TEST_EMAIL_DOMAIN = "*.example.com";
+    expect(() => resolvePersonaConfiguration(env)).toThrow(/without wildcards/);
+  });
+
+  it("accepts normalized exact allowlist mode without deriving role from email", () => {
+    const env = environment("core");
+    delete env.MEDLINK_TEST_EMAIL_DOMAIN;
+    env.MEDLINK_TEST_PLATFORM_ADMIN_EMAIL = "domenicoalabi@gmail.com";
+    env.MEDLINK_TEST_ALLOWED_EMAILS = [
+      "  DOMENICOALABI@GMAIL.COM ",
+      env.MEDLINK_TEST_PATIENT_EMAIL,
+      env.MEDLINK_TEST_PHARMACIST_EMAIL,
+      env.MEDLINK_TEST_PHARMACY_OWNER_EMAIL,
+    ].join(",");
+    const platformAdmin = resolvePersonaConfiguration(env).personas[0];
+    expect(platformAdmin).toMatchObject({ role: "platform_admin", email: "domenicoalabi@gmail.com" });
+  });
+
+  it("rejects an unauthorized allowlist email", () => {
+    const env = environment("core");
+    delete env.MEDLINK_TEST_EMAIL_DOMAIN;
+    env.MEDLINK_TEST_ALLOWED_EMAILS = "someone-else@example.com";
+    expect(() => resolvePersonaConfiguration(env)).toThrow(/not approved/);
+  });
+
+  it.each([
+    ["", /empty/],
+    ["not-an-email", /malformed/],
+    ["patient@tests.medlink.example, PATIENT@TESTS.MEDLINK.EXAMPLE", /duplicate/],
+  ])("rejects malformed allowlist configuration %j", (allowlist, expected) => {
+    const env = environment("core");
+    delete env.MEDLINK_TEST_EMAIL_DOMAIN;
+    env.MEDLINK_TEST_ALLOWED_EMAILS = allowlist;
+    expect(() => resolvePersonaConfiguration(env)).toThrow(expected);
+  });
+
+  it("requires at least one email control mode", () => {
+    const env = environment("core");
+    delete env.MEDLINK_TEST_EMAIL_DOMAIN;
+    expect(() => resolvePersonaConfiguration(env)).toThrow(/EMAIL_DOMAIN or MEDLINK_TEST_ALLOWED_EMAILS/);
+  });
+
+  it("accepts either approved control when both modes are configured", () => {
+    const env = environment("core");
+    env.MEDLINK_TEST_ALLOWED_EMAILS = "external@example.com";
+    env.MEDLINK_TEST_PATIENT_EMAIL = "external@example.com";
+    expect(resolvePersonaConfiguration(env).personas.find(({ role }) => role === "patient")?.email).toBe("external@example.com");
+  });
+
   it.each([["core", 4], ["expanded", 6], ["full", 8]])("selects the %s profile", (profile, count) => {
     expect(resolvePersonaConfiguration(environment(profile)).personas).toHaveLength(count);
   });
@@ -80,7 +145,7 @@ describe("release-scoped persona provisioning", () => {
   it("rejects an invalid email domain", () => {
     const env = environment("core");
     env.MEDLINK_TEST_PATIENT_EMAIL = "patient@outside.example";
-    expect(() => resolvePersonaConfiguration(env)).toThrow(/MEDLINK_TEST_EMAIL_DOMAIN/);
+    expect(() => resolvePersonaConfiguration(env)).toThrow(/not approved/);
   });
 
   it("rejects a missing organization", () => {
@@ -113,7 +178,9 @@ describe("release-scoped persona provisioning", () => {
     mock.client.from = vi.fn((table: string) => table === "organizations"
       ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }
       : { upsert: mock.upsert });
-    await expect(provisionTestPersonas({ env, createService: () => mock.client, log: vi.fn() })).rejects.toThrow(/organization does not exist/);
+    const log = vi.fn();
+    await expect(provisionTestPersonas({ env, createService: () => mock.client, log })).rejects.toThrow(/PERSONA=platform_admin STATUS=BLOCKED_INVALID_ORGANIZATION/);
     expect(mock.createUser).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith("PERSONA=platform_admin STATUS=BLOCKED_INVALID_ORGANIZATION");
   });
 });

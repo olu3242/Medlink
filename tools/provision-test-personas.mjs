@@ -19,6 +19,9 @@ export const personaProfiles = {
 };
 
 const value = (env, name) => env[name]?.trim();
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const domainPattern = /^(?!.*\*)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const required = (env, name) => {
   const configured = value(env, name);
@@ -31,7 +34,17 @@ export function resolvePersonaConfiguration(env = process.env) {
   const selectedRoles = personaProfiles[profileName];
   if (!selectedRoles) throw new Error(`Unknown persona profile: ${profileName}`);
 
-  const domain = required(env, "MEDLINK_TEST_EMAIL_DOMAIN").toLowerCase();
+  const configuredDomain = value(env, "MEDLINK_TEST_EMAIL_DOMAIN")?.toLowerCase();
+  if (configuredDomain && !domainPattern.test(configuredDomain)) {
+    throw new Error("MEDLINK_TEST_EMAIL_DOMAIN must be an exact valid domain without wildcards");
+  }
+  const configuredAllowlist = value(env, "MEDLINK_TEST_ALLOWED_EMAILS");
+  const allowedEmails = configuredAllowlist === undefined
+    ? new Set()
+    : parseAllowedEmails(configuredAllowlist);
+  if (!configuredDomain && allowedEmails.size === 0) {
+    throw new Error("MEDLINK_TEST_EMAIL_DOMAIN or MEDLINK_TEST_ALLOWED_EMAILS is required");
+  }
   const selected = new Set(selectedRoles);
   const personas = [];
 
@@ -45,19 +58,40 @@ export function resolvePersonaConfiguration(env = process.env) {
     if (present.length === 0) throw new Error(`${role} is required by the ${profileName} persona profile`);
 
     const email = required(env, emailName).toLowerCase();
-    if (email.split("@").at(-1) !== domain) {
-      throw new Error(`${emailName} must use MEDLINK_TEST_EMAIL_DOMAIN`);
+    if (!emailPattern.test(email)) throw new Error(`${emailName} must be a valid email address`);
+    const domainApproved = configuredDomain !== undefined && email.split("@").at(-1) === configuredDomain;
+    const allowlistApproved = allowedEmails.has(email);
+    if (!domainApproved && !allowlistApproved) {
+      throw new Error(`${emailName} is not approved by the configured test email controls`);
     }
-    personas.push({ role, email, password: required(env, passwordName), organizationId: required(env, organizationName) });
+    const organizationId = required(env, organizationName);
+    if (!uuidPattern.test(organizationId)) throw new Error(`${organizationName} must be a UUID`);
+    personas.push({ role, email, password: required(env, passwordName), organizationId });
   }
 
   return {
     profileName,
-    domain,
+    domain: configuredDomain,
+    allowedEmails,
     url: required(env, "MEDLINK_TEST_SUPABASE_URL"),
     serviceKey: required(env, "MEDLINK_TEST_SUPABASE_SERVICE_KEY"),
     personas,
   };
+}
+
+function parseAllowedEmails(configured) {
+  const entries = configured.split(",").map((entry) => entry.trim().toLowerCase());
+  if (entries.length === 0 || entries.some((entry) => entry.length === 0)) {
+    throw new Error("MEDLINK_TEST_ALLOWED_EMAILS must not be empty or contain empty entries");
+  }
+  if (entries.some((entry) => !emailPattern.test(entry))) {
+    throw new Error("MEDLINK_TEST_ALLOWED_EMAILS contains a malformed email address");
+  }
+  const allowedEmails = new Set(entries);
+  if (allowedEmails.size !== entries.length) {
+    throw new Error("MEDLINK_TEST_ALLOWED_EMAILS contains duplicate normalized entries");
+  }
+  return allowedEmails;
 }
 
 async function findUser(service, email) {
@@ -70,11 +104,23 @@ async function findUser(service, email) {
   }
 }
 
-async function validateOrganizations(service, personas) {
-  for (const organizationId of new Set(personas.map(({ organizationId }) => organizationId))) {
+async function validateOrganizations(service, personas, log) {
+  const checked = new Map();
+  for (const { role, organizationId } of personas) {
+    if (checked.has(organizationId)) {
+      if (!checked.get(organizationId)) {
+        log(`PERSONA=${role} STATUS=BLOCKED_INVALID_ORGANIZATION`);
+        throw new Error(`PERSONA=${role} STATUS=BLOCKED_INVALID_ORGANIZATION`);
+      }
+      continue;
+    }
     const result = await service.from("organizations").select("id").eq("id", organizationId).maybeSingle();
     if (result.error) throw result.error;
-    if (!result.data) throw new Error("Configured test organization does not exist");
+    checked.set(organizationId, Boolean(result.data));
+    if (!result.data) {
+      log(`PERSONA=${role} STATUS=BLOCKED_INVALID_ORGANIZATION`);
+      throw new Error(`PERSONA=${role} STATUS=BLOCKED_INVALID_ORGANIZATION`);
+    }
   }
 }
 
@@ -84,7 +130,7 @@ export async function provisionTestPersonas({ env = process.env, createService, 
     ? createService(configuration.url, configuration.serviceKey)
     : createClient(configuration.url, configuration.serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  await validateOrganizations(service, configuration.personas);
+  await validateOrganizations(service, configuration.personas, log);
 
   for (const { role, email, password, organizationId } of configuration.personas) {
     let user = await findUser(service, email);
