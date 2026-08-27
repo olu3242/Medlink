@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import { AppShell } from "@medlink/ui";
 import { signOut } from "./auth/sign-in/actions";
 import "@medlink/ui/styles.css";
+import "@medlink/ui/personas.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,8 +12,13 @@ export const metadata: Metadata = {
   description: "Find and reserve medication",
 };
 
-export default function Layout({ children }: { children: ReactNode }) {
+export default async function Layout({ children }: { children: ReactNode }) {
+  const requestHeaders = await headers();
+  if (requestHeaders.get("x-medlink-public-auth-route") === "true") {
+    return <html lang="en"><body className="ml-body"><main className="ml-main" id="main-content">{children}</main></body></html>;
+  }
   return <html lang="en"><body className="ml-body"><AppShell
+    persona="patient"
     brand={<a href="/patient">MedLink Patient</a>}
     navigation={[
       { label: "MedLink home", href: "/" },
