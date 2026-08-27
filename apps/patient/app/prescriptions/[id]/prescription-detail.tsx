@@ -229,7 +229,7 @@ export function PrescriptionDetailView({ id }: { id: string }) {
       });
       if (!response.ok) throw new Error();
       const body = await response.json() as { data: { id: string } };
-      window.location.assign(`/mar/${body.data.id}`);
+      window.location.assign(`/patient/mar/${body.data.id}`);
     } catch {
       setMessage("Medication access could not be started. Retry from this prescription.");
       setStartingAccessFor(null);

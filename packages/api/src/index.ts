@@ -141,7 +141,7 @@ export async function runExperienceApi<TInput, TOutput>(
       authorizeExperienceRole(context.role, contract.roles);
       return operation.execute(input, context, database);
     },
-  });
+  }, "experience");
 }
 
 export function authorizeRegisteredOperationRole(
@@ -167,6 +167,7 @@ export function authorizeRegisteredOperationRole(
 export async function runApi<TInput, TOutput>(
   request: Request,
   operation: ApiOperation<TInput, TOutput>,
+  authorizationMode: "professional" | "experience" = "professional",
 ): Promise<Response> {
   const database = requestDatabase(request);
   const tracing = runtimeTracing("medlink-api");
@@ -246,12 +247,14 @@ export async function runApi<TInput, TOutput>(
     authorizer: {
       authorize(context, permission) {
         authorizeRuntimeContext(context, permission);
-        authorizeRegisteredOperationRole(
-          context.role,
-          request.method,
-          new URL(request.url).pathname,
-          z.enum(permissions).parse(permission),
-        );
+        if (authorizationMode === "professional") {
+          authorizeRegisteredOperationRole(
+            context.role,
+            request.method,
+            new URL(request.url).pathname,
+            z.enum(permissions).parse(permission),
+          );
+        }
       },
     },
     ...standardRuntimeHooks("medlink-api"),
