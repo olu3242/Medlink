@@ -119,6 +119,10 @@ test.describe("platform admin authentication", () => {
     await signInWithMagicLink(page, adminUrl, mailpitUrl, fixture.partnerReviewer.email);
     await expect(page.locator('[data-persona="admin"]')).toHaveCount(1);
     await expect(page.locator('[data-persona="admin"]')).toContainText("Control Center");
+    const dashboard = await page.request.get(`${adminUrl}/admin/api/v1/dashboard/platform`, {
+      headers: { Accept: "application/json" },
+    });
+    expect(dashboard.status(), await dashboard.text()).toBe(200);
   });
 });
 
