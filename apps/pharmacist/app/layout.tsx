@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { AppShell } from "@medlink/ui";
@@ -5,6 +6,11 @@ import { signOut } from "./auth/sign-in/actions";
 import "@medlink/ui/styles.css";
 import "@medlink/ui/personas.css";
 import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "MedLink Pharmacist",
+  description: "Review medication access requests",
+};
 
 export default async function Layout({ children }: { children: ReactNode }) {
   const requestHeaders = await headers();
