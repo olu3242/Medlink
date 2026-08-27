@@ -14,8 +14,8 @@ export function MarDetail({ id }: { id: string }) {
   useEffect(() => {
     let active = true;
     Promise.all([
-      fetch(`/api/v1/mar/${encodeURIComponent(id)}`, { headers: { Accept: "application/json" } }),
-      fetch(`/api/v1/mar/${encodeURIComponent(id)}/timeline`, { headers: { Accept: "application/json" } }),
+      fetch(`/patient/api/v1/mar/${encodeURIComponent(id)}`, { headers: { Accept: "application/json" } }),
+      fetch(`/patient/api/v1/mar/${encodeURIComponent(id)}/timeline`, { headers: { Accept: "application/json" } }),
     ]).then(async ([marResponse, timelineResponse]) => {
       if (!marResponse.ok || !timelineResponse.ok) throw new Error("MAR unavailable");
       const marBody = await marResponse.json() as { data: Mar };
@@ -34,12 +34,12 @@ export function MarDetail({ id }: { id: string }) {
   return <>
     <header className="head">
       <div><div className="eyebrow">Request status</div><h1>{mar.medicineName}</h1></div>
-      <Link className="secondary" href="/">All requests</Link>
+      <Link className="secondary" href="/patient">All requests</Link>
     </header>
     <section className="card">
       <h2>Current status: {mar.status}</h2>
       <p className="muted">A pharmacist makes all clinical review and substitution decisions. MedLink will notify you when action is needed.</p>
-      {SEARCHABLE_STATES.has(mar.status) && <Link className="button" href={`/search?marId=${mar.id}${mar.medicineId ? `&medicineId=${mar.medicineId}` : ""}&q=${encodeURIComponent(mar.medicineName)}`}>Find pharmacy stock</Link>}
+      {SEARCHABLE_STATES.has(mar.status) && <Link className="button" href={`/patient/search?marId=${mar.id}${mar.medicineId ? `&medicineId=${mar.medicineId}` : ""}&q=${encodeURIComponent(mar.medicineName)}`}>Find pharmacy stock</Link>}
     </section>
     <section className="card" aria-labelledby="timeline-title" style={{ marginTop: "1rem" }}>
       <h2 id="timeline-title">Workflow timeline</h2>

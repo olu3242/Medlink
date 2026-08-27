@@ -9,7 +9,7 @@ export default async function Page({
   const { id } = await params;
   return (
     <>
-      <Link className="back-link" href="/">← Inventory</Link>
+      <Link className="back-link" href="/pharmacy">← Inventory</Link>
       <InventoryDetail inventoryId={id} />
     </>
   );

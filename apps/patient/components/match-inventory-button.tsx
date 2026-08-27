@@ -15,7 +15,7 @@ export function MatchInventoryButton({ marId, inventoryBatchId, pharmacyLocation
   async function match() {
     setBusy(true);
     setMessage("");
-    const response = await fetch(`/api/v1/mar/${marId}/match`, {
+    const response = await fetch(`/patient/api/v1/mar/${marId}/match`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -29,7 +29,7 @@ export function MatchInventoryButton({ marId, inventoryBatchId, pharmacyLocation
       setBusy(false);
       return;
     }
-    router.push(`/reserve/${inventoryBatchId}?marId=${marId}&pharmacyLocationId=${pharmacyLocationId}`);
+    router.push(`/patient/reserve/${inventoryBatchId}?marId=${marId}&pharmacyLocationId=${pharmacyLocationId}`);
   }
 
   return <>

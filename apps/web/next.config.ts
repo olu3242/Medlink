@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@medlink/platform",
     "@medlink/database",
+    "@medlink/clinical",
+    "@medlink/api",
+    "@medlink/ai",
+    "@medlink/patients",
+    "@medlink/pharmacy",
     "@medlink/observability",
     "@medlink/runtime",
     "@medlink/ui",

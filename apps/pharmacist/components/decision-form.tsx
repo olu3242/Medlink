@@ -85,7 +85,7 @@ export function DecisionForm({
   ) => {
     try {
       const rows = await data<Availability[]>(
-        `/api/v1/inventory/availability?medicineId=${encodeURIComponent(medicineId)}&quantity=1`,
+        `/pharmacist/api/v1/inventory/availability?medicineId=${encodeURIComponent(medicineId)}&quantity=1`,
       );
       setAvailability((current) => ({ ...current, [itemId]: rows }));
     } catch {
@@ -109,7 +109,7 @@ export function DecisionForm({
     setMessage("");
     try {
       const rows = await data<MedicineMatch[]>(
-        `/api/v1/medicines/search?q=${encodeURIComponent(query)}&reviewId=${encodeURIComponent(reviewId)}`,
+        `/pharmacist/api/v1/medicines/search?q=${encodeURIComponent(query)}&reviewId=${encodeURIComponent(reviewId)}`,
       );
       setMatches((current) => ({ ...current, [itemId]: rows }));
     } catch {
@@ -149,7 +149,7 @@ export function DecisionForm({
         acknowledgedFindingIds: form.getAll("acknowledgedFindingIds"),
         reviewedItems,
       });
-      const response = await fetch(`/api/v1/review/${reviewId}`, {
+      const response = await fetch(`/pharmacist/api/v1/review/${reviewId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

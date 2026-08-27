@@ -35,7 +35,7 @@ export function PrescriptionHistory() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/v1/prescriptions", {
+    void fetch("/patient/api/v1/prescriptions", {
       headers: { Accept: "application/json" },
     }).then(async (response) => {
       if (!response.ok) throw new Error();
@@ -70,7 +70,7 @@ export function PrescriptionHistory() {
           Upload a prescription or enter its medicines to start pharmacist
           review.
         </p>
-        <Link className="button" href="/prescriptions/new">
+        <Link className="button" href="/patient/prescriptions/new">
           Add prescription
         </Link>
       </div>
@@ -95,7 +95,7 @@ export function PrescriptionHistory() {
           </p>
           <Link
             className="secondary"
-            href={`/prescriptions/${prescription.id}`}
+            href={`/patient/prescriptions/${prescription.id}`}
           >
             View details
           </Link>

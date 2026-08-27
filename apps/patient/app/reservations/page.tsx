@@ -14,7 +14,7 @@ export default function ReservationsPage() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/v1/reservations", { headers: { Accept: "application/json" } })
+    fetch("/patient/api/v1/reservations", { headers: { Accept: "application/json" } })
       .then(async (response) => {
         if (!response.ok) throw new Error("Reservations unavailable");
         const body = await response.json() as { data: PatientReservation[] };
@@ -32,7 +32,7 @@ export default function ReservationsPage() {
         <h1>Your reservations</h1>
         <p className="muted">Once a reservation is ready, generate a one-time pickup code to show the pharmacy.</p>
       </div>
-      <Link className="secondary" href="/">Home</Link>
+      <Link className="secondary" href="/patient">Home</Link>
     </header>
     {failed ? <p className="error" role="alert">Reservations are temporarily unavailable. Try again shortly.</p>
       : loading ? <p className="muted" role="status">Loading reservations…</p>

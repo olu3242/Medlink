@@ -3,6 +3,7 @@ import {
   SupabaseInventoryManagementRepository,
   updateInventoryBatchSchema,
 } from "@medlink/inventory";
+import { projectPersonaFields, type Role } from "@medlink/platform";
 import { z } from "zod";
 import { runApi } from "../../../../../lib/api-server";
 
@@ -16,10 +17,12 @@ export const GET = async (request: Request, route: Context) => {
     permission: "inventory:read",
     schema: z.object({}),
     input: async () => ({}),
-    execute: async (_input, context, database) =>
-      new InventoryManagement(
+    execute: async (_input, context, database) => {
+      const row = await new InventoryManagement(
         new SupabaseInventoryManagementRepository(database),
-      ).find(context.organizationId, inventoryId),
+      ).find(context.organizationId, inventoryId);
+      return projectPersonaFields(context.role as Role, "Inventory", row);
+    },
   });
 };
 

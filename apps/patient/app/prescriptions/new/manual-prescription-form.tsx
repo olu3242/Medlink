@@ -41,7 +41,7 @@ export function ManualPrescriptionForm() {
     setMessage("");
     try {
       const response = await fetch(
-        `/api/v1/medicines/search?q=${encodeURIComponent(query)}`,
+        `/patient/api/v1/medicines/search?q=${encodeURIComponent(query)}`,
       );
       if (!response.ok) throw new Error();
       const body = await response.json() as {
@@ -95,7 +95,7 @@ export function ManualPrescriptionForm() {
       return value || undefined;
     };
     try {
-      const response = await fetch("/api/v1/prescriptions", {
+      const response = await fetch("/patient/api/v1/prescriptions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -313,7 +313,7 @@ export function ManualPrescriptionForm() {
         {message && <p role="status">{message}</p>}
         {createdId && (
           <p>
-            <Link className="secondary" href={`/prescriptions/${createdId}`}>
+            <Link className="secondary" href={`/patient/prescriptions/${createdId}`}>
               View prescription
             </Link>
           </p>

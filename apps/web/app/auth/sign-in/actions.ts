@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { resolveServerOrigin } from "@medlink/platform";
 
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
 
@@ -18,13 +19,24 @@ export async function requestMagicLink(formData: FormData) {
   if (!result.success) redirect("/auth/sign-in?error=invalid_email");
 
   const supabase = await createSupabaseServerClient();
+  const publicOrigin = resolveServerOrigin(
+    ["MEDLINK_PUBLIC_ORIGIN", "MEDLINK_APP_URL", "NEXT_PUBLIC_APP_URL"],
+    "http://localhost:3024",
+    "authentication callbacks",
+  );
   const { error } = await supabase.auth.signInWithOtp({
     email: result.data.email,
     options: {
-      emailRedirectTo: `${process.env.MEDLINK_APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/auth/callback?next=${encodeURIComponent(next)}`,
+      emailRedirectTo: `${publicOrigin}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   });
 
   if (error) redirect("/auth/sign-in?error=sign_in_failed");
   redirect(`/auth/sign-in?sent=true&next=${encodeURIComponent(next)}`);
+}
+
+export async function signOut() {
+  const supabase = await createSupabaseServerClient();
+  await supabase.auth.signOut();
+  redirect("/");
 }

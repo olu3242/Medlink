@@ -48,35 +48,73 @@ interface ApiList<T> {
   meta?: { total?: number };
 }
 
-const apiOrigin = process.env.MEDLINK_API_URL ?? "http://localhost:3000";
-
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const incoming = await requestHeaders();
-  const response = await fetch(new URL(path, apiOrigin), {
-    ...init,
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-      ...(incoming.get("authorization")
-        ? { Authorization: incoming.get("authorization")! }
-        : {}),
-      ...(incoming.get("cookie")
-        ? { Cookie: incoming.get("cookie")! }
-        : {}),
-      ...(incoming.get("x-medlink-tenant-id")
-        ? {
-          "X-MedLink-Tenant-Id":
-            incoming.get("x-medlink-tenant-id")!,
-        }
-        : {}),
-      ...init?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`MedLink API request failed (${response.status})`);
+function getApiOrigin() {
+  const configured = process.env.MEDLINK_PUBLIC_ORIGIN ?? process.env.MEDLINK_API_URL;
+  if (configured) return configured;
+  if (process.env.VERCEL === "1") {
+    throw new Error("MEDLINK_API_URL is required in hosted admin runtime");
   }
-  return response.json() as Promise<T>;
+  return "http://localhost:3000";
+}
+
+function getAdminOrigin() {
+  const configured = process.env.MEDLINK_PUBLIC_ORIGIN ?? process.env.MEDLINK_ADMIN_URL;
+  if (configured) return configured;
+  if (process.env.VERCEL === "1") {
+    throw new Error("MEDLINK_PUBLIC_ORIGIN is required for hosted Control Center runtime");
+  }
+  return "http://localhost:3001";
+}
+
+function safeErrorClass(error: unknown) {
+  return error instanceof Error ? error.name : "UnknownError";
+}
+
+async function apiFetch<T>(path: string, init?: RequestInit, origin = getApiOrigin()): Promise<T> {
+  const incoming = await requestHeaders();
+  const requestId = incoming.get("x-request-id") ?? crypto.randomUUID();
+  const correlationId = incoming.get("x-correlation-id") ?? requestId;
+  let upstream: URL | undefined;
+  try {
+    upstream = new URL(path, origin);
+    const response = await fetch(upstream, {
+      ...init,
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "X-Request-Id": requestId,
+        "X-Correlation-Id": correlationId,
+        ...(incoming.get("authorization")
+          ? { Authorization: incoming.get("authorization")! }
+          : {}),
+        ...(incoming.get("cookie")
+          ? { Cookie: incoming.get("cookie")! }
+          : {}),
+        ...(incoming.get("x-medlink-tenant-id")
+          ? { "X-MedLink-Tenant-Id": incoming.get("x-medlink-tenant-id")! }
+          : {}),
+        ...init?.headers,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`MedLink API request failed (${response.status})`);
+    }
+    return response.json() as Promise<T>;
+  } catch (error) {
+    console.error(JSON.stringify({
+      portal: "admin",
+      route: upstream?.pathname ?? path.split("?")[0],
+      upstream: upstream?.origin ?? "unconfigured",
+      status: error instanceof Error && /\((\d{3})\)/.test(error.message)
+        ? Number(error.message.match(/\((\d{3})\)/)?.[1])
+        : null,
+      request_id: requestId,
+      correlation_id: correlationId,
+      error_class: safeErrorClass(error),
+    }));
+    throw error;
+  }
 }
 
 export async function listMedicines(filters: CatalogFilters): Promise<ApiList<MedicineSummary>> {
@@ -91,5 +129,47 @@ export async function getMedicine(id: string): Promise<MedicineDetail> {
     `/api/v1/medicines/${encodeURIComponent(id)}`,
   );
   return response.data;
+}
+
+export interface DashboardMetric {
+  id: string;
+  label: string;
+  value: number;
+  status: "healthy" | "attention" | "empty" | "unknown";
+  href: string;
+}
+
+export interface PlatformDashboardResponse {
+  data: {
+    generatedAt: string;
+    authorization: { role: string; organizationId: string; actorId: string; subjectId: string; testAsAvailable: false };
+    metrics: DashboardMetric[];
+    workQueue: Array<{ severity: string; title: string; reason: string; href: string }>;
+    metricScope: string;
+  };
+}
+
+export function getPlatformDashboard(): Promise<PlatformDashboardResponse> {
+  return apiFetch<PlatformDashboardResponse>("/admin/api/v1/dashboard/platform", undefined, getAdminOrigin());
+}
+
+export interface DashboardSectionResponse {
+  data: {
+    generatedAt: string;
+    metrics?: DashboardMetric[];
+    organizations?: Array<{ id: string; name: string; type: string; created_at: string }>;
+    emptyState?: string | null;
+    manufacturerCoverage?: { total: number; present: number; missing: number; percent: number };
+    nafdacCoverage?: { total: number; present: number; missing: number; percent: number };
+    priceAccess?: Record<string, unknown>;
+  };
+}
+
+export function getDashboardSection(section: "organizations" | "catalog" | "pharmacies" | "inventory" | "reservations", query = ""): Promise<DashboardSectionResponse> {
+  return apiFetch<DashboardSectionResponse>(
+    `/admin/api/v1/dashboard/${section}${query ? `?${query}` : ""}`,
+    undefined,
+    getAdminOrigin(),
+  );
 }
 import { headers as requestHeaders } from "next/headers";

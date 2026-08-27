@@ -15,7 +15,7 @@ export function ProfileForm() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/v1/patients/me", { headers: { Accept: "application/json" } })
+    void fetch("/patient/api/v1/patients/me", { headers: { Accept: "application/json" } })
       .then(async (response) => {
         if (!response.ok) throw new Error();
         return response.json() as Promise<{ data: PatientProfile | null }>;
@@ -64,7 +64,7 @@ export function ProfileForm() {
     };
 
     try {
-      const response = await fetch("/api/v1/patients/me", {
+      const response = await fetch("/patient/api/v1/patients/me", {
         method: profile ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
@@ -90,7 +90,7 @@ export function ProfileForm() {
     setBusy(true);
     setMessage("");
     try {
-      const response = await fetch("/api/v1/patients/me", {
+      const response = await fetch("/patient/api/v1/patients/me", {
         method: "DELETE",
         headers: { "Idempotency-Key": crypto.randomUUID() },
       });

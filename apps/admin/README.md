@@ -9,10 +9,9 @@ and contains no medicine business logic or direct database access.
 npm run dev --workspace @medlink/admin
 ```
 
-Set `MEDLINK_API_URL` to the origin hosting `/api/v1`. It defaults to
-`http://localhost:3000`. Browser mutations use same-origin `/api/v1/medicines`;
-deploy the admin app behind the MedLink API gateway or configure an equivalent
-proxy at the edge.
+Set `MEDLINK_API_URL` to the canonical origin hosting `/api/v1`. Local development
+uses `http://localhost:3000`; hosted runtime fails closed if the variable is absent.
+Browser mutations use the prefixed `/admin/api/v1/medicines` routes.
 
 ## Routes
 

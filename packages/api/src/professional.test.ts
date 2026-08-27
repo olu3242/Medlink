@@ -8,6 +8,8 @@ describe("professional API catalog", () => {
         "inventory.list",
         "reservation.ready",
         "review.decide",
+        "review.medicine.search",
+        "inventory.medicine.search",
         "provider.prescription",
       ]),
     );

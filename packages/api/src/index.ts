@@ -10,6 +10,7 @@ import {
 } from "@medlink/runtime";
 import { z } from "zod";
 import { integrationContract } from "./experience-contracts";
+import { professionalOperations } from "./professional";
 
 export * from "./professional";
 export * from "./events";
@@ -87,6 +88,18 @@ export function authorizeRuntimeContext(
   }
 }
 
+export function authorizeExperienceRole(role: string, allowedRoles: readonly Role[]): void {
+  if (!allowedRoles.includes(role as Role)) {
+    throw new RuntimeError(
+      "authorization",
+      "persona_not_allowed",
+      "This operation is not available for the active persona",
+      403,
+      false,
+    );
+  }
+}
+
 function contractPathMatches(template: string, pathname: string): boolean {
   const expected = template.split("/").filter(Boolean);
   const actual = pathname.split("/").filter(Boolean);
@@ -109,7 +122,10 @@ export async function runExperienceApi<TInput, TOutput>(
       501,
     ), request.headers.get("x-correlation-id") ?? crypto.randomUUID());
   }
-  const pathname = new URL(request.url).pathname;
+  const pathname = normalizeExperiencePath(
+    new URL(request.url).pathname,
+    contract.persona,
+  );
   if (
     request.method !== contract.method
     || operation.permission !== contract.permission
@@ -122,12 +138,45 @@ export async function runExperienceApi<TInput, TOutput>(
       500,
     ), request.headers.get("x-correlation-id") ?? crypto.randomUUID());
   }
-  return runApi(request, operation);
+  return runApi(request, {
+    ...operation,
+    execute(input, context, database) {
+      authorizeExperienceRole(context.role, contract.roles);
+      return operation.execute(input, context, database);
+    },
+  }, "experience");
+}
+
+export function normalizeExperiencePath(pathname: string, persona: string): string {
+  const prefix = `/${persona}`;
+  if (pathname === prefix) return "/";
+  return pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length) : pathname;
+}
+
+export function authorizeRegisteredOperationRole(
+  role: string,
+  method: string,
+  pathname: string,
+  permission: Permission,
+): void {
+  // Patient paths are governed by runExperienceApi contracts. Professional
+  // registration deliberately applies only to direct professional surfaces,
+  // where identical /api/v1 paths have different role ownership.
+  const portal = pathname.match(/^\/(admin|pharmacist|pharmacy)(?:\/|$)/)?.[1];
+  const normalizedPath = pathname.replace(/^\/(?:admin|pharmacist|pharmacy)/, "");
+  const contract = professionalOperations.find((candidate) =>
+    (!candidate.portal || candidate.portal === portal)
+    && candidate.method === method
+    && candidate.permission === permission
+    && contractPathMatches(candidate.path, normalizedPath),
+  );
+  if (contract) authorizeExperienceRole(role, contract.roles);
 }
 
 export async function runApi<TInput, TOutput>(
   request: Request,
   operation: ApiOperation<TInput, TOutput>,
+  authorizationMode: "professional" | "experience" = "professional",
 ): Promise<Response> {
   const database = requestDatabase(request);
   const tracing = runtimeTracing("medlink-api");
@@ -207,6 +256,14 @@ export async function runApi<TInput, TOutput>(
     authorizer: {
       authorize(context, permission) {
         authorizeRuntimeContext(context, permission);
+        if (authorizationMode === "professional") {
+          authorizeRegisteredOperationRole(
+            context.role,
+            request.method,
+            new URL(request.url).pathname,
+            z.enum(permissions).parse(permission),
+          );
+        }
       },
     },
     ...standardRuntimeHooks("medlink-api"),

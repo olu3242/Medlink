@@ -9,3 +9,8 @@ export * from "./enterprise-administration";
 export * from "./enterprise-dashboards";
 export * from "./capability-registry";
 export * from "./architecture-governance";
+export * from "./persona-certification";
+export * from "./control-center";
+export * from "./access-governance";
+export * from "./server-origin";
+export * from "./persona-contracts";
