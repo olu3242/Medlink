@@ -25,7 +25,7 @@ export const professionalOperations: readonly ProfessionalOperation[] = [
   { id: "inventory.stock.change", method: "POST", path: "/api/v1/inventory/:id/stock", permission: "inventory:manage", roles: ["pharmacy_owner", "pharmacy_staff", "inventory_manager"] },
   { id: "inventory.transactions", method: "GET", path: "/api/v1/inventory/:id/transactions", permission: "inventory:read", roles: ["pharmacy_owner", "pharmacy_staff", "inventory_manager", "pharmacist"] },
   { id: "inventory.availability", method: "GET", path: "/api/v1/inventory/availability", permission: "inventory:read", roles: ["pharmacy_owner", "pharmacy_staff", "inventory_manager", "pharmacist"] },
-  { id: "reservation.list", method: "GET", path: "/api/v1/reservations", permission: "reservation:read", roles: ["pharmacy_staff", "pharmacist"] },
+  { id: "reservation.list", method: "GET", path: "/api/v1/reservations", permission: "reservation:read", roles: ["pharmacy_owner", "pharmacy_staff", "pharmacist"] },
   { id: "reservation.ready", method: "PATCH", path: "/api/v1/reservations/:id/ready", permission: "reservation:manage", roles: ["pharmacy_staff", "pharmacist"] },
   { id: "reservation.collect", method: "PATCH", path: "/api/v1/reservations/:id/collect", permission: "reservation:manage", roles: ["pharmacy_staff", "pharmacist"] },
   { id: "review.list", method: "GET", path: "/api/v1/review", permission: "clinical:review", roles: ["pharmacist"] },

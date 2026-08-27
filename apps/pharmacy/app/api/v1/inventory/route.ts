@@ -3,6 +3,7 @@ import {
   InventoryManagement,
   SupabaseInventoryManagementRepository,
 } from "@medlink/inventory";
+import { projectPersonaFields, type Role } from "@medlink/platform";
 import { z } from "zod";
 import { runApi } from "../../../../lib/api-server";
 
@@ -24,10 +25,12 @@ export const GET = (request: Request) => runApi(request, {
       includeInactive: query.get("includeInactive") ?? false,
     };
   },
-  execute: async (input, context, database) =>
-    new InventoryManagement(
+  execute: async (input, context, database) => {
+    const rows = await new InventoryManagement(
       new SupabaseInventoryManagementRepository(database),
-    ).list({ organizationId: context.organizationId, ...input }),
+    ).list({ organizationId: context.organizationId, ...input });
+    return rows.map((row) => projectPersonaFields(context.role as Role, "Inventory", row));
+  },
 });
 
 export const POST = (request: Request) => runApi(request, {

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import "@medlink/ui/styles.css";
+import "@medlink/ui/personas.css";
 import "../../admin/app/globals.css";
 import "../../patient/app/globals.css";
 import "../../pharmacist/app/globals.css";

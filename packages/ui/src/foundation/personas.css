@@ -1,0 +1,24 @@
+:root {
+  --persona-primary: var(--ml-brand);
+  --persona-accent: var(--ml-accent);
+  --surface-page: var(--ml-canvas);
+  --surface-card: var(--ml-surface);
+  --text-primary: var(--ml-ink);
+  --text-muted: var(--ml-muted);
+  --status-success: #08756b;
+  --status-warning: #a15c00;
+  --status-critical: var(--ml-danger);
+  --status-info: #1d4ed8;
+}
+
+.ml-shell[data-persona="patient"] { --persona-primary: #08756b; --persona-accent: #2f855a; --surface-page: #f4f9f8; }
+.ml-shell[data-persona="pharmacist"] { --persona-primary: #075985; --persona-accent: #08756b; --surface-page: #f2f7f8; }
+.ml-shell[data-persona="pharmacy"] { --persona-primary: #146c43; --persona-accent: #1d4ed8; --surface-page: #f4f8f5; }
+.ml-shell[data-persona="pharmacy-manager"] { --persona-primary: #123b52; --persona-accent: #18815b; --surface-page: #f3f6f8; }
+.ml-shell[data-persona="admin"] { --persona-primary: #172554; --persona-accent: #2563eb; --surface-page: #f4f6fa; }
+
+.ml-shell[data-persona] { background: var(--surface-page); color: var(--text-primary); }
+.ml-shell[data-persona] .ml-sidebar { background: var(--persona-primary); }
+.ml-shell[data-persona] .ml-button { background: var(--persona-primary); }
+.ml-shell[data-persona] .ml-tabs button[aria-selected="true"] { color: var(--persona-primary); }
+.ml-shell[data-persona] :is(a, button, input, select, textarea):focus-visible { outline: 3px solid var(--persona-accent); outline-offset: 3px; }

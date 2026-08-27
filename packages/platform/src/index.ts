@@ -13,3 +13,4 @@ export * from "./persona-certification";
 export * from "./control-center";
 export * from "./access-governance";
 export * from "./server-origin";
+export * from "./persona-contracts";
