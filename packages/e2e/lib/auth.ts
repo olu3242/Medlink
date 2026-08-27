@@ -25,7 +25,7 @@ export async function signInWithMagicLink(
     url.origin === expectedOrigin
     && url.pathname !== "/auth/callback"
     && (!url.searchParams.has("error")
-      || (options.allowForbiddenLanding && url.searchParams.get("error") === "forbidden")),
+      || (options.allowForbiddenLanding === true && url.searchParams.get("error") === "forbidden")),
   );
   await page.waitForLoadState("networkidle");
   const sessionCookies = await page.context().cookies(baseUrl);
