@@ -8,9 +8,12 @@ export interface ProfessionalOperation {
   readonly path: string;
   readonly permission: Permission;
   readonly roles: readonly Role[];
+  readonly portal?: "admin" | "pharmacist" | "pharmacy";
 }
 
 export const professionalOperations: readonly ProfessionalOperation[] = [
+  { id: "review.medicine.search", method: "GET", path: "/api/v1/medicines/search", permission: "medicine:read", roles: ["pharmacist"], portal: "pharmacist" },
+  { id: "inventory.medicine.search", method: "GET", path: "/api/v1/medicines/search", permission: "medicine:read", roles: ["pharmacy_owner", "pharmacy_staff", "inventory_manager"], portal: "pharmacy" },
   { id: "catalog.medicine.list", method: "GET", path: "/api/v1/medicines", permission: "medicine:read", roles: ["platform_admin", "tenant_admin"] },
   { id: "catalog.medicine.get", method: "GET", path: "/api/v1/medicines/:id", permission: "medicine:read", roles: ["platform_admin", "tenant_admin"] },
   { id: "catalog.medicine.create", method: "POST", path: "/api/v1/medicines", permission: "medicine:manage", roles: ["platform_admin"] },

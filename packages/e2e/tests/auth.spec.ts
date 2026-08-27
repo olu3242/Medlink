@@ -17,7 +17,7 @@ test.describe("patient authentication", () => {
   test("logs in through the real magic-link flow and reaches an authenticated API", async ({ page }) => {
     const fixture = await loadFixture();
     await signInWithMagicLink(page, patientUrl, mailpitUrl, fixture.patient.email);
-    await expect(page).toHaveURL(new RegExp(`^${patientUrl}/?$`));
+    await expect(page).toHaveURL(new RegExp(`^${patientUrl}/patient/?$`));
 
     const response = await page.request.get(`${patientUrl}/api/v1/mar`, {
       headers: { Accept: "application/json" },

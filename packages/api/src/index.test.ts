@@ -49,6 +49,21 @@ describe("authorizeRegisteredOperationRole", () => {
     )).not.toThrow();
   });
 
+  it("allows medicine search only through its explicitly registered portal", () => {
+    expect(() => authorizeRegisteredOperationRole(
+      "pharmacist", "GET", "/pharmacist/api/v1/medicines/search", "medicine:read",
+    )).not.toThrow();
+    expect(() => authorizeRegisteredOperationRole(
+      "platform_admin", "GET", "/pharmacist/api/v1/medicines/search", "medicine:read",
+    )).toThrow(expect.objectContaining({ code: "persona_not_allowed", status: 403 }));
+    expect(() => authorizeRegisteredOperationRole(
+      "pharmacy_staff", "GET", "/pharmacy/api/v1/medicines/search", "medicine:read",
+    )).not.toThrow();
+    expect(() => authorizeRegisteredOperationRole(
+      "pharmacist", "GET", "/pharmacy/api/v1/medicines/search", "medicine:read",
+    )).toThrow(expect.objectContaining({ code: "persona_not_allowed", status: 403 }));
+  });
+
   it("denies a pharmacist attempting another pharmacy's mutation surface", () => {
     expect(() => authorizeRegisteredOperationRole(
       "pharmacist", "PUT", "/pharmacy/api/v1/inventory/00000000-0000-4000-8000-000000000001", "inventory:manage",

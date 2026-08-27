@@ -153,9 +153,11 @@ export function authorizeRegisteredOperationRole(
   // Patient paths are governed by runExperienceApi contracts. Professional
   // registration deliberately applies only to direct professional surfaces,
   // where identical /api/v1 paths have different role ownership.
+  const portal = pathname.match(/^\/(admin|pharmacist|pharmacy)(?:\/|$)/)?.[1];
   const normalizedPath = pathname.replace(/^\/(?:admin|pharmacist|pharmacy)/, "");
   const contract = professionalOperations.find((candidate) =>
-    candidate.method === method
+    (!candidate.portal || candidate.portal === portal)
+    && candidate.method === method
     && candidate.permission === permission
     && contractPathMatches(candidate.path, normalizedPath),
   );
