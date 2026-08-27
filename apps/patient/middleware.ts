@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { enforcePersonaRequest } from "../lib/persona-middleware";
+import { enforcePersonaRequest } from "@medlink/platform/persona-middleware";
 
 export const middleware = (request: NextRequest) => enforcePersonaRequest(request, {
   portal: "patient",

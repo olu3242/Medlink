@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createPersonaSupabaseServerClient } from "../../../../lib/supabase-server";
+import { createPersonaSupabaseServerClient } from "@medlink/platform/supabase-server";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");

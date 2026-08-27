@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { resolveServerOrigin } from "@medlink/platform";
-import { createPersonaSupabaseServerClient } from "../../../../lib/supabase-server";
+import { createPersonaSupabaseServerClient } from "@medlink/platform/supabase-server";
 
 const signInSchema = z.object({ email: z.string().email().max(320) });
 
