@@ -34,12 +34,13 @@ export default function ReservationsPage() {
       const response = await fetch(path, init);
       if (!response.ok) {
         const problem = await response.json().catch(() => null) as { code?: string } | null;
-        setMessage(response.status === 409 || problem?.code?.includes("invalid")
+        const failureMessage = response.status === 409 || problem?.code?.includes("invalid")
           ? "That transition conflicts with the current reservation state. The queue has been refreshed."
           : response.status === 401 || response.status === 403
             ? "You are not authorized to perform that reservation action."
-            : "The reservation was not updated. Retry after the queue refreshes.");
+            : "The reservation was not updated. Retry after the queue refreshes.";
         await load();
+        setMessage(failureMessage);
         return;
       }
       await load();
