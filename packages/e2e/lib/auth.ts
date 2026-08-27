@@ -11,6 +11,7 @@ export async function signInWithMagicLink(
   baseUrl: string,
   mailpitUrl: string,
   email: string,
+  options: { readonly allowForbiddenLanding?: boolean } = {},
 ): Promise<void> {
   await page.goto(`${baseUrl}/auth/sign-in`);
   await page.getByLabel("Email address").fill(email);
@@ -23,7 +24,8 @@ export async function signInWithMagicLink(
   await page.waitForURL((url) =>
     url.origin === expectedOrigin
     && url.pathname !== "/auth/callback"
-    && !url.searchParams.has("error"),
+    && (!url.searchParams.has("error")
+      || (options.allowForbiddenLanding && url.searchParams.get("error") === "forbidden")),
   );
   await page.waitForLoadState("networkidle");
   const sessionCookies = await page.context().cookies(baseUrl);

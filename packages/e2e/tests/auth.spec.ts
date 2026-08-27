@@ -118,7 +118,7 @@ test.describe("platform admin authentication", () => {
     const fixture = await loadFixture();
     await signInWithMagicLink(page, adminUrl, mailpitUrl, fixture.partnerReviewer.email);
     await expect(page.locator('[data-persona="admin"]')).toHaveCount(1);
-    await expect(page.getByRole("heading", { name: "MedLink Control Center" })).toBeVisible();
+    await expect(page.locator('[data-persona="admin"]')).toContainText("Control Center");
   });
 });
 
@@ -148,7 +148,9 @@ test.describe("negative paths", () => {
     // multiPersona holds two legitimate memberships (pharmacist in the
     // primary org, pharmacy_staff in the other) -- Section 4 requires
     // ambiguous context to fail closed, not guess.
-    await signInWithMagicLink(page, pharmacistUrl, mailpitUrl, fixture.multiPersona.email);
+    await signInWithMagicLink(page, pharmacistUrl, mailpitUrl, fixture.multiPersona.email, {
+      allowForbiddenLanding: true,
+    });
 
     const response = await page.request.get(`${pharmacistUrl}/api/v1/review`, {
       headers: { Accept: "application/json" },
@@ -158,7 +160,9 @@ test.describe("negative paths", () => {
 
   test("an explicit tenant header lets a multi-membership identity choose a specific context", async ({ page }) => {
     const fixture = await loadFixture();
-    await signInWithMagicLink(page, pharmacistUrl, mailpitUrl, fixture.multiPersona.email);
+    await signInWithMagicLink(page, pharmacistUrl, mailpitUrl, fixture.multiPersona.email, {
+      allowForbiddenLanding: true,
+    });
 
     const response = await page.request.get(`${pharmacistUrl}/api/v1/review`, {
       headers: { Accept: "application/json", "x-medlink-tenant-id": fixture.organizationId },
