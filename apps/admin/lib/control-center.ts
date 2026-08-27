@@ -11,6 +11,14 @@ async function count(query: PromiseLike<{ count: number | null; error: { message
   return result.count ?? 0;
 }
 
+async function observedCount(query: PromiseLike<{ count: number | null; error: { message: string } | null }>) {
+  try {
+    return { value: await count(query), status: "healthy" as const };
+  } catch {
+    return { value: 0, status: "unknown" as const };
+  }
+}
+
 function metric(id: string, label: string, value: number, href: string, status: Status = "healthy") {
   return { id, label, value, status, href };
 }
@@ -60,27 +68,27 @@ export class ControlCenterService {
 
   private async platform() {
     const [organizations, memberships, medicines, activeMedicines, locations, catalogItems, mappings, batches, reservations] = await Promise.all([
-      count(this.database.from("organizations").select("id", { count: "exact", head: true }).is("deleted_at", null)),
-      count(this.database.from("organization_memberships").select("id", { count: "exact", head: true }).is("deleted_at", null)),
-      count(this.database.from("medicines").select("id", { count: "exact", head: true }).is("deleted_at", null)),
-      count(this.database.from("medicines").select("id", { count: "exact", head: true }).eq("status", "active").is("deleted_at", null)),
-      count(this.database.from("pharmacy_locations").select("id", { count: "exact", head: true }).is("deleted_at", null)),
-      count(this.database.from("pharmacy_catalog_items").select("id", { count: "exact", head: true }).is("deleted_at", null)),
-      count(this.database.from("pharmacy_catalog_mappings").select("id", { count: "exact", head: true }).eq("is_current", true)),
-      count(this.database.from("inventory_batches").select("id", { count: "exact", head: true }).is("deleted_at", null)),
-      count(this.database.from("reservations").select("id", { count: "exact", head: true }).is("deleted_at", null)),
+      observedCount(this.database.from("organizations").select("id", { count: "exact", head: true }).is("deleted_at", null)),
+      observedCount(this.database.from("organization_memberships").select("id", { count: "exact", head: true }).is("deleted_at", null)),
+      observedCount(this.database.from("medicines").select("id", { count: "exact", head: true }).is("deleted_at", null)),
+      observedCount(this.database.from("medicines").select("id", { count: "exact", head: true }).eq("status", "active").is("deleted_at", null)),
+      observedCount(this.database.from("pharmacy_locations").select("id", { count: "exact", head: true }).is("deleted_at", null)),
+      observedCount(this.database.from("pharmacy_catalog_items").select("id", { count: "exact", head: true }).is("deleted_at", null)),
+      observedCount(this.database.from("pharmacy_catalog_mappings").select("id", { count: "exact", head: true }).eq("is_current", true)),
+      observedCount(this.database.from("inventory_batches").select("id", { count: "exact", head: true }).is("deleted_at", null)),
+      observedCount(this.database.from("reservations").select("id", { count: "exact", head: true }).is("deleted_at", null)),
     ]);
     return { metricScope: "Authenticated RLS-visible scope", metrics: [
-      metric("organizations", "Visible organizations", organizations, "/control-center/organizations"),
-      metric("memberships", "Visible active memberships", memberships, "/control-center/organizations"),
-      metric("medicines", "Medicines", medicines, "/control-center/catalog"),
-      metric("active-medicines", "Active medicines", activeMedicines, "/control-center/catalog"),
-      metric("locations", "Pharmacy locations", locations, "/control-center/pharmacies"),
-      metric("catalog-items", "Pharmacy catalog items", catalogItems, "/control-center/pharmacies", catalogItems ? "healthy" : "empty"),
-      metric("mappings", "Canonical mappings", mappings, "/control-center/pharmacies", mappings ? "healthy" : "empty"),
-      metric("inventory", "Inventory batches", batches, "/control-center/inventory", batches ? "healthy" : "empty"),
-      metric("reservations", "Reservations", reservations, "/control-center/reservations", reservations ? "healthy" : "empty"),
-    ], workQueue: activeWorkQueue([{ id: "mapping-required", active: mappings === 0, severity: "warning", title: "Mapping required", reason: "No pharmacy catalog mappings onboarded yet.", href: "/control-center/pharmacies" }]) };
+      metric("organizations", "Visible organizations", organizations.value, "/control-center/organizations", organizations.status),
+      metric("memberships", "Visible active memberships", memberships.value, "/control-center/organizations", memberships.status),
+      metric("medicines", "Medicines", medicines.value, "/control-center/catalog", medicines.status),
+      metric("active-medicines", "Active medicines", activeMedicines.value, "/control-center/catalog", activeMedicines.status),
+      metric("locations", "Pharmacy locations", locations.value, "/control-center/pharmacies", locations.status),
+      metric("catalog-items", "Pharmacy catalog items", catalogItems.value, "/control-center/pharmacies", catalogItems.status === "unknown" ? "unknown" : catalogItems.value ? "healthy" : "empty"),
+      metric("mappings", "Canonical mappings", mappings.value, "/control-center/pharmacies", mappings.status === "unknown" ? "unknown" : mappings.value ? "healthy" : "empty"),
+      metric("inventory", "Inventory batches", batches.value, "/control-center/inventory", batches.status === "unknown" ? "unknown" : batches.value ? "healthy" : "empty"),
+      metric("reservations", "Reservations", reservations.value, "/control-center/reservations", reservations.status === "unknown" ? "unknown" : reservations.value ? "healthy" : "empty"),
+    ], workQueue: activeWorkQueue([{ id: "mapping-required", active: mappings.status !== "unknown" && mappings.value === 0, severity: "warning", title: "Mapping required", reason: "No pharmacy catalog mappings onboarded yet.", href: "/control-center/pharmacies" }]) };
   }
 
   private async organizations(role: Role, organizationId: string, filters: DashboardFilters) {

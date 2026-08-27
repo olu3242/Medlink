@@ -39,9 +39,13 @@ describe("ControlCenterService authorization", () => {
     await expect(service.load("organizations", runtime("platform_admin") as never, { organizationId: crypto.randomUUID(), pharmacyId: crypto.randomUUID() })).rejects.toMatchObject({ status: 400 });
   });
 
-  function recordingDatabase() {
+  function recordingDatabase(failingTable?: string) {
     const calls: Array<{ table: string; operation: string; args: unknown[] }> = [];
-    class Query implements PromiseLike<{ count: number; data: unknown; error: null }> {
+    class Query implements PromiseLike<{
+      count: number | null;
+      data: unknown[];
+      error: { message: string } | null;
+    }> {
       constructor(readonly table: string) {}
       private record(operation: string, ...args: unknown[]) { calls.push({ table: this.table, operation, args }); return this; }
       select(...args: unknown[]) { return this.record("select", ...args); }
@@ -57,8 +61,11 @@ describe("ControlCenterService authorization", () => {
       order(...args: unknown[]) { return this.record("order", ...args); }
       limit(...args: unknown[]) { return this.record("limit", ...args); }
       maybeSingle() { this.record("maybeSingle"); return Promise.resolve({ data: { id: "location" }, error: null }); }
-      then<TResult1 = { count: number; data: unknown[]; error: null }, TResult2 = never>(onfulfilled?: ((value: { count: number; data: unknown[]; error: null }) => TResult1 | PromiseLike<TResult1>) | null, onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null) {
-        return Promise.resolve({ count: 1, data: [], error: null }).then(onfulfilled, onrejected);
+      then<TResult1 = { count: number | null; data: unknown[]; error: { message: string } | null }, TResult2 = never>(onfulfilled?: ((value: { count: number | null; data: unknown[]; error: { message: string } | null }) => TResult1 | PromiseLike<TResult1>) | null, onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null) {
+        const result = this.table === failingTable
+          ? { count: null, data: [], error: { message: "query denied" } }
+          : { count: 1, data: [], error: null };
+        return Promise.resolve(result).then(onfulfilled, onrejected);
       }
     }
     return { database: { from: (table: string) => new Query(table) }, calls };
@@ -77,6 +84,18 @@ describe("ControlCenterService authorization", () => {
     expect("metricScope" in result && result.metricScope).toBe("Authenticated RLS-visible scope");
     const first = "metrics" in result ? result.metrics[0] : undefined;
     expect(first && "label" in first ? first.label : undefined).toBe("Visible organizations");
+  });
+
+  it("isolates an unavailable platform metric instead of collapsing the dashboard", async () => {
+    const { database } = recordingDatabase("medicines");
+    const result = await new ControlCenterService(database as never).load("platform", runtime("platform_admin") as never);
+    if (!("metrics" in result)) throw new Error("Platform metrics are missing");
+    expect(result.metrics.filter(({ id }) => id === "medicines" || id === "active-medicines"))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "medicines", value: 0, status: "unknown" }),
+        expect.objectContaining({ id: "active-medicines", value: 0, status: "unknown" }),
+      ]));
+    expect(result.metrics.find(({ id }) => id === "organizations")?.status).toBe("healthy");
   });
 
   it("applies an authorized location to every inventory query", async () => {
