@@ -186,9 +186,9 @@ jobs:
           export NEXT_PUBLIC_SUPABASE_URL="$API_URL"
           export NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY"
 
-          PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
-          PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
-          PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
+          MEDLINK_PUBLIC_ORIGIN=http://localhost:3000 PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
+          MEDLINK_PUBLIC_ORIGIN=http://localhost:3003 PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
+          MEDLINK_PUBLIC_ORIGIN=http://localhost:3002 PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
 
           for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in; do
             for _ in $(seq 1 30); do
@@ -274,9 +274,9 @@ jobs:
           export ANTHROPIC_ENDPOINT="http://127.0.0.1:4010/anthropic/messages"
 
           node packages/e2e/provider-simulator.mjs &
-          WHATSAPP_ACCESS_TOKEN= PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
-          PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
-          WHATSAPP_ACCESS_TOKEN= PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
+          WHATSAPP_ACCESS_TOKEN= MEDLINK_PUBLIC_ORIGIN=http://localhost:3000 PORT=3000 MEDLINK_API_URL=http://localhost:3000 npm run start --workspace=apps/patient &
+          MEDLINK_PUBLIC_ORIGIN=http://localhost:3003 PORT=3003 MEDLINK_API_URL=http://localhost:3003 npm run start --workspace=apps/pharmacist &
+          WHATSAPP_ACCESS_TOKEN= MEDLINK_PUBLIC_ORIGIN=http://localhost:3002 PORT=3002 MEDLINK_API_URL=http://localhost:3002 npm run start --workspace=apps/pharmacy &
           MEDLINK_APP_URL=http://localhost:3004 PORT=3004 MEDLINK_API_URL=http://localhost:3004 npm run start --workspace=apps/web &
 
           for url in http://localhost:3000/auth/sign-in http://localhost:3003/auth/sign-in http://localhost:3002/auth/sign-in http://localhost:3004/health/live; do
