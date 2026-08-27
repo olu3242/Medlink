@@ -122,7 +122,10 @@ export async function runExperienceApi<TInput, TOutput>(
       501,
     ), request.headers.get("x-correlation-id") ?? crypto.randomUUID());
   }
-  const pathname = new URL(request.url).pathname;
+  const pathname = normalizeExperiencePath(
+    new URL(request.url).pathname,
+    contract.persona,
+  );
   if (
     request.method !== contract.method
     || operation.permission !== contract.permission
@@ -142,6 +145,12 @@ export async function runExperienceApi<TInput, TOutput>(
       return operation.execute(input, context, database);
     },
   }, "experience");
+}
+
+export function normalizeExperiencePath(pathname: string, persona: string): string {
+  const prefix = `/${persona}`;
+  if (pathname === prefix) return "/";
+  return pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length) : pathname;
 }
 
 export function authorizeRegisteredOperationRole(
