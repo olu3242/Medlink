@@ -11,9 +11,11 @@ export async function signInWithMagicLink(
   baseUrl: string,
   mailpitUrl: string,
   email: string,
-  options: { readonly allowForbiddenLanding?: boolean } = {},
+  options: { readonly allowForbiddenLanding?: boolean; readonly next?: string } = {},
 ): Promise<void> {
-  await page.goto(`${baseUrl}/auth/sign-in`);
+  const signInUrl = new URL(`${baseUrl}/auth/sign-in`);
+  if (options.next) signInUrl.searchParams.set("next", options.next);
+  await page.goto(signInUrl.toString());
   await page.getByLabel("Email address").fill(email);
   await page.getByRole("button", { name: /email me a sign-in link/i }).click();
   await page.waitForURL(/sent=true/);
