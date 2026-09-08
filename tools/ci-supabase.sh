@@ -9,15 +9,24 @@ ci_supabase_identity() {
   local run_id="${GITHUB_RUN_ID:-local}"
   local attempt="${GITHUB_RUN_ATTEMPT:-1}"
   local safe_job="$(printf '%s' "$job_slug" | tr '[:upper:]_' '[:lower:]-' | tr -cd 'a-z0-9-' | cut -c1-32)"
+  local safe_run_id="$(printf '%s' "$run_id" | tr -cd 'a-zA-Z0-9-' | cut -c1-12)"
   local slot
+  export CI_SUPABASE_EXCLUDE_SERVICES=""
   case "$job_slug" in
     migration-apply) slot=0 ;;
     live-database) slot=1 ;;
-    browser-auth-e2e) slot=2 ;;
+    browser-auth-e2e)
+      slot=2
+      export CI_SUPABASE_EXCLUDE_SERVICES="studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api"
+      ;;
     medication-golden-loop-e2e) slot=3 ;;
     *) slot=9 ;;
   esac
-  export CI_SUPABASE_PROJECT_ID="medlink-ci-${safe_job}-${run_id}-${attempt}"
+  export CI_SUPABASE_PROJECT_ID="medlink-ci-${slot}-${safe_run_id}-${attempt}-${safe_job:0:10}"
+  [[ "${#CI_SUPABASE_PROJECT_ID}" -le 40 ]] || {
+    printf 'Supabase project ID exceeds Docker resource limit: %s\n' "$CI_SUPABASE_PROJECT_ID" >&2
+    return 1
+  }
   export CI_SUPABASE_WORKDIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/supabase-${safe_job}-${run_id}-${attempt}"
   export CI_SUPABASE_CONFIG_PATH="$CI_SUPABASE_WORKDIR/supabase/config.toml"
   export CI_SUPABASE_API_PORT=$((54321 + slot * 10))
@@ -145,7 +154,7 @@ ci_supabase_assert_schema() {
 ci_supabase_start() {
   ci_supabase_prepare
   if [[ -n "${GITHUB_ENV:-}" ]]; then
-    for name in CI_SUPABASE_PROJECT_ID CI_SUPABASE_WORKDIR CI_SUPABASE_CONFIG_PATH CI_SUPABASE_API_PORT CI_SUPABASE_DB_PORT CI_SUPABASE_STUDIO_PORT CI_SUPABASE_INBUCKET_PORT CI_SUPABASE_SMTP_PORT CI_SUPABASE_POP3_PORT CI_SUPABASE_ANALYTICS_PORT; do
+    for name in CI_SUPABASE_PROJECT_ID CI_SUPABASE_WORKDIR CI_SUPABASE_CONFIG_PATH CI_SUPABASE_API_PORT CI_SUPABASE_DB_PORT CI_SUPABASE_STUDIO_PORT CI_SUPABASE_INBUCKET_PORT CI_SUPABASE_SMTP_PORT CI_SUPABASE_POP3_PORT CI_SUPABASE_ANALYTICS_PORT CI_SUPABASE_EXCLUDE_SERVICES; do
       printf '%s=%s\n' "$name" "${!name}" >> "$GITHUB_ENV"
     done
   fi
@@ -155,7 +164,11 @@ ci_supabase_start() {
       ci_supabase_stop
     fi
     local start_output
-    if start_output="$(npx supabase start --workdir "$CI_SUPABASE_WORKDIR" --yes 2>&1)"; then
+    local -a start_args=(start --workdir "$CI_SUPABASE_WORKDIR" --yes)
+    if [[ -n "$CI_SUPABASE_EXCLUDE_SERVICES" ]]; then
+      start_args+=(--exclude "$CI_SUPABASE_EXCLUDE_SERVICES")
+    fi
+    if start_output="$(npx supabase "${start_args[@]}" 2>&1)"; then
       printf '%s\n' "$start_output"
       if ! ci_supabase_assert_port_parity || ! ci_supabase_assert_schema; then
         return 1

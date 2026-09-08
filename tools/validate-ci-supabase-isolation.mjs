@@ -55,6 +55,11 @@ for (const required of [
   "rate exceeded",
   "ci_supabase_retry_cleanup",
   "CI_SUPABASE_TRANSIENT_CHAIN",
+  'CI_SUPABASE_EXCLUDE_SERVICES="studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api"',
+  'start_args+=(--exclude "$CI_SUPABASE_EXCLUDE_SERVICES")',
+  'safe_run_id="$(printf \'%s\' "$run_id" | tr -cd \'a-zA-Z0-9-\' | cut -c1-12)"',
+  'CI_SUPABASE_PROJECT_ID="medlink-ci-${slot}-${safe_run_id}-${attempt}-${safe_job:0:10}"',
+  '[[ "${#CI_SUPABASE_PROJECT_ID}" -le 40 ]]',
 ]) assert.ok(wrapper.includes(required), `CI wrapper is missing contract: ${required}`);
 assert.ok(!wrapper.includes('$CI_SUPABASE_WORKDIR/config.toml'), "config must not be written at the workdir root");
 for (const forbidden of ["docker system prune", "docker volume prune", "supabase stop --all"]) {
@@ -63,6 +68,8 @@ for (const forbidden of ["docker system prune", "docker volume prune", "supabase
 assert.match(wrapper, /for attempt in 1 2 3;/u, "Supabase startup must remain bounded to three attempts");
 assert.match(wrapper, /name=\$\{CI_SUPABASE_PROJECT_ID\}/u,
   "retry cleanup must filter Docker resources by the isolated project ID");
+assert.doesNotMatch(wrapper, /CI_SUPABASE_EXCLUDE_SERVICES="[^"]*(?:gotrue|postgrest|kong|mailpit|postgres-meta)[^"]*"/u,
+  "browser auth must retain Auth, REST, gateway, Mailpit, and metadata services");
 assert.match(wrapper, /if ! ci_supabase_assert_port_parity \|\| ! ci_supabase_assert_schema; then\s+return 1/u,
   "port or schema assertion failures must fail immediately without entering the start retry path");
 
@@ -95,7 +102,11 @@ try {
     const env = { ...process.env, CI_SUPABASE_PROJECT_ID: `medlink-ci-${job}-contract`, CI_SUPABASE_CONFIG_PATH: configPath };
     portKeys.forEach((key, index) => { env[`CI_SUPABASE_${key}_PORT`] = String(ports[index]); });
     const generated = spawnSync(process.execPath, [fileURLToPath(configWriter), configPath], { env, encoding: "utf8" });
-    assert.equal(generated.status, 0, generated.stderr || `${job} config generation failed`);
+    assert.equal(
+      generated.status,
+      0,
+      generated.error?.message || generated.stderr || `${job} config generation failed`,
+    );
 
     const config = await readFile(configPath, "utf8");
     assert.match(config, new RegExp(`^project_id\\s*=\\s*"medlink-ci-${job}-contract"$`, "m"));
