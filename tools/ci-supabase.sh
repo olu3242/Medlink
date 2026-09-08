@@ -57,6 +57,48 @@ ci_supabase_stop() {
   fi
 }
 
+ci_supabase_runtime_inventory() {
+  local phase="$1"
+  command -v docker >/dev/null 2>&1 || return 0
+  printf 'CI_SUPABASE_RUNTIME_INVENTORY=%s\n' "$phase"
+  docker ps -a --filter "name=${CI_SUPABASE_PROJECT_ID}" --format 'CONTAINER={{.Names}} STATUS={{.Status}}' || true
+  docker network ls --filter "name=${CI_SUPABASE_PROJECT_ID}" --format 'NETWORK={{.Name}}' || true
+  docker volume ls --filter "name=${CI_SUPABASE_PROJECT_ID}" --format 'VOLUME={{.Name}}' || true
+}
+
+ci_supabase_remove_scoped_resources() {
+  local resource_kind="$1"
+  local resource_id resource_name
+  while IFS= read -r resource_id; do
+    [[ -n "$resource_id" ]] || continue
+    case "$resource_kind" in
+      container) resource_name="$(docker inspect --format '{{.Name}}' "$resource_id" 2>/dev/null | sed 's#^/##')" ;;
+      network) resource_name="$(docker network inspect --format '{{.Name}}' "$resource_id" 2>/dev/null)" ;;
+      volume) resource_name="$(docker volume inspect --format '{{.Name}}' "$resource_id" 2>/dev/null)" ;;
+      *) return 1 ;;
+    esac
+    [[ "$resource_name" == *"$CI_SUPABASE_PROJECT_ID"* ]] || {
+      printf 'Refusing to remove non-job %s resource: %s\n' "$resource_kind" "$resource_name" >&2
+      return 1
+    }
+    case "$resource_kind" in
+      container) docker rm -f "$resource_id" ;;
+      network) docker network rm "$resource_id" ;;
+      volume) docker volume rm "$resource_id" ;;
+    esac
+  done
+}
+
+ci_supabase_retry_cleanup() {
+  ci_supabase_runtime_inventory BEFORE_RETRY_CLEANUP
+  ci_supabase_stop
+  command -v docker >/dev/null 2>&1 || return 0
+  docker ps -aq --filter "name=${CI_SUPABASE_PROJECT_ID}" | ci_supabase_remove_scoped_resources container
+  docker network ls -q --filter "name=${CI_SUPABASE_PROJECT_ID}" | ci_supabase_remove_scoped_resources network
+  docker volume ls -q --filter "name=${CI_SUPABASE_PROJECT_ID}" | ci_supabase_remove_scoped_resources volume
+  ci_supabase_runtime_inventory AFTER_RETRY_CLEANUP
+}
+
 ci_supabase_cleanup() {
   ci_supabase_stop
   case "${CI_SUPABASE_WORKDIR:-}" in
@@ -107,9 +149,11 @@ ci_supabase_start() {
       printf '%s=%s\n' "$name" "${!name}" >> "$GITHUB_ENV"
     done
   fi
-  local attempt
+  local attempt transient_chain=0
   for attempt in 1 2 3; do
-    ci_supabase_stop
+    if [[ "$attempt" -eq 1 ]]; then
+      ci_supabase_stop
+    fi
     local start_output
     if start_output="$(npx supabase start --workdir "$CI_SUPABASE_WORKDIR" --yes 2>&1)"; then
       printf '%s\n' "$start_output"
@@ -119,12 +163,17 @@ ci_supabase_start() {
       return 0
     fi
     printf '%s\n' "$start_output" >&2
-    if ! printf '%s\n' "$start_output" | grep -Eqi 'toomanyrequests|429|rate exceeded|temporar(y|ily)|timeout|timed out|connection reset|network|pull.*(fail|error)'; then
+    if printf '%s\n' "$start_output" | grep -Eqi 'toomanyrequests|429|rate exceeded|temporar(y|ily)|timeout|timed out|connection reset|network|pull.*(fail|error)'; then
+      transient_chain=1
+    elif [[ "$transient_chain" -eq 1 ]] && printf '%s\n' "$start_output" | grep -Eqi 'starting database|initialising schema|initializing schema|error running container'; then
+      printf 'CI_SUPABASE_TRANSIENT_CHAIN=partial initialization after registry/network failure\n' >&2
+    else
       return 1
     fi
     if [[ "$attempt" -eq 3 ]]; then
       return 1
     fi
+    ci_supabase_retry_cleanup
     sleep $((attempt * 5))
   done
 }

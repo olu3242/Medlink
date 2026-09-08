@@ -322,7 +322,7 @@ jobs:
           MEDLINK_E2E_SUPABASE_URL="$API_URL" \
           MEDLINK_E2E_SUPABASE_SERVICE_KEY="$SECRET_KEY" \
           MEDLINK_E2E_WEB_URL=http://localhost:3004 \
-          MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
+          MEDLINK_E2E_MAILPIT_URL="http://127.0.0.1:${CI_SUPABASE_INBUCKET_PORT}" \
           npm run test:partner --workspace=packages/e2e
       - if: always()
         run: source tools/ci-supabase.sh && ci_supabase_cleanup

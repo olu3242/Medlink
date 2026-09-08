@@ -30,8 +30,17 @@ for (const [job, block] of blocks) {
 if (workflow.includes("npx supabase start") || workflow.includes("npx supabase stop")) {
   throw new Error("CI workflow contains direct Supabase lifecycle commands");
 }
-if ((workflow.match(/CI_SUPABASE_INBUCKET_PORT/g) ?? []).length < 3) {
-  throw new Error("E2E jobs must consume the isolated Inbucket port");
+const isolatedE2EBlocks = blocks
+  .filter(([job]) => job === "browser-auth-e2e" || job === "medication-golden-loop-e2e")
+  .map(([, block]) => block)
+  .join("\n");
+assert.doesNotMatch(isolatedE2EBlocks, /(?:localhost|127\.0\.0\.1):5432[1-7]/u,
+  "isolated E2E jobs must not depend on repository-default Supabase endpoints");
+const mailpitAssignments = isolatedE2EBlocks.match(/MEDLINK_E2E_MAILPIT_URL=[^\n]+/gu) ?? [];
+assert.ok(mailpitAssignments.length >= 4, "all isolated browser scenarios must define their Mailpit endpoint");
+for (const assignment of mailpitAssignments) {
+  assert.match(assignment, /\$\{CI_SUPABASE_INBUCKET_PORT\}/u,
+    `isolated Mailpit endpoint must use CI_SUPABASE_INBUCKET_PORT: ${assignment}`);
 }
 
 for (const required of [
@@ -44,8 +53,16 @@ for (const required of [
   "toomanyrequests",
   "429",
   "rate exceeded",
+  "ci_supabase_retry_cleanup",
+  "CI_SUPABASE_TRANSIENT_CHAIN",
 ]) assert.ok(wrapper.includes(required), `CI wrapper is missing contract: ${required}`);
 assert.ok(!wrapper.includes('$CI_SUPABASE_WORKDIR/config.toml'), "config must not be written at the workdir root");
+for (const forbidden of ["docker system prune", "docker volume prune", "supabase stop --all"]) {
+  assert.ok(!wrapper.includes(forbidden), `CI wrapper contains unsafe global cleanup: ${forbidden}`);
+}
+assert.match(wrapper, /for attempt in 1 2 3;/u, "Supabase startup must remain bounded to three attempts");
+assert.match(wrapper, /name=\$\{CI_SUPABASE_PROJECT_ID\}/u,
+  "retry cleanup must filter Docker resources by the isolated project ID");
 assert.match(wrapper, /if ! ci_supabase_assert_port_parity \|\| ! ci_supabase_assert_schema; then\s+return 1/u,
   "port or schema assertion failures must fail immediately without entering the start retry path");
 
