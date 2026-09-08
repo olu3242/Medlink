@@ -4,7 +4,7 @@ const workflow = await readFile(new URL("../.github/workflows/ci.yml", import.me
 const jobs = ["migration-apply", "live-database", "browser-auth-e2e", "medication-golden-loop-e2e"];
 const blocks = jobs.map((job) => {
   const start = workflow.indexOf(`  ${job}:`);
-  const nextJob = workflow.slice(start + 3).search(/\n  [a-z0-9-]+:\n/u);
+  const nextJob = workflow.slice(start + 3).search(/\n {2}[a-z0-9-]+:\n/u);
   const end = nextJob < 0 ? -1 : start + 3 + nextJob;
   if (start < 0) throw new Error(`missing Supabase job: ${job}`);
   return [job, workflow.slice(start, end < 0 ? workflow.length : end)];
