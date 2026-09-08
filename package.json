@@ -24,6 +24,7 @@
     "test:architecture": "vitest run packages/platform/src/experience-conformance.test.ts packages/api/src/experience-contracts.test.ts packages/platform/src/portal-architecture.test.ts",
     "test:agent-governance": "vitest run packages/agents/src packages/agent-runtime/src apps/web/lib/workflow-invoker.test.ts",
     "test:deployment-contract": "vitest run packages/platform/src/vercel-deployment-contract.test.ts",
+    "test:ci-supabase-isolation": "node tools/validate-ci-supabase-isolation.mjs",
     "test:whatsapp-provider": "vitest run packages/whatsapp/src apps/web/lib/whatsapp-webhook.test.ts apps/web/lib/conversation-store.test.ts",
     "test:provider-conformance": "vitest run packages/integrations/src/conformance.test.ts packages/integrations/src/provider-certification.test.ts packages/integrations/src/operational-adapters.test.ts packages/prescription/src/clinical-pipeline.test.ts",
     "test:security": "vitest run packages/security/src packages/runtime/src/rls-matrix.test.ts packages/runtime/src/live-rls-migration.test.ts",

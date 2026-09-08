@@ -105,8 +105,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx supabase start
-      - run: npx supabase db reset
+      - run: source tools/ci-supabase.sh && ci_supabase_start
+      - run: source tools/ci-supabase.sh && ci_supabase_reset
       - name: Verify deterministic schema recovery
         shell: bash
         run: |
@@ -115,17 +115,18 @@ jobs:
           trap 'rm -rf "$dump_dir"' EXIT
           first_dump="$dump_dir/first.sql"
           recovered_dump="$dump_dir/recovered.sql"
-          npx supabase db dump --local --schema public --file "$first_dump"
+          source tools/ci-supabase.sh
+          npx supabase db dump --workdir "$CI_SUPABASE_WORKDIR" --local --schema public --file "$first_dump"
           test -s "$first_dump"
           grep -q "runtime_outbox_events" "$first_dump"
           sha256sum "$first_dump"
-          npx supabase db reset
-          npx supabase db dump --local --schema public --file "$recovered_dump"
+          ci_supabase_reset
+          npx supabase db dump --workdir "$CI_SUPABASE_WORKDIR" --local --schema public --file "$recovered_dump"
           test -s "$recovered_dump"
           sha256sum "$recovered_dump"
           cmp "$first_dump" "$recovered_dump"
       - if: always()
-        run: npx supabase stop
+        run: source tools/ci-supabase.sh && ci_supabase_cleanup
 
   live-database:
     if: github.event_name == 'pull_request' && vars.RUN_LIVE_DATABASE_TESTS == 'true'
@@ -137,19 +138,20 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx supabase start
-      - run: npx supabase db reset
+      - run: source tools/ci-supabase.sh && ci_supabase_start
+      - run: source tools/ci-supabase.sh && ci_supabase_reset
       - name: Run live database tests against the PR schema
         shell: bash
         run: |
           set -euo pipefail
-          eval "$(npx supabase status -o env)"
+          source tools/ci-supabase.sh
+          eval "$(ci_supabase_status)"
           MEDLINK_LIVE_SUPABASE_URL="$API_URL" \
           MEDLINK_LIVE_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
           MEDLINK_LIVE_SUPABASE_SERVICE_KEY="$SECRET_KEY" \
           npm run test:live
       - if: always()
-        run: npx supabase stop
+        run: source tools/ci-supabase.sh && ci_supabase_cleanup
 
   browser-auth-e2e:
     # Auth-only browser certification (Section 15's "who is acting"
@@ -168,13 +170,14 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
         working-directory: packages/e2e
-      - run: npx supabase start
-      - run: npx supabase db reset
+      - run: source tools/ci-supabase.sh && ci_supabase_start
+      - run: source tools/ci-supabase.sh && ci_supabase_reset
       - name: Build patient, pharmacist, pharmacy, and admin against the local Supabase instance
         shell: bash
         run: |
           set -euo pipefail
-          eval "$(npx supabase status -o env)"
+          source tools/ci-supabase.sh
+          eval "$(ci_supabase_status)"
           NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
           NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
           npm run build --workspace=apps/patient --workspace=apps/pharmacist --workspace=apps/pharmacy --workspace=apps/admin
@@ -182,7 +185,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          eval "$(npx supabase status -o env)"
+          source tools/ci-supabase.sh
+          eval "$(ci_supabase_status)"
           export NEXT_PUBLIC_SUPABASE_URL="$API_URL"
           export NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY"
 
@@ -205,10 +209,10 @@ jobs:
           MEDLINK_E2E_PHARMACIST_URL=http://localhost:3003 \
           MEDLINK_E2E_PHARMACY_URL=http://localhost:3002 \
           MEDLINK_E2E_ADMIN_URL=http://localhost:3001 \
-          MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
+          MEDLINK_E2E_MAILPIT_URL="http://127.0.0.1:${CI_SUPABASE_INBUCKET_PORT}" \
           npm run test:auth --workspace=packages/e2e
       - if: always()
-        run: npx supabase stop
+        run: source tools/ci-supabase.sh && ci_supabase_cleanup
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -240,13 +244,14 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
         working-directory: packages/e2e
-      - run: npx supabase start
-      - run: npx supabase db reset
+      - run: source tools/ci-supabase.sh && ci_supabase_start
+      - run: source tools/ci-supabase.sh && ci_supabase_reset
       - name: Build patient, pharmacist, pharmacy, and worker host against local Supabase
         shell: bash
         run: |
           set -euo pipefail
-          eval "$(npx supabase status -o env)"
+          source tools/ci-supabase.sh
+          eval "$(ci_supabase_status)"
           NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
           NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
           npm run build --workspace=apps/patient --workspace=apps/pharmacist --workspace=apps/pharmacy --workspace=apps/web
@@ -254,7 +259,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          eval "$(npx supabase status -o env)"
+          source tools/ci-supabase.sh
+          eval "$(ci_supabase_status)"
           export NEXT_PUBLIC_SUPABASE_URL="$API_URL"
           export NEXT_PUBLIC_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY"
           export SUPABASE_SERVICE_ROLE_KEY="$SECRET_KEY"
@@ -300,7 +306,7 @@ jobs:
           MEDLINK_E2E_PROVIDER_URL=http://127.0.0.1:4010 \
           MEDLINK_E2E_WHATSAPP_APP_SECRET="$WHATSAPP_APP_SECRET" \
           MEDLINK_E2E_PAYMENT_WEBHOOK_SECRET="$PAYMENT_WEBHOOK_SECRET" \
-          MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
+          MEDLINK_E2E_MAILPIT_URL="http://127.0.0.1:${CI_SUPABASE_INBUCKET_PORT}" \
           npm run test:whatsapp-golden-loop --workspace=packages/e2e
 
           MEDLINK_E2E_SUPABASE_URL="$API_URL" \
@@ -310,7 +316,7 @@ jobs:
           MEDLINK_E2E_PROVIDER_URL=http://127.0.0.1:4010 \
           MEDLINK_E2E_PAYMENT_WEBHOOK_SECRET="$PAYMENT_WEBHOOK_SECRET" \
           MEDLINK_E2E_PAYMENT_REFUND_WORKER_TOKEN="$MEDLINK_PAYMENT_REFUND_WORKER_TOKEN" \
-          MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
+          MEDLINK_E2E_MAILPIT_URL="http://127.0.0.1:${CI_SUPABASE_INBUCKET_PORT}" \
           npm run test:payment-refund --workspace=packages/e2e
 
           MEDLINK_E2E_SUPABASE_URL="$API_URL" \
@@ -319,7 +325,7 @@ jobs:
           MEDLINK_E2E_MAILPIT_URL=http://127.0.0.1:54324 \
           npm run test:partner --workspace=packages/e2e
       - if: always()
-        run: npx supabase stop
+        run: source tools/ci-supabase.sh && ci_supabase_cleanup
       - if: always()
         uses: actions/upload-artifact@v4
         with:
