@@ -26,8 +26,11 @@ describe("single-app MedLink frontend contract", () => {
   it("uses one auth callback and guarded persona layouts", () => {
     expect(existsSync(join(repositoryRoot, "apps/web/app/auth/callback/route.ts"))).toBe(true);
     for (const persona of personas) {
-      expect(read(`apps/web/app/${persona}/layout.tsx`)).toContain(`requirePersonaAccess("${persona}")`);
+      const layout = read(`apps/web/app/${persona}/layout.tsx`);
+      expect(layout).toContain("AuthenticatedShell");
+      expect(layout).toContain(`portal="${persona}"`);
     }
+    expect(read("apps/web/components/authenticated-shell.tsx")).toContain("requirePersonaAccess(portal)");
     expect(read("apps/web/lib/role-landing.ts")).not.toMatch(/@|email/i);
   });
 

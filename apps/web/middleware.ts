@@ -5,6 +5,7 @@ export async function middleware(request: NextRequest) {
   const correlationId = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-correlation-id", correlationId);
+  requestHeaders.set("x-medlink-pathname", request.nextUrl.pathname);
 
   let response = NextResponse.next({ request: { headers: requestHeaders } });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

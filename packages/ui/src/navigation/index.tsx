@@ -5,7 +5,13 @@ import { Button, Search } from "../components/primitives";
 import { Avatar } from "../components/primitives";
 export interface NavItem { label: string; href: string; }
 export function Navbar({ brand, items, actions }: { brand: ReactNode; items: NavItem[]; actions?: ReactNode }) { return <header className="ml-header"><div>{brand}</div><nav aria-label="Primary">{items.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}</nav>{actions}</header>; }
-export function Sidebar({ brand, items }: { brand: ReactNode; items: NavItem[] }) { return <aside className="ml-sidebar"><div>{brand}</div><nav className="ml-nav" aria-label="Workspace">{items.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}</nav></aside>; }
+function currentItemHref(items: readonly NavItem[], activePath?: string) {
+  if (!activePath) return undefined;
+  return items
+    .filter(({ href }) => activePath === href || (href !== "/" && activePath.startsWith(`${href}/`)))
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href;
+}
+export function Sidebar({ brand, items, activePath }: { brand: ReactNode; items: NavItem[]; activePath?: string | undefined }) { const currentHref = currentItemHref(items, activePath); return <aside className="ml-sidebar"><div className="ml-sidebar-brand">{brand}</div><nav className="ml-nav" aria-label="Workspace">{items.map((item) => <a aria-current={item.href === currentHref ? "page" : undefined} key={item.href} href={item.href}>{item.label}</a>)}</nav></aside>; }
 export function Breadcrumb({ items }: { items: NavItem[] }) { return <nav aria-label="Breadcrumb"><ol>{items.map((item) => <li key={item.href}><a href={item.href}>{item.label}</a></li>)}</ol></nav>; }
 export function Switcher({ label, options, value, onChange }: { label: string; options: { label: string; value: string }[]; value: string; onChange: (value: string) => void }) { return <label>{label}<select className="ml-input" value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>; }
 export const OrganizationSwitcher = Switcher; export const WorkspaceSwitcher = Switcher;

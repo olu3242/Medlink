@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     destination.pathname = "/auth/sign-in";
+    destination.search = "";
     destination.searchParams.set("error", "callback_failed");
     return NextResponse.redirect(destination);
   }
@@ -33,6 +34,10 @@ export async function GET(request: NextRequest) {
       destination.pathname = resolveRoleLanding(
         memberships?.map((membership) => membership.role) ?? [],
       );
+      if (destination.pathname === "/") {
+        destination.pathname = "/auth/sign-in";
+        destination.searchParams.set("error", "permission_denied");
+      }
     }
   }
 

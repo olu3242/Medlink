@@ -8,7 +8,7 @@ import {
 } from "../../lib/api";
 
 interface CatalogPageProps {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; match?: string }>;
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
@@ -40,7 +40,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
       </header>
       <section aria-labelledby="catalog-results" className="card">
         <h2 className="skip-link" id="catalog-results">Catalog results</h2>
-        <CatalogFilters query={params.q} status={status} />
+        <CatalogFilters match={params.match} query={params.q} status={status} />
         {error ? <div className="error" role="alert">{error}</div> : <MedicineTable medicines={medicines} />}
       </section>
     </>

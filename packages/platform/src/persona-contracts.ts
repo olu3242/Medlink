@@ -20,6 +20,8 @@ export interface PersonaContract {
   readonly persona: CanonicalPersona;
   readonly role: Role;
   readonly portal: ActivePortal;
+  readonly roleLabel: string;
+  readonly productLabel: string;
   readonly primaryGoal: string;
   readonly navigation: readonly PersonaNavigationItem[];
   readonly allowedRoutes: readonly string[];
@@ -71,9 +73,11 @@ const adminInventory: FieldPolicy = { object: "Inventory", fields: {
 
 const patient: PersonaContract = {
   persona: "PATIENT", role: "patient", portal: "patient", theme: "patient",
+  roleLabel: "Patient", productLabel: "MedLink Patient",
   primaryGoal: "Find, reserve, and safely collect prescribed medicine",
   navigation: [
-    { label: "Home", href: "/patient" }, { label: "Find Medicine", href: "/patient/search", permission: "medicine:read" },
+    { label: "Home", href: "/patient" }, { label: "Medicine Catalog", href: "/patient/medicines", permission: "medicine:read" },
+    { label: "Find Medicine", href: "/patient/search", permission: "medicine:read" },
     { label: "Reservations", href: "/patient/reservations", permission: "reservation:read" },
     { label: "Prescriptions", href: "/patient/prescriptions", permission: "prescription:read" },
     { label: "Profile", href: "/patient/profile", permission: "patient:read" },
@@ -88,6 +92,7 @@ const patient: PersonaContract = {
 };
 const pharmacist: PersonaContract = {
   persona: "PHARMACIST", role: "pharmacist", portal: "pharmacist", theme: "pharmacist",
+  roleLabel: "Pharmacist", productLabel: "MedLink Pharmacist",
   primaryGoal: "Review clinical requests and make safe, licensed decisions",
   navigation: [{ label: "Workspace", href: "/pharmacist" }, { label: "Clinical Queue", href: "/pharmacist", permission: "clinical:review" }],
   allowedRoutes: ["/pharmacist", "/pharmacist/review", "/pharmacist/access-review"], capabilities: capabilitiesFor("pharmacist"),
@@ -102,6 +107,7 @@ const pharmacist: PersonaContract = {
 };
 const pharmacyStaff: PersonaContract = {
   persona: "PHARMACY_STAFF", role: "pharmacy_staff", portal: "pharmacy", theme: "pharmacy",
+  roleLabel: "Pharmacy Staff", productLabel: "MedLink Pharmacy",
   primaryGoal: "Move reservations and stock through safe fulfillment",
   navigation: [
     { label: "Dashboard", href: "/pharmacy" },
@@ -117,6 +123,7 @@ const pharmacyStaff: PersonaContract = {
 };
 const pharmacyManager: PersonaContract = {
   persona: "PHARMACY_MANAGER", role: "pharmacy_owner", portal: "pharmacy", theme: "pharmacy-manager",
+  roleLabel: "Pharmacy Owner", productLabel: "MedLink Pharmacy Manager",
   primaryGoal: "Manage pharmacy operations, staff, inventory health, and exceptions",
   navigation: [
     { label: "Overview", href: "/pharmacy" },
@@ -132,6 +139,7 @@ const pharmacyManager: PersonaContract = {
 };
 const medlinkAdmin: PersonaContract = {
   persona: "MEDLINK_ADMIN", role: "platform_admin", portal: "admin", theme: "admin",
+  roleLabel: "Platform Administrator", productLabel: "MedLink Control Center",
   primaryGoal: "Govern the MedLink network without assuming clinical authority",
   navigation: [
     { label: "Network Overview", href: "/admin" }, { label: "Organizations", href: "/admin/organizations", permission: "organization:read" },
@@ -145,9 +153,20 @@ const medlinkAdmin: PersonaContract = {
   ], fieldPolicies: [adminInventory], workflowPolicies: [],
 };
 
+const inventoryManager: PersonaContract = {
+  ...pharmacyStaff,
+  role: "inventory_manager",
+  roleLabel: "Inventory Manager",
+  primaryGoal: "Maintain accurate, available, and traceable pharmacy inventory",
+  capabilities: capabilitiesFor("inventory_manager"),
+  objectPermissions: [ Rugs? ],
+};
+
 const contracts: Readonly<Partial<Record<Role, PersonaContract>>> = {
-  patient, pharmacist, pharmacy_staff: pharmacyStaff, inventory_manager: pharmacyStaff,
-  pharmacy_owner: pharmacyManager, platform_admin: medlinkAdmin, tenant_admin: medlinkAdmin,
+  patient, pharmacist, pharmacy_staff: pharmacyStaff,
+  inventory_manager: { ...pharmacyStaff, role: "inventory_manager", roleLabel: "Inventory Manager" },
+  pharmacy_owner: pharmacyManager, platform_admin: medlinkAdmin,
+  tenant_admin: { ...medlinkAdmin, role: "tenant_admin", roleLabel: "Organization Administrator" },
 };
 
 export function personaContractForRole(role: Role): PersonaContract | null { return contracts[role] ?? null; }

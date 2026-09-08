@@ -23,8 +23,16 @@ describe("persona convergence contract", () => {
     expect(isRouteAllowed("pharmacy_staff", "/pharmacy/reservations/123")).toBe(true);
     expect(isRouteAllowed("pharmacy_staff", "/pharmacist/review/123")).toBe(false);
     expect(navigationForRole("patient").map(({ label }) => label)).toEqual([
-      "Home", "Find Medicine", "Reservations", "Prescriptions", "Profile",
+      "Home", "Medicine Catalog", "Find Medicine", "Reservations", "Prescriptions", "Profile",
     ]);
+  });
+
+  it("gives inherited themes an explicit role distinction", () => {
+    expect(personaContractForRole("platform_admin")).toMatchObject({ theme: "admin", roleLabel: "Platform Administrator" });
+    expect(personaContractForRole("tenant_admin")).toMatchObject({ theme: "admin", roleLabel: "Organization Administrator" });
+    expect(personaContractForRole("pharmacy_staff")).toMatchObject({ theme: "pharmacy", roleLabel: "Pharmacy Staff" });
+    expect(personaContractForRole("inventory_manager")).toMatchObject({ theme: "pharmacy", roleLabel: "Inventory Manager" });
+    expect(personaContractForRole("pharmacy_owner")).toMatchObject({ theme: "pharmacy-manager", roleLabel: "Pharmacy Owner" });
   });
 
   it("denies cross-persona semantic actions, including admin clinical authority", () => {

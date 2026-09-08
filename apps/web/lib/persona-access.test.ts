@@ -17,5 +17,11 @@ describe("single-app persona route matrix", () => {
   it("fails closed for missing and unknown memberships", () => {
     expect(canAccessPersona("admin", [])).toBe(false);
     expect(canAccessPersona("patient", ["unknown"])).toBe(false);
+    expect(canAccessPersona("admin", ["admin@medlink.example"])).toBe(false);
+  });
+
+  it("never treats a cosmetic Test-As value as an authenticated role", () => {
+    expect(canAccessPersona("admin", ["test_as_platform_admin"])).toBe(false);
+    expect(canAccessPersona("patient", ["test_as_patient"])).toBe(false);
   });
 });

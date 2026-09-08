@@ -1,4 +1,5 @@
 export * from "./equivalency";
+export * from "./intelligence";
 export * from "./catalog-service";
 export * from "./canonical";
 export * from "./supabase-catalog";

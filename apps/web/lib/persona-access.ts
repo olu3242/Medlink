@@ -13,7 +13,7 @@ export function canAccessPersona(persona: PersonaRoute, candidateRoles: readonly
 export async function requirePersonaAccess(persona: PersonaRoute) {
   const supabase = await createSupabaseServerClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect(`/auth/sign-in?next=/${persona}`);
+  if (!auth.user) redirect(`/auth/sign-in?error=auth_required&next=/${persona}`);
 
   const { data: memberships, error } = await supabase
     .from("organization_memberships")
@@ -28,7 +28,19 @@ export async function requirePersonaAccess(persona: PersonaRoute) {
     ? memberships?.find(({ organization_id }) => organization_id === activeTenant)
     : memberships?.length === 1 ? memberships[0] : undefined;
   if (error || !membership || !roles.includes(membership.role as Role) || !canAccessPortal(membership.role as Role, persona)) {
-    redirect("/?error=forbidden");
+    redirect(`/auth/sign-in?error=permission_denied&next=/${persona}`);
   }
-  return { role: membership.role as Role, organizationId: membership.organization_id };
+  const { data: organization } = await supabase
+    .from("organizations")
+    .select("name")
+    .eq("id", membership.organization_id)
+    .maybeSingle();
+  const profileName = auth.user.user_metadata.full_name ?? auth.user.user_metadata.name;
+  return {
+    role: membership.role as Role,
+    organizationId: membership.organization_id,
+    organizationName: typeof organization?.name === "string" ? organization.name : "Organization context",
+    userEmail: auth.user.email ?? "Authenticated user",
+    userName: typeof profileName === "string" && profileName.trim() ? profileName : auth.user.email ?? "Authenticated user",
+  };
 }

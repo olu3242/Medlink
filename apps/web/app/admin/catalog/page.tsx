@@ -1,1 +1,1 @@
-export { default } from "../../../../admin/app/control-center/catalog/page";
+export { default } from "../../../../admin/app/catalog/page";
