@@ -66,6 +66,8 @@ for (const forbidden of ["docker system prune", "docker volume prune", "supabase
   assert.ok(!wrapper.includes(forbidden), `CI wrapper contains unsafe global cleanup: ${forbidden}`);
 }
 assert.match(wrapper, /for attempt in 1 2 3;/u, "Supabase startup must remain bounded to three attempts");
+assert.match(wrapper, /migration-apply\)[\s\S]*?CI_SUPABASE_EXCLUDE_SERVICES="studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api"/u,
+  "migration apply must avoid unrelated Supabase services during cold startup");
 assert.match(wrapper, /name=\$\{CI_SUPABASE_PROJECT_ID\}/u,
   "retry cleanup must filter Docker resources by the isolated project ID");
 assert.doesNotMatch(wrapper, /CI_SUPABASE_EXCLUDE_SERVICES="[^"]*(?:gotrue|postgrest|kong|mailpit|postgres-meta)[^"]*"/u,

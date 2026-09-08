@@ -13,7 +13,10 @@ ci_supabase_identity() {
   local slot
   export CI_SUPABASE_EXCLUDE_SERVICES=""
   case "$job_slug" in
-    migration-apply) slot=0 ;;
+    migration-apply)
+      slot=0
+      export CI_SUPABASE_EXCLUDE_SERVICES="studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api"
+      ;;
     live-database) slot=1 ;;
     browser-auth-e2e)
       slot=2
