@@ -159,14 +159,33 @@ const inventoryManager: PersonaContract = {
   roleLabel: "Inventory Manager",
   primaryGoal: "Maintain accurate, available, and traceable pharmacy inventory",
   capabilities: capabilitiesFor("inventory_manager"),
-  objectPermissions: [ Rugs? ],
+  objectPermissions: [
+    { object: "Inventory", actions: ["READ", "CREATE", "UPDATE"], scope: "organization" },
+    { object: "Medicine", actions: ["READ"], scope: "network" },
+  ],
+  workflowPolicies: [],
+};
+
+const tenantAdmin: PersonaContract = {
+  ...medlinkAdmin,
+  role: "tenant_admin",
+  roleLabel: "Organization Administrator",
+  primaryGoal: "Administer an authorized organization without platform-wide authority",
+  capabilities: capabilitiesFor("tenant_admin"),
+  objectPermissions: [
+    { object: "Organization", actions: ["READ", "CREATE", "UPDATE", "CONFIGURE"], scope: "organization" },
+    { object: "Medicine", actions: ["READ", "UPDATE"], scope: "organization" },
+    { object: "Inventory", actions: ["READ"], scope: "organization" },
+    { object: "Reservation", actions: ["READ"], scope: "organization" },
+    { object: "PlatformPolicy", actions: [], scope: "none" },
+  ],
 };
 
 const contracts: Readonly<Partial<Record<Role, PersonaContract>>> = {
   patient, pharmacist, pharmacy_staff: pharmacyStaff,
-  inventory_manager: { ...pharmacyStaff, role: "inventory_manager", roleLabel: "Inventory Manager" },
+  inventory_manager: inventoryManager,
   pharmacy_owner: pharmacyManager, platform_admin: medlinkAdmin,
-  tenant_admin: { ...medlinkAdmin, role: "tenant_admin", roleLabel: "Organization Administrator" },
+  tenant_admin: tenantAdmin,
 };
 
 export function personaContractForRole(role: Role): PersonaContract | null { return contracts[role] ?? null; }
