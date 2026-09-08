@@ -1,0 +1,27 @@
+:root {
+  --persona-primary: var(--ml-brand);
+  --persona-accent: var(--ml-accent);
+  --persona-surface-page: var(--ml-canvas);
+  --persona-surface-card: var(--ml-surface);
+  --text-primary: var(--ml-ink);
+  --text-muted: var(--ml-muted);
+  --status-success: #08756b;
+  --status-warning: #a15c00;
+  --status-critical: var(--ml-danger);
+  --status-info: #1d4ed8;
+}
+
+.ml-shell[data-persona] {
+  --brand: var(--persona-primary);
+  --brand-dark: var(--persona-primary);
+  --dark: var(--persona-primary);
+  --canvas: var(--persona-surface-page);
+  background: var(--persona-surface-page);
+  color: var(--text-primary);
+}
+.ml-shell[data-persona] .ml-sidebar { background: var(--persona-primary); }
+.ml-shell[data-persona] .ml-button { background: var(--persona-primary); }
+.ml-shell[data-persona] .ml-card { background: var(--persona-surface-card); }
+.ml-shell[data-persona] .ml-tabs button[aria-selected="true"] { color: var(--persona-primary); }
+.ml-shell[data-persona] :is(a, button, input, select, textarea):focus-visible { outline: 3px solid var(--persona-accent); outline-offset: 3px; box-shadow: 0 0 0 5px var(--persona-surface-page); }
+.ml-shell[data-persona] .ml-sidebar a:focus-visible { outline-color: #ffffff; box-shadow: none; }

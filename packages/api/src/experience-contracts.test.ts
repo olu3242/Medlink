@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { experienceOperationContracts, runtimeServiceContracts } from "./experience-contracts";
 import { eventContracts } from "./events";
 import { permissions } from "@medlink/platform";
-import { runExperienceApi } from "./index";
+import { normalizeExperiencePath, runExperienceApi } from "./index";
 import { z } from "zod";
 
 describe("experience integration registry", () => {
@@ -29,6 +29,15 @@ describe("experience integration registry", () => {
     );
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toMatchObject({ code: "experience_contract_mismatch" });
+  });
+
+  it("matches canonical contracts after a persona-app rewrite preserves its prefix", () => {
+    expect(normalizeExperiencePath("/patient/api/v1/mar", "patient"))
+      .toBe("/api/v1/mar");
+    expect(normalizeExperiencePath("/pharmacist/api/v1/review/review-id", "pharmacist"))
+      .toBe("/api/v1/review/review-id");
+    expect(normalizeExperiencePath("/patient/api/v1/mar", "pharmacist"))
+      .toBe("/patient/api/v1/mar");
   });
 
   it("rejects an unimplemented experience contract before authentication", async () => {

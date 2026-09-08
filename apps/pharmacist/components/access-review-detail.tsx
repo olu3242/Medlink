@@ -10,7 +10,7 @@ export function AccessReviewDetail({ id }: { id: string }) {
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/v1/access-reviews/${encodeURIComponent(id)}`, { headers: { Accept: "application/json" } })
+    fetch(`/pharmacist/api/v1/access-reviews/${encodeURIComponent(id)}`, { headers: { Accept: "application/json" } })
       .then(async (response) => {
         if (!response.ok) throw new Error("Review unavailable");
         const body = await response.json() as { data: Detail };

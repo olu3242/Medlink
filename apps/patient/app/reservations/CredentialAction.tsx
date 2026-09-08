@@ -20,7 +20,7 @@ export function CredentialAction(
     setError("");
     try {
       const credential = await generatePickupCredential();
-      const response = await fetch(`/api/v1/reservations/${reservationId}/credential`, {
+      const response = await fetch(`/patient/api/v1/reservations/${reservationId}/credential`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pickupCodeHash: credential.hash }),

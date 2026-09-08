@@ -7,7 +7,7 @@ export function MedicineTable({ medicines }: { medicines: MedicineSummary[] }) {
       <div className="empty">
         <h2>No medicines found</h2>
         <p className="muted">Try changing the filters or add the first medicine.</p>
-        <Link className="secondary-link" href="/medicine/new">Add medicine</Link>
+        <Link className="secondary-link" href="/admin/medicine/new">Add medicine</Link>
       </div>
     );
   }
@@ -29,7 +29,7 @@ export function MedicineTable({ medicines }: { medicines: MedicineSummary[] }) {
           {medicines.map((medicine) => (
             <tr key={medicine.id}>
               <td>
-                <Link className="medicine-link" href={`/medicine/${medicine.id}`}>
+                <Link className="medicine-link" href={`/admin/medicine/${medicine.id}`}>
                   {medicine.brandName}
                 </Link>
                 {medicine.manufacturer

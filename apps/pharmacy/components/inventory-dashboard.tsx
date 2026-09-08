@@ -61,8 +61,8 @@ export function InventoryDashboard() {
     setMessage("");
     try {
       const [inventory, pharmacyLocations] = await Promise.all([
-        api<InventoryBatch[]>("/api/v1/inventory?includeInactive=true"),
-        api<PharmacyLocation[]>("/api/v1/pharmacy-locations"),
+        api<InventoryBatch[]>("/pharmacy/api/v1/inventory?includeInactive=true"),
+        api<PharmacyLocation[]>("/pharmacy/api/v1/pharmacy-locations"),
       ]);
       setRows(inventory);
       setLocations(pharmacyLocations);
@@ -104,7 +104,7 @@ export function InventoryDashboard() {
     setMessage("");
     try {
       setMedicineMatches(await api<MedicineMatch[]>(
-        `/api/v1/medicines/search?q=${encodeURIComponent(query.trim())}`,
+        `/pharmacy/api/v1/medicines/search?q=${encodeURIComponent(query.trim())}`,
       ));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Medicine search failed.");
@@ -124,7 +124,7 @@ export function InventoryDashboard() {
     setMessage("");
     try {
       const price = String(form.get("unitPriceMinor") ?? "").trim();
-      await api<InventoryBatch>("/api/v1/inventory", {
+      await api<InventoryBatch>("/pharmacy/api/v1/inventory", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -236,7 +236,7 @@ export function InventoryDashboard() {
               <table>
                 <caption className="skip">Tenant-scoped pharmacy stock</caption>
                 <thead><tr><th>Medicine</th><th>Location / batch</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Expiry</th><th>State</th><th /></tr></thead>
-                <tbody>{visible.map((row) => <tr key={row.id}><td><strong>{row.brandName}</strong><br /><span className="muted">{row.genericName} · {row.strength}</span></td><td>{row.pharmacyName}<br /><span className="muted">{row.batchNumber}</span></td><td>{row.quantityOnHand} {row.unit}</td><td>{row.quantityReserved}</td><td>{row.availableQuantity}</td><td>{row.expiresOn}</td><td><span className={`status ${row.availabilityState}`}>{row.availabilityState.replaceAll("_", " ")}</span></td><td><Link className="text-link" href={`/inventory/${row.id}`}>Manage</Link></td></tr>)}</tbody>
+                <tbody>{visible.map((row) => <tr key={row.id}><td><strong>{row.brandName}</strong><br /><span className="muted">{row.genericName} · {row.strength}</span></td><td>{row.pharmacyName}<br /><span className="muted">{row.batchNumber}</span></td><td>{row.quantityOnHand} {row.unit}</td><td>{row.quantityReserved}</td><td>{row.availableQuantity}</td><td>{row.expiresOn}</td><td><span className={`status ${row.availabilityState}`}>{row.availabilityState.replaceAll("_", " ")}</span></td><td><Link className="text-link" href={`/pharmacy/inventory/${row.id}`}>Manage</Link></td></tr>)}</tbody>
               </table>
               {!visible.length ? <p className="muted empty">No stock matches these filters.</p> : null}
             </div>

@@ -45,8 +45,8 @@ export default async function Page() {
           </p>
         </div>
         <div className="quick-actions">
-          {rows[0] ? <Link className="button" href={`/review/${rows[0].id}`}>Review next</Link> : null}
-          <Link className="button secondary" href="/">Refresh workspace</Link>
+          {rows[0] ? <Link className="button" href={`/pharmacist/review/${rows[0].id}`}>Review next</Link> : null}
+          <Link className="button secondary" href="/pharmacist">Refresh workspace</Link>
         </div>
       </header>
       {failed || !metrics
@@ -76,7 +76,7 @@ export default async function Page() {
                       <h3>{review.medicineNames.join(", ") || "Unresolved medicine"}</h3>
                       <p>{review.reason}</p>
                       <p className="muted">{review.patientReference} · submitted {new Date(review.createdAt).toLocaleString()}</p>
-                      <Link className="button" href={`/review/${review.id}`}>Open review</Link>
+                      <Link className="button" href={`/pharmacist/review/${review.id}`}>Open review</Link>
                     </article>
                   ))}
                   {!rows.length ? <div className="card"><h3>Queue clear</h3><p className="muted">No prescriptions currently require pharmacist action.</p></div> : null}

@@ -12,7 +12,7 @@ export default function PrescriptionsPage() {
             Track intake, pharmacist review, and approved prescription status.
           </p>
         </div>
-        <Link className="button" href="/prescriptions/new">
+        <Link className="button" href="/patient/prescriptions/new">
           Add prescription
         </Link>
       </header>

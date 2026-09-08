@@ -1,9 +1,12 @@
 interface CatalogFiltersProps {
   query?: string | undefined;
   status?: string | undefined;
+  match?: string | undefined;
 }
 
-export function CatalogFilters({ query = "", status = "" }: CatalogFiltersProps) {
+import { MedicineSearchCriteria } from "./medicine-search-criteria";
+
+export function CatalogFilters({ query = "", status = "", match }: CatalogFiltersProps) {
   return (
     <form aria-label="Catalog filters" className="toolbar" method="get">
       <div className="field search">
@@ -29,6 +32,7 @@ export function CatalogFilters({ query = "", status = "" }: CatalogFiltersProps)
         <span aria-hidden="true">&nbsp;</span>
         <button className="button-link" type="submit">Apply filters</button>
       </div>
+      <MedicineSearchCriteria selected={match} />
     </form>
   );
 }

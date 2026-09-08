@@ -3,5 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./persona-middleware": "./src/persona-middleware.ts",
+    "./supabase-server": "./src/supabase-server.ts"
+  }
 }

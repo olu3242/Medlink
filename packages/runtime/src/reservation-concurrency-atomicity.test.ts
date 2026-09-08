@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 function migration(name: string): string {
-  return readFileSync(new URL(`../../../supabase/migrations/${name}`, import.meta.url), "utf8").toLowerCase();
+  return readFileSync(new URL(`../../../supabase/migrations/${name}`, import.meta.url), "utf8")
+    .replace(/\r\n?/g, "\n")
+    .toLowerCase();
 }
 
 const lockGuard = migration("202607270003_medication_access_core.sql");

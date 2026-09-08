@@ -3,10 +3,12 @@ import { eventContracts, validateEvent } from "./events";
 import { professionalOperations } from "./professional";
 
 describe("versioned API and event contracts", () => {
-  it("keeps every professional API under v1 with a unique method/path", () => {
+  it("keeps every professional API under v1 with a unique portal/method/path", () => {
     expect(professionalOperations.every((operation) => operation.path.startsWith("/api/v1/")))
       .toBe(true);
-    const keys = professionalOperations.map(({ method, path }) => `${method} ${path}`);
+    const keys = professionalOperations.map(({ portal, method, path }) =>
+      `${portal ?? "shared"} ${method} ${path}`,
+    );
     expect(new Set(keys).size).toBe(keys.length);
   });
 

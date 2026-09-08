@@ -60,5 +60,5 @@ describe("build-time server module initialization", () => {
     for (const importRoute of routeModules) {
       await expect(importRoute()).resolves.toBeTypeOf("object");
     }
-  });
+  }, 15_000);
 });

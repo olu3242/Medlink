@@ -25,7 +25,7 @@ export function InventorySearch({ query, marId, medicineId }: {
     setOutcome(undefined);
     const params = new URLSearchParams({ q: query });
     if (marId) params.set("marId", marId);
-    fetch(`/api/v1/inventory?${params}`, {
+    fetch(`/patient/api/v1/inventory?${params}`, {
       headers: { Accept: "application/json" },
     }).then(async (response) => {
       if (!response.ok) throw new Error("Search unavailable");
@@ -57,7 +57,7 @@ export function InventorySearch({ query, marId, medicineId }: {
           locationConsent: "true",
         });
         if (marId) params.set("marId", marId);
-        const response = await fetch(`/api/v1/inventory?${params}`, {
+        const response = await fetch(`/patient/api/v1/inventory?${params}`, {
           headers: { Accept: "application/json" },
         });
         if (!response.ok) throw new Error("Nearby search unavailable");

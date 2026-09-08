@@ -11,6 +11,7 @@ export interface AuthE2EFixture {
   readonly patient: AuthE2EPersona;
   readonly pharmacist: AuthE2EPersona;
   readonly pharmacyStaff: AuthE2EPersona;
+  readonly pharmacyOwner: AuthE2EPersona;
   readonly otherTenantPharmacist: AuthE2EPersona;
   readonly multiPersona: AuthE2EPersona;
   readonly partnerApplicant: AuthE2EPersona;
@@ -41,10 +42,11 @@ export async function provisionAuthE2EFixture(
     return { email, userId: created.data.user.id };
   }
 
-  const [patient, pharmacist, pharmacyStaff, otherTenantPharmacist, multiPersona, partnerApplicant, partnerReviewer] = await Promise.all([
+  const [patient, pharmacist, pharmacyStaff, pharmacyOwner, otherTenantPharmacist, multiPersona, partnerApplicant, partnerReviewer] = await Promise.all([
     createPersona("patient"),
     createPersona("pharmacist"),
     createPersona("pharmacy-staff"),
+    createPersona("pharmacy-owner"),
     createPersona("other-tenant-pharmacist"),
     // Same person holding two legitimate roles in the same organization
     // -- one identity, multiple memberships (Section 14).
@@ -71,6 +73,7 @@ export async function provisionAuthE2EFixture(
     { id: patient.userId, display_name: "E2E Patient" },
     { id: pharmacist.userId, display_name: "E2E Pharmacist" },
     { id: pharmacyStaff.userId, display_name: "E2E Pharmacy Staff" },
+    { id: pharmacyOwner.userId, display_name: "E2E Pharmacy Manager" },
     { id: otherTenantPharmacist.userId, display_name: "E2E Other Tenant Pharmacist" },
     { id: multiPersona.userId, display_name: "E2E Multi Persona" },
     { id: partnerApplicant.userId, display_name: "E2E Partner Applicant" },
@@ -89,6 +92,7 @@ export async function provisionAuthE2EFixture(
     { organization_id: organizationId, user_id: patient.userId, role: "patient" },
     { organization_id: organizationId, user_id: pharmacist.userId, role: "pharmacist" },
     { organization_id: organizationId, user_id: pharmacyStaff.userId, role: "pharmacy_staff" },
+    { organization_id: organizationId, user_id: pharmacyOwner.userId, role: "pharmacy_owner" },
     { organization_id: otherOrganizationId, user_id: otherTenantPharmacist.userId, role: "pharmacist" },
     { organization_id: organizationId, user_id: multiPersona.userId, role: "pharmacist" },
     { organization_id: otherOrganizationId, user_id: multiPersona.userId, role: "pharmacy_staff" },
@@ -96,5 +100,5 @@ export async function provisionAuthE2EFixture(
   ]);
   if (membershipsError) throw membershipsError;
 
-  return { organizationId, otherOrganizationId, patient, pharmacist, pharmacyStaff, otherTenantPharmacist, multiPersona, partnerApplicant, partnerReviewer };
+  return { organizationId, otherOrganizationId, patient, pharmacist, pharmacyStaff, pharmacyOwner, otherTenantPharmacist, multiPersona, partnerApplicant, partnerReviewer };
 }

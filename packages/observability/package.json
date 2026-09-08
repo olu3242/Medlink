@@ -6,6 +6,7 @@
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
     "@medlink/platform": "*",
-    "@medlink/runtime": "*"
+    "@medlink/runtime": "*",
+    "pino": "^9.7.0"
   }
 }

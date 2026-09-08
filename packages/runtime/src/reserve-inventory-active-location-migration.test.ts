@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const sql = readFileSync(new URL(
   "../../../supabase/migrations/202608170072_reserve_inventory_active_location_guard.sql",
   import.meta.url,
-), "utf8").toLowerCase();
+), "utf8").replace(/\r\n?/g, "\n").toLowerCase();
 
 describe("reserve_inventory active pharmacy location guard migration", () => {
   it("rejects a reservation against a pharmacy location that is not active or is soft-deleted", () => {

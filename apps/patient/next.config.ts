@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
-export default {
+
+const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  assetPrefix: "/patient",
   transpilePackages: [
     "@medlink/ui",
     "@medlink/api",
@@ -9,4 +11,12 @@ export default {
     "@medlink/runtime",
     "@medlink/observability",
   ],
-} satisfies NextConfig;
+  async rewrites() {
+    return [
+      { source: "/patient", destination: "/" },
+      { source: "/patient/:path*", destination: "/:path*" },
+    ];
+  },
+};
+
+export default nextConfig;

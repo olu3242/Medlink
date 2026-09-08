@@ -7,3 +7,11 @@ export const tokens = {
   breakpoint: { sm: "40rem", md: "48rem", lg: "64rem", xl: "80rem" },
 } as const;
 export type ThemeMode = "light" | "dark" | "system";
+
+export const personaThemes = {
+  patient: { primary: "#08756b", accent: "#2f855a", surfacePage: "#f4f9f8", surfaceCard: "#ffffff" },
+  pharmacist: { primary: "#075985", accent: "#08756b", surfacePage: "#f2f7f8", surfaceCard: "#ffffff" },
+  pharmacy: { primary: "#146c43", accent: "#1d4ed8", surfacePage: "#f4f8f5", surfaceCard: "#ffffff" },
+  "pharmacy-manager": { primary: "#123b52", accent: "#18815b", surfacePage: "#f3f6f8", surfaceCard: "#ffffff" },
+  admin: { primary: "#172554", accent: "#2563eb", surfacePage: "#f4f6fa", surfaceCard: "#ffffff" },
+} as const;

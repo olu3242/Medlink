@@ -26,7 +26,7 @@ export function MedicineCatalogue() {
     try {
       const params = new URLSearchParams();
       if (search.trim()) params.set("q", search.trim());
-      const response = await fetch(`/api/v1/medicines?${params.toString()}`);
+      const response = await fetch(`/patient/api/v1/medicines?${params.toString()}`);
       if (!response.ok) throw new Error();
       const body = await response.json() as { data: Medicine[] };
       setMedicines(body.data);
@@ -83,7 +83,7 @@ export function MedicineCatalogue() {
               {medicine.dosageForm} · {medicine.route}
               {medicine.manufacturer ? ` · ${medicine.manufacturer}` : ""}
             </p>
-            <Link className="secondary" href={`/medicines/${medicine.id}`}>
+            <Link className="secondary" href={`/patient/medicines/${medicine.id}`}>
               Medicine details
             </Link>
           </article>

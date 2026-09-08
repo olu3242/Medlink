@@ -8,7 +8,7 @@ import {
 } from "../../lib/api";
 
 interface CatalogPageProps {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; match?: string }>;
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
@@ -36,11 +36,11 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           <h1>Medicine catalog</h1>
           <p className="muted">Manage canonical medicines, brands, generics, and clinical status.</p>
         </div>
-        <Link className="button-link" href="/medicine/new">Add medicine</Link>
+        <Link className="button-link" href="/admin/medicine/new">Add medicine</Link>
       </header>
       <section aria-labelledby="catalog-results" className="card">
         <h2 className="skip-link" id="catalog-results">Catalog results</h2>
-        <CatalogFilters query={params.q} status={status} />
+        <CatalogFilters match={params.match} query={params.q} status={status} />
         {error ? <div className="error" role="alert">{error}</div> : <MedicineTable medicines={medicines} />}
       </section>
     </>

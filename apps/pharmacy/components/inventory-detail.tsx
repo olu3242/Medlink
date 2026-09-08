@@ -32,8 +32,8 @@ export function InventoryDetail({ inventoryId }: { inventoryId: string }) {
     setMessage("");
     try {
       const [record, ledger] = await Promise.all([
-        api<InventoryBatch>(`/api/v1/inventory/${encodeURIComponent(inventoryId)}`),
-        api<InventoryTransaction[]>(`/api/v1/inventory/${encodeURIComponent(inventoryId)}/transactions`),
+        api<InventoryBatch>(`/pharmacy/api/v1/inventory/${encodeURIComponent(inventoryId)}`),
+        api<InventoryTransaction[]>(`/pharmacy/api/v1/inventory/${encodeURIComponent(inventoryId)}/transactions`),
       ]);
       setBatch(record);
       setTransactions(ledger);
@@ -53,7 +53,7 @@ export function InventoryDetail({ inventoryId }: { inventoryId: string }) {
     setBusy(true);
     setMessage("");
     try {
-      await api<InventoryBatch>(`/api/v1/inventory/${batch.id}/stock`, {
+      await api<InventoryBatch>(`/pharmacy/api/v1/inventory/${batch.id}/stock`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -84,7 +84,7 @@ export function InventoryDetail({ inventoryId }: { inventoryId: string }) {
     setBusy(true);
     setMessage("");
     try {
-      await api<InventoryBatch>(`/api/v1/inventory/${batch.id}`, {
+      await api<InventoryBatch>(`/pharmacy/api/v1/inventory/${batch.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

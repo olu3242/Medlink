@@ -13,7 +13,7 @@ test("authenticated applicant and reviewer activate the same canonical pharmacy 
   const fixture=JSON.parse(await readFile(new URL("../.fixture.json",import.meta.url),"utf8")) as AuthE2EFixture;
   const nonce=Date.now().toString(36); const legalName=`Network Partner ${nonce}`;
   const applicantContext=await browser.newContext(); const applicant=await applicantContext.newPage();
-  await signInWithMagicLink(applicant,webUrl,mailpitUrl,fixture.partnerApplicant.email);
+  await signInWithMagicLink(applicant,webUrl,mailpitUrl,fixture.partnerApplicant.email,{next:"/partner"});
   await applicant.goto(`${webUrl}/partner`);
   await applicant.getByLabel("Legal organization name").fill(legalName);
   await applicant.getByLabel("Trading name").fill(`Network Rx ${nonce}`);
@@ -32,7 +32,7 @@ test("authenticated applicant and reviewer activate the same canonical pharmacy 
   await expect(applicant.getByText("Saved")).toBeVisible();
 
   const reviewerContext=await browser.newContext(); const reviewer=await reviewerContext.newPage();
-  await signInWithMagicLink(reviewer,webUrl,mailpitUrl,fixture.partnerReviewer.email);
+  await signInWithMagicLink(reviewer,webUrl,mailpitUrl,fixture.partnerReviewer.email,{next:"/partner/review"});
   async function reviewAction(name:string){
     await reviewer.goto(`${webUrl}/partner/review`); const card=reviewer.locator("article",{hasText:legalName});
     await card.getByRole("button",{name}).click(); await expect(card.getByText("Saved")).toBeVisible();

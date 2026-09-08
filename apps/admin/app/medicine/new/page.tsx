@@ -10,7 +10,7 @@ export default function NewMedicinePage() {
           <h1>Add medicine</h1>
           <p className="muted">Create a canonical catalog entry for clinical review.</p>
         </div>
-        <Link className="secondary-link" href="/catalog">Back to catalog</Link>
+        <Link className="secondary-link" href="/admin/medicines">Back to catalog</Link>
       </header>
       <section className="card">
         <MedicineForm />

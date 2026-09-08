@@ -10,7 +10,7 @@ export function AccessReviewForm({ reviewId, onCompleted }: { reviewId: string; 
     setBusy(true);
     setMessage("");
     const decision = String(form.get("decision"));
-    const response = await fetch(`/api/v1/access-reviews/${reviewId}`, {
+    const response = await fetch(`/pharmacist/api/v1/access-reviews/${reviewId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

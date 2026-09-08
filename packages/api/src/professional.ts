@@ -8,9 +8,12 @@ export interface ProfessionalOperation {
   readonly path: string;
   readonly permission: Permission;
   readonly roles: readonly Role[];
+  readonly portal?: "admin" | "pharmacist" | "pharmacy";
 }
 
 export const professionalOperations: readonly ProfessionalOperation[] = [
+  { id: "review.medicine.search", method: "GET", path: "/api/v1/medicines/search", permission: "medicine:read", roles: ["pharmacist"], portal: "pharmacist" },
+  { id: "inventory.medicine.search", method: "GET", path: "/api/v1/medicines/search", permission: "medicine:read", roles: ["pharmacy_owner", "pharmacy_staff", "inventory_manager"], portal: "pharmacy" },
   { id: "catalog.medicine.list", method: "GET", path: "/api/v1/medicines", permission: "medicine:read", roles: ["platform_admin", "tenant_admin"] },
   { id: "catalog.medicine.get", method: "GET", path: "/api/v1/medicines/:id", permission: "medicine:read", roles: ["platform_admin", "tenant_admin"] },
   { id: "catalog.medicine.create", method: "POST", path: "/api/v1/medicines", permission: "medicine:manage", roles: ["platform_admin"] },
@@ -25,7 +28,7 @@ export const professionalOperations: readonly ProfessionalOperation[] = [
   { id: "inventory.stock.change", method: "POST", path: "/api/v1/inventory/:id/stock", permission: "inventory:manage", roles: ["pharmacy_owner", "pharmacy_staff", "inventory_manager"] },
   { id: "inventory.transactions", method: "GET", path: "/api/v1/inventory/:id/transactions", permission: "inventory:read", roles: ["pharmacy_owner", "pharmacy_staff", "inventory_manager", "pharmacist"] },
   { id: "inventory.availability", method: "GET", path: "/api/v1/inventory/availability", permission: "inventory:read", roles: ["pharmacy_owner", "pharmacy_staff", "inventory_manager", "pharmacist"] },
-  { id: "reservation.list", method: "GET", path: "/api/v1/reservations", permission: "reservation:read", roles: ["pharmacy_staff", "pharmacist"] },
+  { id: "reservation.list", method: "GET", path: "/api/v1/reservations", permission: "reservation:read", roles: ["pharmacy_owner", "pharmacy_staff", "pharmacist"] },
   { id: "reservation.ready", method: "PATCH", path: "/api/v1/reservations/:id/ready", permission: "reservation:manage", roles: ["pharmacy_staff", "pharmacist"] },
   { id: "reservation.collect", method: "PATCH", path: "/api/v1/reservations/:id/collect", permission: "reservation:manage", roles: ["pharmacy_staff", "pharmacist"] },
   { id: "review.list", method: "GET", path: "/api/v1/review", permission: "clinical:review", roles: ["pharmacist"] },

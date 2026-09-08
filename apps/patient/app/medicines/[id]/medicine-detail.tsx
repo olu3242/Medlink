@@ -45,9 +45,9 @@ export function MedicineDetail({ medicineId }: { medicineId: string }) {
   useEffect(() => {
     let active = true;
     void Promise.all([
-      fetch(`/api/v1/medicines/${encodeURIComponent(medicineId)}`),
+      fetch(`/patient/api/v1/medicines/${encodeURIComponent(medicineId)}`),
       fetch(
-        `/api/v1/medicines/${encodeURIComponent(medicineId)}/alternatives`,
+        `/patient/api/v1/medicines/${encodeURIComponent(medicineId)}/alternatives`,
       ),
     ]).then(async ([medicineResponse, alternativesResponse]) => {
       if (!medicineResponse.ok || !alternativesResponse.ok) throw new Error();
@@ -80,7 +80,7 @@ export function MedicineDetail({ medicineId }: { medicineId: string }) {
             {medicine.genericName} · {medicine.strength}
           </p>
         </div>
-        <Link className="secondary" href="/medicines">Back to catalogue</Link>
+        <Link className="secondary" href="/patient/medicines">Back to catalogue</Link>
       </header>
       <div className="grid">
         <section className="card">
@@ -138,7 +138,7 @@ export function MedicineDetail({ medicineId }: { medicineId: string }) {
                 </span>
                 <Link
                   className="secondary"
-                  href={`/medicines/${item.alternative.id}`}
+                  href={`/patient/medicines/${item.alternative.id}`}
                 >
                   View
                 </Link>

@@ -6,6 +6,10 @@
   "exports": {
     ".": "./src/index.tsx",
     "./styles.css": "./src/foundation/styles.css",
+    "./personas.css": "./src/foundation/personas.css",
     "./tokens": "./src/tokens/index.ts"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1"
   }
 }

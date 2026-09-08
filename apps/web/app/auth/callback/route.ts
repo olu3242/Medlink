@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
+import { resolveRoleLanding } from "../../../lib/role-landing";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
@@ -17,7 +18,27 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     destination.pathname = "/auth/sign-in";
+    destination.search = "";
     destination.searchParams.set("error", "callback_failed");
+    return NextResponse.redirect(destination);
+  }
+
+  if (safeNext === "/") {
+    const { data: auth } = await supabase.auth.getUser();
+    if (auth.user) {
+      const { data: memberships } = await supabase
+        .from("organization_memberships")
+        .select("role")
+        .eq("user_id", auth.user.id)
+        .is("deleted_at", null);
+      destination.pathname = resolveRoleLanding(
+        memberships?.map((membership) => membership.role) ?? [],
+      );
+      if (destination.pathname === "/") {
+        destination.pathname = "/auth/sign-in";
+        destination.searchParams.set("error", "permission_denied");
+      }
+    }
   }
 
   return NextResponse.redirect(destination);

@@ -757,7 +757,7 @@ test("signed WhatsApp medication access golden loop: WhatsApp -> patient -> phar
 
     await patientPage.goto(`${patientUrl}/reservations`);
     const firstAttemptResponsePromise = patientPage.waitForResponse((response) =>
-      response.url() === `${patientUrl}/api/v1/payments` && response.request().method() === "POST",
+      response.url().endsWith("/api/v1/payments") && response.request().method() === "POST",
     );
     await patientPage.getByRole("button", { name: "Pay securely" }).click();
     const firstAttemptResponse = await firstAttemptResponsePromise;

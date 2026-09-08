@@ -5,15 +5,18 @@ import type {
 } from "@medlink/clinical";
 import type { InventoryBatch } from "@medlink/inventory";
 import { cookies, headers } from "next/headers";
+import { resolveServerOrigin } from "@medlink/platform";
 
 export type Review = PharmacistReviewSummary;
 export type ReviewDetail = PharmacistReviewDetail;
 
 async function get<T>(path: string) {
   const [incoming, cookieStore] = await Promise.all([headers(), cookies()]);
-  const origin = process.env.MEDLINK_PHARMACIST_URL
-    ?? process.env.MEDLINK_API_URL
-    ?? "http://localhost:3003";
+  const origin = resolveServerOrigin(
+    ["MEDLINK_PUBLIC_ORIGIN", "MEDLINK_PHARMACIST_URL", "MEDLINK_API_URL"],
+    "http://localhost:3003",
+    "pharmacist API calls",
+  );
   const forwarded = new Headers({ Accept: "application/json" });
   const cookieHeader = incoming.get("cookie") ?? cookieStore.getAll()
     .map(({ name, value }) => `${name}=${value}`)
@@ -37,13 +40,13 @@ async function get<T>(path: string) {
 }
 
 export const queue = () =>
-  get<PharmacistReviewSummary[]>("/api/v1/review");
+  get<PharmacistReviewSummary[]>("/pharmacist/api/v1/review");
 export const review = (id: string) =>
-  get<PharmacistReviewDetail>(`/api/v1/review/${encodeURIComponent(id)}`);
+  get<PharmacistReviewDetail>(`/pharmacist/api/v1/review/${encodeURIComponent(id)}`);
 export const dashboard = () =>
-  get<PharmacistDashboard>("/api/v1/dashboard");
+  get<PharmacistDashboard>("/pharmacist/api/v1/dashboard");
 export const inventoryAlerts = () =>
-  get<InventoryBatch[]>("/api/v1/inventory");
+  get<InventoryBatch[]>("/pharmacist/api/v1/inventory");
 
 export type ReviewDecision = "approved" | "rejected" | "needs_information";
 
@@ -51,11 +54,13 @@ export async function decide(
   id: string,
   input: { decision: ReviewDecision; recommendation: string },
 ): Promise<void> {
-  const origin = process.env.MEDLINK_PHARMACIST_URL
-    ?? process.env.MEDLINK_API_URL
-    ?? "http://localhost:3003";
+  const origin = resolveServerOrigin(
+    ["MEDLINK_PUBLIC_ORIGIN", "MEDLINK_PHARMACIST_URL", "MEDLINK_API_URL"],
+    "http://localhost:3003",
+    "pharmacist API calls",
+  );
   const response = await fetch(
-    new URL(`/api/v1/review/${encodeURIComponent(id)}`, origin),
+    new URL(`/pharmacist/api/v1/review/${encodeURIComponent(id)}`, origin),
     {
       method: "PATCH",
       headers: {

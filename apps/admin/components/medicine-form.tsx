@@ -27,7 +27,7 @@ export function MedicineForm({ medicine }: { medicine?: MedicineDetail }) {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/v1/ingredients", { headers: { Accept: "application/json" } })
+    void fetch("/admin/api/v1/ingredients", { headers: { Accept: "application/json" } })
       .then(async (response) => {
         if (!response.ok) throw new Error();
         return response.json() as Promise<{ data: IngredientOption[] }>;
@@ -54,7 +54,7 @@ export function MedicineForm({ medicine }: { medicine?: MedicineDetail }) {
     if (!preferredName) {
       throw new Error("Select or create a primary active ingredient.");
     }
-    const response = await fetch("/api/v1/ingredients", {
+    const response = await fetch("/admin/api/v1/ingredients", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -73,8 +73,8 @@ export function MedicineForm({ medicine }: { medicine?: MedicineDetail }) {
     setMessage(null);
     const form = new FormData(event.currentTarget);
     const url = medicine
-      ? `/api/v1/medicines/${medicine.id}`
-      : "/api/v1/medicines";
+      ? `/admin/api/v1/medicines/${medicine.id}`
+      : "/admin/api/v1/medicines";
 
     try {
       const primaryIngredientId = await resolveIngredient(form);

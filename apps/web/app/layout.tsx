@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import "@medlink/ui/styles.css";
+import "@medlink/ui/personas.css";
+import "../../admin/app/globals.css";
+import "../../patient/app/globals.css";
+import "../../pharmacist/app/globals.css";
+import "../../pharmacy/app/globals.css";
 
 export const metadata: Metadata = {
   title: "MedLink — Verified medicine near you",
@@ -10,7 +16,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="ml-body">{children}</body>
     </html>
   );
 }

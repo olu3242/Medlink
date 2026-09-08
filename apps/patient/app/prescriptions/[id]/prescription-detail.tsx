@@ -72,11 +72,11 @@ export function PrescriptionDetailView({ id }: { id: string }) {
     setState("loading");
     try {
       const [response, clarificationResult] = await Promise.all([
-        fetch(`/api/v1/prescriptions/${encodeURIComponent(id)}`, {
+        fetch(`/patient/api/v1/prescriptions/${encodeURIComponent(id)}`, {
           headers: { Accept: "application/json" },
         }),
         fetch(
-          `/api/v1/prescriptions/${encodeURIComponent(id)}/clarifications`,
+          `/patient/api/v1/prescriptions/${encodeURIComponent(id)}/clarifications`,
           { headers: { Accept: "application/json" } },
         ),
       ]);
@@ -124,7 +124,7 @@ export function PrescriptionDetailView({ id }: { id: string }) {
     setMessage("");
     try {
       const response = await fetch(
-        `/api/v1/prescriptions/${encodeURIComponent(id)}`,
+        `/patient/api/v1/prescriptions/${encodeURIComponent(id)}`,
         {
           method: "PUT",
           headers: {
@@ -173,7 +173,7 @@ export function PrescriptionDetailView({ id }: { id: string }) {
     setMessage("");
     try {
       const response = await fetch(
-        `/api/v1/prescriptions/${encodeURIComponent(id)}?version=${prescription.version}`,
+        `/patient/api/v1/prescriptions/${encodeURIComponent(id)}?version=${prescription.version}`,
         {
           method: "DELETE",
           headers: { "Idempotency-Key": crypto.randomUUID() },
@@ -192,7 +192,7 @@ export function PrescriptionDetailView({ id }: { id: string }) {
     setMessage("");
     try {
       const response = await fetch(
-        `/api/v1/prescriptions/${encodeURIComponent(id)}/clarifications/${encodeURIComponent(clarificationId)}/response`,
+        `/patient/api/v1/prescriptions/${encodeURIComponent(id)}/clarifications/${encodeURIComponent(clarificationId)}/response`,
         {
           method: "POST",
           headers: {
@@ -218,7 +218,7 @@ export function PrescriptionDetailView({ id }: { id: string }) {
     setStartingAccessFor(item.id);
     setMessage("");
     try {
-      const response = await fetch("/api/v1/mar", {
+      const response = await fetch("/patient/api/v1/mar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -229,7 +229,7 @@ export function PrescriptionDetailView({ id }: { id: string }) {
       });
       if (!response.ok) throw new Error();
       const body = await response.json() as { data: { id: string } };
-      window.location.assign(`/mar/${body.data.id}`);
+      window.location.assign(`/patient/mar/${body.data.id}`);
     } catch {
       setMessage("Medication access could not be started. Retry from this prescription.");
       setStartingAccessFor(null);
@@ -500,7 +500,7 @@ export function PrescriptionDetailView({ id }: { id: string }) {
         </section>
       ) : null}
       <p>
-        <Link className="secondary" href="/prescriptions">
+        <Link className="secondary" href="/patient/prescriptions">
           Back to prescription history
         </Link>
       </p>
