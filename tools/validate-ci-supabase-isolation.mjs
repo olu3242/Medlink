@@ -58,8 +58,10 @@ for (const required of [
   'CI_SUPABASE_EXCLUDE_SERVICES="studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api"',
   'start_args+=(--exclude "$CI_SUPABASE_EXCLUDE_SERVICES")',
   'safe_run_id="$(printf \'%s\' "$run_id" | tr -cd \'a-zA-Z0-9-\' | cut -c1-12)"',
-  'CI_SUPABASE_PROJECT_ID="medlink-ci-${slot}-${safe_run_id}-${attempt}-${safe_job:0:10}"',
+  'project_job="${project_job%-}"',
+  'CI_SUPABASE_PROJECT_ID="medlink-ci-${slot}-${safe_run_id}-${attempt}-${project_job}"',
   '[[ "${#CI_SUPABASE_PROJECT_ID}" -le 40 ]]',
+  '[[ "$CI_SUPABASE_PROJECT_ID" =~ [a-zA-Z0-9]$ ]]',
 ]) assert.ok(wrapper.includes(required), `CI wrapper is missing contract: ${required}`);
 assert.ok(!wrapper.includes('$CI_SUPABASE_WORKDIR/config.toml'), "config must not be written at the workdir root");
 for (const forbidden of ["docker system prune", "docker volume prune", "supabase stop --all"]) {

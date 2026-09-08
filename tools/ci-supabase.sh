@@ -25,9 +25,15 @@ ci_supabase_identity() {
     medication-golden-loop-e2e) slot=3 ;;
     *) slot=9 ;;
   esac
-  export CI_SUPABASE_PROJECT_ID="medlink-ci-${slot}-${safe_run_id}-${attempt}-${safe_job:0:10}"
+  local project_job="${safe_job:0:10}"
+  project_job="${project_job%-}"
+  export CI_SUPABASE_PROJECT_ID="medlink-ci-${slot}-${safe_run_id}-${attempt}-${project_job}"
   [[ "${#CI_SUPABASE_PROJECT_ID}" -le 40 ]] || {
     printf 'Supabase project ID exceeds Docker resource limit: %s\n' "$CI_SUPABASE_PROJECT_ID" >&2
+    return 1
+  }
+  [[ "$CI_SUPABASE_PROJECT_ID" =~ [a-zA-Z0-9]$ ]] || {
+    printf 'Supabase project ID must end with an alphanumeric character: %s\n' "$CI_SUPABASE_PROJECT_ID" >&2
     return 1
   }
   export CI_SUPABASE_WORKDIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/supabase-${safe_job}-${run_id}-${attempt}"
