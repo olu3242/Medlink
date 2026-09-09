@@ -1,5 +1,8 @@
 export const authErrorMessages: Readonly<Record<string, string>> = {
   invalid_email: "Enter a valid email address.",
+  rate_limited: "Too many sign-in links were requested. Wait a few minutes before trying again.",
+  provider_unavailable: "The email sign-in provider is temporarily unavailable. Try again shortly.",
+  configuration_error: "Secure sign-in is temporarily unavailable because this environment is not configured correctly.",
   sign_in_failed: "The authentication service could not start sign-in. Check your connection and try again.",
   missing_code: "This sign-in link is incomplete. Request a new secure link.",
   callback_failed: "This sign-in link is invalid or has expired. Request a new secure link.",

@@ -1,8 +1,13 @@
 :root {
   --persona-primary: var(--ml-brand);
+  --persona-primary-soft: var(--ml-surface);
   --persona-accent: var(--ml-accent);
-  --persona-surface-page: var(--ml-canvas);
+  --persona-surface: var(--ml-canvas);
   --persona-surface-card: var(--ml-surface);
+  --persona-border: var(--ml-line);
+  --persona-focus: var(--ml-accent);
+  --persona-badge-bg: var(--ml-surface);
+  --persona-badge-text: var(--ml-ink);
   --text-primary: var(--ml-ink);
   --text-muted: var(--ml-muted);
   --status-success: #08756b;
@@ -15,13 +20,17 @@
   --brand: var(--persona-primary);
   --brand-dark: var(--persona-primary);
   --dark: var(--persona-primary);
-  --canvas: var(--persona-surface-page);
-  background: var(--persona-surface-page);
+  --canvas: var(--persona-surface);
+  background: var(--persona-surface);
   color: var(--text-primary);
 }
 .ml-shell[data-persona] .ml-sidebar { background: var(--persona-primary); }
-.ml-shell[data-persona] .ml-button { background: var(--persona-primary); }
-.ml-shell[data-persona] .ml-card { background: var(--persona-surface-card); }
-.ml-shell[data-persona] .ml-tabs button[aria-selected="true"] { color: var(--persona-primary); }
-.ml-shell[data-persona] :is(a, button, input, select, textarea):focus-visible { outline: 3px solid var(--persona-accent); outline-offset: 3px; box-shadow: 0 0 0 5px var(--persona-surface-page); }
+.ml-shell[data-persona] .ml-header { border-top: .3rem solid var(--persona-accent); border-bottom-color: var(--persona-border); background: linear-gradient(90deg,var(--persona-primary-soft),var(--persona-surface-card) 48%); }
+.ml-shell[data-persona] .ml-main { border-top: 1px solid var(--persona-border); }
+.ml-shell[data-persona] .ml-button:not([data-variant]) { background: var(--persona-primary); }
+.ml-shell[data-persona] .ml-card { border-color: var(--persona-border); background: var(--persona-surface-card); }
+.ml-shell[data-persona] .ml-card:is(:focus-within,[aria-current="true"],[data-selected="true"]) { box-shadow: inset .3rem 0 0 var(--persona-accent),var(--ml-shadow-sm); }
+.ml-shell[data-persona] .ml-tabs button[aria-selected="true"] { color: var(--persona-primary); background: var(--persona-primary-soft); }
+.ml-shell[data-persona] .ml-role-badge { border-color: var(--persona-border); background: var(--persona-badge-bg); color: var(--persona-badge-text); }
+.ml-shell[data-persona] :is(a, button, input, select, textarea):focus-visible { outline: 3px solid var(--persona-focus); outline-offset: 3px; box-shadow: 0 0 0 5px var(--persona-surface); }
 .ml-shell[data-persona] .ml-sidebar a:focus-visible { outline-color: #ffffff; box-shadow: none; }

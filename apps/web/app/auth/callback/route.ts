@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
 import { resolveRoleLanding } from "../../../lib/role-landing";
+import { safeAuthNext } from "../../../lib/auth-flow";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const requestedNext = request.nextUrl.searchParams.get("next");
-  const safeNext = requestedNext?.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
+  const safeNext = safeAuthNext(requestedNext);
   const destination = new URL(safeNext, request.url);
 
   if (!code) {

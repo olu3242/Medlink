@@ -9,6 +9,10 @@ describe("shared authentication presentation", () => {
     ["auth_required", "protected workspace"],
     ["permission_denied", "does not permit"],
     ["sign_in_failed", "connection"],
+    ["rate_limited", "few minutes"],
+    ["provider_unavailable", "provider"],
+    ["configuration_error", "configured"],
+    ["sign_out_failed", "sign-out"],
   ])("gives %s a distinct actionable message", (code, expected) => {
     expect(authErrorMessage(code)).toContain(expected);
   });
