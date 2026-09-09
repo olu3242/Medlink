@@ -9,9 +9,9 @@ export const tokens = {
 export type ThemeMode = "light" | "dark" | "system";
 
 export const personaThemes = {
-  patient: { primary: "#08756b", accent: "#2f855a", surfacePage: "#f4f9f8", surfaceCard: "#ffffff" },
-  pharmacist: { primary: "#075985", accent: "#08756b", surfacePage: "#f2f7f8", surfaceCard: "#ffffff" },
-  pharmacy: { primary: "#146c43", accent: "#1d4ed8", surfacePage: "#f4f8f5", surfaceCard: "#ffffff" },
-  "pharmacy-manager": { primary: "#123b52", accent: "#18815b", surfacePage: "#f3f6f8", surfaceCard: "#ffffff" },
-  admin: { primary: "#172554", accent: "#2563eb", surfacePage: "#f4f6fa", surfaceCard: "#ffffff" },
+  patient: { primary: "#08756b", primarySoft: "#dff4ef", accent: "#2f855a", surface: "#f4f9f8", card: "#ffffff", border: "#b9dcd4", focus: "#b45309", badgeBackground: "#dff4ef", badgeText: "#075b51" },
+  pharmacist: { primary: "#075985", primarySoft: "#e0f2fe", accent: "#0e7490", surface: "#f2f7fb", card: "#ffffff", border: "#bae6fd", focus: "#c2410c", badgeBackground: "#e0f2fe", badgeText: "#075985" },
+  pharmacy: { primary: "#146c43", primarySoft: "#dcfce7", accent: "#1d4ed8", surface: "#f4f8f5", card: "#ffffff", border: "#bbf7d0", focus: "#a16207", badgeBackground: "#dcfce7", badgeText: "#166534" },
+  "pharmacy-manager": { primary: "#123b52", primarySoft: "#e0f2f1", accent: "#18815b", surface: "#f3f6f8", card: "#ffffff", border: "#a7d8ce", focus: "#b45309", badgeBackground: "#d9f3eb", badgeText: "#115e4b" },
+  admin: { primary: "#172554", primarySoft: "#e0e7ff", accent: "#2563eb", surface: "#f4f6fa", card: "#ffffff", border: "#c7d2fe", focus: "#b45309", badgeBackground: "#e0e7ff", badgeText: "#1e3a8a" },
 } as const;

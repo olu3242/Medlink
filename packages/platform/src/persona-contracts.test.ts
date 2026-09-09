@@ -36,10 +36,20 @@ describe("persona convergence contract", () => {
   });
 
   it("denies cross-persona semantic actions, including admin clinical authority", () => {
+    expect(canPerformObjectAction("patient", "Medicine", "READ")).toBe(true);
+    expect(canPerformObjectAction("patient", "Prescription", "CREATE")).toBe(true);
+    expect(canPerformObjectAction("patient", "Reservation", "CREATE")).toBe(true);
     expect(canPerformObjectAction("patient", "Inventory", "UPDATE")).toBe(false);
+    expect(canPerformObjectAction("pharmacist", "Medicine", "RECOMMEND")).toBe(true);
+    expect(canPerformObjectAction("pharmacist", "Inventory", "READ")).toBe(true);
     expect(canPerformObjectAction("pharmacist", "Settlement", "SETTLE")).toBe(false);
     expect(canPerformObjectAction("pharmacy_staff", "ClinicalReview", "APPROVE", "pending_review")).toBe(false);
     expect(canPerformObjectAction("pharmacy_owner", "PlatformPolicy", "GOVERN")).toBe(false);
+    expect(canPerformObjectAction("pharmacy_owner", "Inventory", "UPDATE")).toBe(true);
+    expect(canPerformObjectAction("pharmacy_owner", "OrganizationMembership", "UPDATE")).toBe(true);
+    expect(canPerformObjectAction("platform_admin", "Organization", "GOVERN")).toBe(true);
+    expect(canPerformObjectAction("platform_admin", "Medicine", "GOVERN")).toBe(true);
+    expect(canPerformObjectAction("platform_admin", "AuditEvent", "READ")).toBe(true);
     expect(canPerformObjectAction("platform_admin", "ClinicalReview", "APPROVE", "pending_review")).toBe(false);
   });
 

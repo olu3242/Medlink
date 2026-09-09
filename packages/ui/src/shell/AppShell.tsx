@@ -14,9 +14,14 @@ function personaProperties(persona?: AppShellPersona): PersonaProperties | undef
   const theme = personaThemes[persona];
   return {
     "--persona-primary": theme.primary,
+    "--persona-primary-soft": theme.primarySoft,
     "--persona-accent": theme.accent,
-    "--persona-surface-page": theme.surfacePage,
-    "--persona-surface-card": theme.surfaceCard,
+    "--persona-surface": theme.surface,
+    "--persona-surface-card": theme.card,
+    "--persona-border": theme.border,
+    "--persona-focus": theme.focus,
+    "--persona-badge-bg": theme.badgeBackground,
+    "--persona-badge-text": theme.badgeText,
   };
 }
 

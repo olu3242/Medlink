@@ -20,6 +20,15 @@ describe("single-app persona route matrix", () => {
     expect(canAccessPersona("admin", ["admin@medlink.example"])).toBe(false);
   });
 
+  it.each([
+    ["patient", "admin"], ["patient", "pharmacist"], ["patient", "pharmacy"],
+    ["pharmacist", "admin"], ["pharmacist", "patient"], ["pharmacist", "pharmacy"],
+    ["pharmacy_owner", "admin"], ["pharmacy_owner", "patient"], ["pharmacy_owner", "pharmacist"],
+    ["platform_admin", "patient"], ["platform_admin", "pharmacist"], ["platform_admin", "pharmacy"],
+  ] as const)("denies direct %s navigation to /%s", (role, portal) => {
+    expect(canAccessPersona(portal, [role])).toBe(false);
+  });
+
   it("never treats a cosmetic Test-As value as an authenticated role", () => {
     expect(canAccessPersona("admin", ["test_as_platform_admin"])).toBe(false);
     expect(canAccessPersona("patient", ["test_as_patient"])).toBe(false);
