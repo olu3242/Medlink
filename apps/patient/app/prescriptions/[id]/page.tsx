@@ -1,9 +1,1 @@
-import { PrescriptionDetailView } from "./prescription-detail";
-
-export default async function PrescriptionPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  return <PrescriptionDetailView id={(await params).id} />;
-}
+export { default } from "../../../../web/app/patient/prescriptions/[id]/page";

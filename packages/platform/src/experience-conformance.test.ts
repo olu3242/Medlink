@@ -9,11 +9,11 @@ const read = (file: string): ConformanceSource => ({ file, content: readFileSync
 
 describe("enterprise experience architecture conformance", () => {
   const layouts = operationalPortals.map((portal) => read(`apps/${portal}/app/layout.tsx`));
-  const patientComponents = ["apps/patient/app/page.tsx", "apps/patient/app/search/page.tsx", "apps/patient/app/notifications/page.tsx"].map(read);
+  const patientComponents = ["apps/web/app/patient/_home-content.tsx", "apps/web/app/patient/search/page.tsx", "apps/web/app/patient/notifications/page.tsx"].map(read);
   const patientRoutes = [
     "inventory/route.ts", "mar/route.ts", "mar/[id]/route.ts", "mar/[id]/timeline/route.ts",
     "notifications/route.ts", "pharmacies/route.ts", "reservations/route.ts", "review/route.ts", "review/[id]/route.ts",
-  ].map((route) => read(`apps/patient/app/api/v1/${route}`));
+  ].map((route) => read(`apps/web/app/patient/api/v1/${route}`));
 
   it("blocks AppShell, client database, and runtime boundary violations", () => {
     const findings = evaluateExperienceConformance({ portalLayouts: layouts, reactSources: patientComponents, apiRoutes: patientRoutes });

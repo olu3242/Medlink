@@ -1,1 +1,16 @@
-export * from "../../../../../../patient/app/api/v1/review/route";
+import { z } from "zod";
+import { AccessApplication } from "../../../../../lib/patient/application";
+import { runExperienceApi } from "../../../../../lib/patient/api-server";
+
+export const GET = (request: Request) => runExperienceApi(
+  request,
+  "pharmacist.review.list",
+  {
+    name: "clinical.reviews.list",
+    permission: "clinical:review",
+    schema: z.object({}),
+    input: async () => ({}),
+    execute: async (_input, context, database) =>
+      new AccessApplication(database).reviews(context.organizationId),
+  },
+);
