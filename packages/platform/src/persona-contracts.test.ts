@@ -23,7 +23,8 @@ describe("persona convergence contract", () => {
     expect(isRouteAllowed("pharmacy_staff", "/pharmacy/reservations/123")).toBe(true);
     expect(isRouteAllowed("pharmacy_staff", "/pharmacist/review/123")).toBe(false);
     expect(navigationForRole("patient").map(({ label }) => label)).toEqual([
-      "Home", "Medicine Catalog", "Find Medicine", "Reservations", "Prescriptions", "Profile",
+      "MedLink home", "My requests", "My reservations", "Prescriptions", "Add prescription",
+      "Medicine catalogue", "Find nearby", "Ask Alice", "My profile",
     ]);
   });
 
