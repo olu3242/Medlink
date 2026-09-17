@@ -1,4 +1,4 @@
-import { SupabaseCanonicalMedicineRepository, activeRegistration, formulationFilters, formulationGroup, matchesFormulationFilters, formulationDifferences, prepareOffers, sortFormulationResults, INVENTORY_FRESHNESS_HOURS } from "@medlink/medicine";
+import { SupabaseCanonicalMedicineRepository, activeRegistration, formulationFilters, formulationGroup, matchesFormulationFilters, formulationDifferences, prepareOffers, sortFormulationResults, ratioFacets, unitFacets, INVENTORY_FRESHNESS_HOURS } from "@medlink/medicine";
 import { createMedLinkLogger } from "@medlink/observability";
 import type { MedicationDiscoveryOption } from "@medlink/pharmacy";
 import { RuntimeError } from "@medlink/runtime";
@@ -36,6 +36,8 @@ export const GET = (request: Request) => runApi(request, {
       routes: [...new Set(classified.map(({ medicine }) => medicine.route))].sort(),
       brands: [...new Set(classified.map(({ medicine }) => medicine.brandName))].sort(),
       manufacturers: [...new Set(classified.flatMap(({ medicine }) => medicine.manufacturer ? [medicine.manufacturer] : []))].sort(),
+      units: unitFacets(classified.map(({ medicine }) => medicine)),
+      ratios: ratioFacets(classified.map(({ medicine }) => medicine)),
     };
     const application = new AccessApplication(database, signal);
     const results: Array<(typeof classified)[number] & { registered: boolean; offers: ReturnType<typeof prepareOffers<MedicationDiscoveryOption>> }> = [];

@@ -11,6 +11,10 @@ export const formulationFilters = z.object({
   route: z.string().max(100).optional(),
   brand: z.string().max(200).optional(),
   manufacturer: z.string().max(200).optional(),
+  unit: z.string().max(80).optional(),
+  ratio: z.string().max(100).optional(),
+  minAmount: z.coerce.number().positive().optional(),
+  maxAmount: z.coerce.number().positive().optional(),
   registered: z.enum(["true", "false"]).default("false"),
   availability: z.enum(["all", "in_stock", "low_stock"]).default("all"),
   pharmacy: z.string().max(200).optional(),
@@ -26,6 +30,8 @@ export const formulationFilters = z.object({
 }).superRefine((value, context) => {
   if (value.minPrice !== undefined && value.maxPrice !== undefined && value.minPrice > value.maxPrice)
     context.addIssue({ code: "custom", path: ["maxPrice"], message: "Maximum price must be at least minimum price" });
+  if (value.minAmount !== undefined && value.maxAmount !== undefined && value.minAmount > value.maxAmount)
+    context.addIssue({ code: "custom", path: ["maxAmount"], message: "Maximum amount must be at least minimum amount" });
   if ((value.latitude !== undefined || value.longitude !== undefined)
     && (value.latitude === undefined || value.longitude === undefined || value.locationConsent !== "true"))
     context.addIssue({ code: "custom", path: ["latitude"], message: "Coordinates require location consent and both latitude and longitude" });
@@ -71,5 +77,22 @@ export function matchesFormulationFilters(medicine: CanonicalMedicine, group: Fo
     && (!filters.route || medicine.route === filters.route)
     && (!filters.brand || medicine.brandName === filters.brand)
     && (!filters.manufacturer || medicine.manufacturer === filters.manufacturer)
+    && (!filters.unit || medicine.ingredients.some((item) => item.unit !== null && normalizedText(item.unit) === normalizedText(filters.unit!)))
+    && (!filters.ratio || medicine.ingredients.some((item) => normalizedAmount(item.amount, item.unit) === filters.ratio))
+    && (filters.minAmount === undefined || medicine.ingredients.some((item) => item.amount !== null && item.amount >= filters.minAmount!))
+    && (filters.maxAmount === undefined || medicine.ingredients.some((item) => item.amount !== null && item.amount <= filters.maxAmount!))
     && (filters.registered !== "true" || activeRegistration(medicine, new Date().toISOString().slice(0, 10)));
+}
+export function ratioFacets(medicines: readonly CanonicalMedicine[]): string[] {
+  return [...new Set(medicines.flatMap((medicine) =>
+    medicine.ingredients.flatMap((item) => {
+      const ratio = normalizedAmount(item.amount, item.unit);
+      return ratio ? [ratio] : [];
+    }),
+  ))].sort();
+}
+export function unitFacets(medicines: readonly CanonicalMedicine[]): string[] {
+  return [...new Set(medicines.flatMap((medicine) =>
+    medicine.ingredients.flatMap((item) => (item.unit ? [item.unit] : [])),
+  ))].sort();
 }

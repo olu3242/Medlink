@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { MedicineCatalogue } from "./medicine-catalogue";
 
 export default function MedicinesPage() {
@@ -13,7 +14,9 @@ export default function MedicinesPage() {
           </p>
         </div>
       </header>
-      <MedicineCatalogue />
+      <Suspense fallback={<p role="status">Loading catalogue…</p>}>
+        <MedicineCatalogue />
+      </Suspense>
     </>
   );
 }
