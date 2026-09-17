@@ -1,1 +1,2 @@
-export * from "../../../../../../../admin/app/api/v1/dashboard/organizations/route";
+import { runApiDashboard } from "../../../../../../lib/admin/dashboard-route";
+export const GET = (request: Request) => runApiDashboard(request, "organizations");

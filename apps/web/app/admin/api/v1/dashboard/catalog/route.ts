@@ -1,1 +1,2 @@
-export * from "../../../../../../../admin/app/api/v1/dashboard/catalog/route";
+import { runApiDashboard } from "../../../../../../lib/admin/dashboard-route";
+export const GET = (request: Request) => runApiDashboard(request, "catalog");
