@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useRef, useState, type FormEvent } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { CanonicalMedicine, FormulationGroup } from "@medlink/medicine";
 import type { MedicationDiscoveryOption } from "@medlink/pharmacy";
 
@@ -9,9 +10,10 @@ interface SearchResult {
   pagination: { total: number; offset: number; limit: number; nextOffset: number | null };
   reference: CanonicalMedicine;
   availabilityChecked: boolean;
-  facets: { ingredients: { id: string; name: string }[]; strengths: string[]; forms: string[]; routes: string[]; brands: string[]; manufacturers: string[] };
+  facets: { ingredients: { id: string; name: string }[]; strengths: string[]; forms: string[]; routes: string[]; brands: string[]; manufacturers: string[]; units: string[]; ratios: string[] };
   results: { medicine: CanonicalMedicine; group: FormulationGroup; registered: boolean; differences: string[]; offers: (MedicationDiscoveryOption & { freshness: "fresh" | "stale" | "unknown" })[] }[];
 }
+const NON_FILTER_PARAMS = new Set(["medicineId", "offset", "latitude", "longitude", "locationConsent"]);
 const sections = [
   ["exact", "Exact pharmaceutical matches", "Same ingredients, amounts and ratios, strength, form, and route. A pharmacist must assess changes to the prescribed product."],
   ["related", "Related formulations", "Same ingredients with a different or incompletely verified formulation. Not directly interchangeable."],
@@ -19,6 +21,9 @@ const sections = [
 ] as const;
 
 export function MedicineCatalogue() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState<Pick<CanonicalMedicine, "id" | "brandName" | "genericName" | "strength" | "dosageForm" | "route">[]>([]);
   const [selected, setSelected] = useState("");
@@ -29,6 +34,19 @@ export function MedicineCatalogue() {
   const [location, setLocation] = useState<{ latitude: number; longitude: number }>();
   const form = useRef<HTMLFormElement>(null);
   const sequence = useRef(0);
+  const restoredFromUrl = useRef(false);
+  const initialFilters = useRef(new URLSearchParams(searchParams.toString()));
+  const defaultValue = (name: string) => initialFilters.current.get(name) ?? undefined;
+
+  useEffect(() => {
+    if (restoredFromUrl.current) return;
+    restoredFromUrl.current = true;
+    const medicineId = initialFilters.current.get("medicineId");
+    if (medicineId) void equivalents(medicineId, false, Number(initialFilters.current.get("offset") ?? 0), initialFilters.current);
+    // Restore filter state from a shared or refreshed URL exactly once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function search(event: FormEvent) {
     event.preventDefault();
     const token = ++sequence.current;
@@ -44,17 +62,24 @@ export function MedicineCatalogue() {
     } catch { if (token === sequence.current) setMessage("The medicine catalogue is temporarily unavailable."); }
     finally { if (token === sequence.current) setLoading(false); }
   }
-  async function equivalents(id: string, reset = false, offset = 0) {
+  async function equivalents(id: string, reset = false, offset = 0, overrideParams?: URLSearchParams) {
     const token = ++sequence.current;
     setSelected(id); setLoading(true); setMessage("");
     const params = new URLSearchParams({ medicineId: id, offset: String(offset) });
-    if (!reset && form.current) for (const [key, value] of new FormData(form.current)) if (String(value)) params.append(key, String(value));
+    if (overrideParams) {
+      for (const [key, value] of overrideParams) if (!NON_FILTER_PARAMS.has(key) && value) params.append(key, value);
+    } else if (!reset && form.current) {
+      for (const [key, value] of new FormData(form.current)) if (String(value)) params.append(key, String(value));
+    }
     if (location) { params.set("latitude", String(location.latitude)); params.set("longitude", String(location.longitude)); params.set("locationConsent", "true"); }
     try {
       const response = await fetch(`/patient/api/v1/medicines/equivalents?${params}`);
       if (!response.ok) throw new Error();
       const body = await response.json();
-      if (token === sequence.current) setData(body.data);
+      if (token === sequence.current) {
+        setData(body.data);
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      }
     } catch { if (token === sequence.current) { setData(undefined); setMessage("Could not load matches. Check the price range and try again."); } }
     finally { if (token === sequence.current) setLoading(false); }
   }
@@ -67,7 +92,7 @@ export function MedicineCatalogue() {
     }, () => setLocationMessage("Location could not be obtained. Catalogue comparison is still available."), { timeout: 10000, maximumAge: 60000 });
   }
   const select = (name: string, label: string, values: string[]) => <div className="field" key={name}>
-    <label htmlFor={`filter-${name}`}>{label}</label><select id={`filter-${name}`} name={name}><option value="">All</option>{values.map((value) => <option key={value}>{value}</option>)}</select>
+    <label htmlFor={`filter-${name}`}>{label}</label><select id={`filter-${name}`} name={name} defaultValue={defaultValue(name) ?? ""}><option value="">All</option>{values.map((value) => <option key={value}>{value}</option>)}</select>
   </div>;
   return <section className="stack" aria-busy={loading}>
     <form className="card inline-search" onSubmit={search}>
@@ -80,16 +105,20 @@ export function MedicineCatalogue() {
       </select></div></section>}
     {selected && <form key={selected} ref={form} className="card stack" onSubmit={(event) => { event.preventDefault(); void equivalents(selected); }}>
       <h2>Filter formulations and pharmacies</h2><div className="grid">
-        <div className="field"><label htmlFor="filter-ingredient">Active ingredients</label><select id="filter-ingredient" name="ingredient" multiple>{data?.facets.ingredients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
-        <div className="field"><label htmlFor="filter-quality">Match quality</label><select id="filter-quality" name="quality"><option value="all">All groups</option><option value="exact">Exact pharmaceutical match</option><option value="related">Related formulation / other strength</option><option value="therapeutic">Therapeutic alternative</option></select></div>
+        <div className="field"><label htmlFor="filter-ingredient">Active ingredients</label><select id="filter-ingredient" name="ingredient" multiple defaultValue={initialFilters.current.getAll("ingredient")}>{data?.facets.ingredients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+        <div className="field"><label htmlFor="filter-quality">Match quality</label><select id="filter-quality" name="quality" defaultValue={defaultValue("quality") ?? "all"}><option value="all">All groups</option><option value="exact">Exact pharmaceutical match</option><option value="related">Related formulation / other strength</option><option value="therapeutic">Therapeutic alternative</option></select></div>
         {select("strength", "Strength", data?.facets.strengths ?? [])}{select("form", "Dosage form", data?.facets.forms ?? [])}{select("route", "Route", data?.facets.routes ?? [])}{select("brand", "Brand", data?.facets.brands ?? [])}{select("manufacturer", "Manufacturer", data?.facets.manufacturers ?? [])}
-        <div className="field"><label htmlFor="filter-registered">Registration</label><select name="registered" id="filter-registered"><option value="false">Include unverified registration</option><option value="true">NAFDAC registered only</option></select></div>
-        <div className="field"><label htmlFor="filter-availability">Availability</label><select name="availability" id="filter-availability"><option value="all">Include unavailable / unchecked</option><option value="in_stock">In stock now</option><option value="low_stock">Low stock</option></select></div>
-        <div className="field"><label htmlFor="filter-radius">Distance radius (km)</label><input id="filter-radius" name="radiusKm" type="number" min="1" max="200" defaultValue="25" /></div>
-        <div className="field"><label htmlFor="filter-pharmacy">Preferred pharmacy name</label><input id="filter-pharmacy" name="pharmacy" maxLength={200} /></div>
-        <div className="field"><label htmlFor="filter-min">Minimum price (NGN per unit)</label><input id="filter-min" name="minPrice" type="number" min="0" step="0.01" /></div>
-        <div className="field"><label htmlFor="filter-max">Maximum price (NGN per unit)</label><input id="filter-max" name="maxPrice" type="number" min="0" step="0.01" /></div>
-        <div className="field"><label htmlFor="filter-sort">Sort within each safety group</label><select name="sort" id="filter-sort"><option value="exact">Best exact match</option><option value="nearest">Nearest pharmacy</option><option value="price">Lowest price</option><option value="freshness">Recently confirmed inventory</option><option value="brand">Brand name</option></select></div>
+        {select("unit", "Ingredient unit", data?.facets.units ?? [])}
+        {select("ratio", "Ratio / concentration", data?.facets.ratios ?? [])}
+        <div className="field"><label htmlFor="filter-min-amount">Minimum ingredient amount</label><input id="filter-min-amount" name="minAmount" type="number" min="0" step="any" defaultValue={defaultValue("minAmount")} /></div>
+        <div className="field"><label htmlFor="filter-max-amount">Maximum ingredient amount</label><input id="filter-max-amount" name="maxAmount" type="number" min="0" step="any" defaultValue={defaultValue("maxAmount")} /></div>
+        <div className="field"><label htmlFor="filter-registered">Registration</label><select name="registered" id="filter-registered" defaultValue={defaultValue("registered") ?? "false"}><option value="false">Include unverified registration</option><option value="true">NAFDAC registered only</option></select></div>
+        <div className="field"><label htmlFor="filter-availability">Availability</label><select name="availability" id="filter-availability" defaultValue={defaultValue("availability") ?? "all"}><option value="all">Include unavailable / unchecked</option><option value="in_stock">In stock now</option><option value="low_stock">Low stock</option></select></div>
+        <div className="field"><label htmlFor="filter-radius">Distance radius (km)</label><input id="filter-radius" name="radiusKm" type="number" min="1" max="200" defaultValue={defaultValue("radiusKm") ?? "25"} /></div>
+        <div className="field"><label htmlFor="filter-pharmacy">Preferred pharmacy name</label><input id="filter-pharmacy" name="pharmacy" maxLength={200} defaultValue={defaultValue("pharmacy")} /></div>
+        <div className="field"><label htmlFor="filter-min">Minimum price (NGN per unit)</label><input id="filter-min" name="minPrice" type="number" min="0" step="0.01" defaultValue={defaultValue("minPrice")} /></div>
+        <div className="field"><label htmlFor="filter-max">Maximum price (NGN per unit)</label><input id="filter-max" name="maxPrice" type="number" min="0" step="0.01" defaultValue={defaultValue("maxPrice")} /></div>
+        <div className="field"><label htmlFor="filter-sort">Sort within each safety group</label><select name="sort" id="filter-sort" defaultValue={defaultValue("sort") ?? "exact"}><option value="exact">Best exact match</option><option value="nearest">Nearest pharmacy</option><option value="price">Lowest price</option><option value="freshness">Recently confirmed inventory</option><option value="brand">Brand name</option></select></div>
       </div><button type="button" className="secondary" onClick={locate}>Use my location</button><p role="status">{locationMessage}</p><button className="button" disabled={loading}>Apply filters</button>
       <button type="button" disabled={loading} className="secondary" onClick={() => { form.current?.reset(); void equivalents(selected, true); }}>Clear filters</button>
     </form>}
