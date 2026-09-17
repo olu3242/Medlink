@@ -1,5 +1,1 @@
-import { InventoryDashboard } from "../components/inventory-dashboard";
-
-export default function Page() {
-  return <InventoryDashboard />;
-}
+export { default } from "../../web/app/pharmacy/inventory/page";

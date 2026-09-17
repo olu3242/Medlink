@@ -1,5 +1,5 @@
 import Link from "next/link";
-import PharmacyOperations from "../../../pharmacy/app/page";
+import PharmacyOperations from "./inventory/page";
 import { requirePersonaAccess } from "../../lib/persona-access";
 
 export default async function PharmacyHome() {
