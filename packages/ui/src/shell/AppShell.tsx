@@ -4,7 +4,7 @@ import { Sidebar } from "../navigation";
 import { ErrorBoundary, ToastProvider } from "../components/overlays";
 import { ThemeProvider } from "../themes/ThemeProvider";
 import { personaThemes, personaIdentity } from "../tokens";
-export type AppShellPersona = "patient" | "pharmacist" | "pharmacy" | "pharmacy-manager" | "admin";
+export type AppShellPersona = "patient" | "pharmacist" | "pharmacy" | "pharmacy-manager" | "provider" | "admin";
 export interface AppShellProps { brand: ReactNode; navigation: NavItem[]; persona?: AppShellPersona; currentPath?: string; children?: ReactNode; header?: ReactNode; footer?: ReactNode; status?: ReactNode; }
 
 type PersonaProperties = CSSProperties & Record<`--persona-${string}`, string>;

@@ -13,7 +13,9 @@ describe("single-app MedLink frontend contract", () => {
       expect(existsSync(join(repositoryRoot, `apps/web/app/${persona}/page.tsx`))).toBe(true);
       expect(existsSync(join(repositoryRoot, `apps/web/app/${persona}/layout.tsx`))).toBe(true);
     }
-    expect(existsSync(join(repositoryRoot, "apps/web/app/provider/page.tsx"))).toBe(false);
+    expect(existsSync(join(repositoryRoot, "apps/web/app/provider/page.tsx"))).toBe(true);
+    expect(existsSync(join(repositoryRoot, "apps/web/app/provider/layout.tsx"))).toBe(true);
+    expect(read("apps/web/app/provider/layout.tsx")).toContain('portal="provider"');
   });
 
   it("keeps shared APIs canonical and persona APIs explicitly owned", () => {

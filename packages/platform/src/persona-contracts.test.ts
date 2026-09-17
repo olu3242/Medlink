@@ -13,7 +13,7 @@ describe("persona convergence contract", () => {
     expect(personaContractForRole("inventory_manager")?.persona).toBe("PHARMACY_STAFF");
     expect(personaContractForRole("pharmacy_owner")?.persona).toBe("PHARMACY_MANAGER");
     expect(personaContractForRole("platform_admin")?.persona).toBe("MEDLINK_ADMIN");
-    expect(personaContractForRole("provider")).toBeNull();
+    expect(personaContractForRole("provider")?.persona).toBe("PROVIDER");
   });
 
   it("uses the same contract for route and navigation decisions", () => {
@@ -69,6 +69,8 @@ describe("persona convergence contract", () => {
     expect(projectPersonaFields("pharmacy_owner", "Inventory", inventory)).toMatchObject({
       batchNumber: "B-100", supplier: "Private supplier", costPrice: 600,
     });
-    expect(projectPersonaFields("provider", "Inventory", inventory)).toEqual({});
+    expect(projectPersonaFields("provider", "Inventory", inventory)).toEqual({
+      batchNumber: "B-100", quantityReserved: 8,
+    });
   });
 });
