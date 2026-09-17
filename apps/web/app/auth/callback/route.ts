@@ -24,7 +24,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(destination);
   }
 
-  {
+  // Partner applicants/reviewers are real authenticated users who are
+  // intentionally not members of any organization until identity
+  // resolution (see apps/web/lib/partner.ts); /partner routes are
+  // authorized independently of the organization_memberships/persona
+  // system, so they must not be forced through workspace resolution.
+  const isPartnerRoute = destination.pathname === "/partner" || destination.pathname.startsWith("/partner/");
+
+  if (!isPartnerRoute) {
     const { data: auth } = await supabase.auth.getUser();
     if (auth.user) {
       const { data: memberships } = await supabase
