@@ -13,6 +13,7 @@ export const personaThemes = {
   pharmacist: { primary: "#075985", accent: "#08756b", surfacePage: "#f2f7f8", surfaceCard: "#ffffff" },
   pharmacy: { primary: "#146c43", accent: "#1d4ed8", surfacePage: "#f4f8f5", surfaceCard: "#ffffff" },
   "pharmacy-manager": { primary: "#123b52", accent: "#18815b", surfacePage: "#f3f6f8", surfaceCard: "#ffffff" },
+  provider: { primary: "#0369A1", accent: "#0ea5e9", surfacePage: "#f2f8fc", surfaceCard: "#ffffff" },
   admin: { primary: "#172554", accent: "#2563eb", surfacePage: "#f4f6fa", surfaceCard: "#ffffff" },
 } as const;
 

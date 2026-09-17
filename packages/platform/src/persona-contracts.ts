@@ -6,8 +6,8 @@ export const canonicalPersonas = [
   "PROVIDER", "FINANCE_OPS", "SUPPORT_OPS", "MEDLINK_ADMIN", "AI_AGENT",
 ] as const;
 export type CanonicalPersona = (typeof canonicalPersonas)[number];
-export type ActivePortal = "patient" | "pharmacist" | "pharmacy" | "admin";
-export type PersonaTheme = "patient" | "pharmacist" | "pharmacy" | "pharmacy-manager" | "admin";
+export type ActivePortal = "patient" | "pharmacist" | "pharmacy" | "provider" | "admin";
+export type PersonaTheme = "patient" | "pharmacist" | "pharmacy" | "pharmacy-manager" | "provider" | "admin";
 export type ObjectAction = "READ" | "CREATE" | "UPDATE" | "DELETE" | "RECOMMEND" | "APPROVE" | "EXECUTE" | "CANCEL" | "REFUND" | "SETTLE" | "CONFIGURE" | "GOVERN";
 export type ObjectScope = "own" | "organization" | "assigned" | "network" | "none";
 export type FieldVisibility = "hidden" | "masked" | "read_only" | "editable";
@@ -109,6 +109,26 @@ const pharmacist: PersonaContract = {
     { object: "Settlement", actions: [], scope: "none" },
   ], fieldPolicies: [clinicalInventory], workflowPolicies: [{ workflow: "ClinicalReview", action: "APPROVE", allowedStates: ["pending_review"] }],
 };
+const provider: PersonaContract = {
+  persona: "PROVIDER", role: "provider", portal: "provider", theme: "provider",
+  roleLabel: "Provider", productLabel: "MedLink Provider",
+  primaryGoal: "Coordinate patient care and prescribe safely within an authorized scope",
+  navigation: [
+    { label: "MedLink home", href: "/" },
+    { label: "Overview", href: "/provider" },
+    { label: "Patients", href: "/provider/patients", permission: "patient:read" },
+    { label: "Prescriptions", href: "/provider/prescriptions", permission: "prescription:read" },
+    { label: "Medicine Search", href: "/provider/medicines", permission: "medicine:read" },
+  ],
+  allowedRoutes: ["/provider", "/provider/patients", "/provider/prescriptions", "/provider/medicines"],
+  capabilities: capabilitiesFor("provider"),
+  objectPermissions: [
+    { object: "Medicine", actions: ["READ"], scope: "network" },
+    { object: "Patient", actions: ["READ"], scope: "assigned" },
+    { object: "Prescription", actions: ["READ", "CREATE"], scope: "assigned" },
+    { object: "Inventory", actions: ["READ"], scope: "network" },
+  ], fieldPolicies: [clinicalInventory], workflowPolicies: [],
+};
 const pharmacyStaff: PersonaContract = {
   persona: "PHARMACY_STAFF", role: "pharmacy_staff", portal: "pharmacy", theme: "pharmacy",
   roleLabel: "Pharmacy Staff", productLabel: "MedLink Pharmacy",
@@ -192,7 +212,7 @@ const tenantAdmin: PersonaContract = {
 };
 
 const contracts: Readonly<Partial<Record<Role, PersonaContract>>> = {
-  patient, pharmacist, pharmacy_staff: pharmacyStaff,
+  patient, pharmacist, provider, pharmacy_staff: pharmacyStaff,
   inventory_manager: inventoryManager,
   pharmacy_owner: pharmacyManager, platform_admin: medlinkAdmin,
   tenant_admin: tenantAdmin,
