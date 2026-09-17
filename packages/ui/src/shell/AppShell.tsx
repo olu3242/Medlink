@@ -3,7 +3,7 @@ import type { NavItem } from "../navigation";
 import { Sidebar } from "../navigation";
 import { ErrorBoundary, ToastProvider } from "../components/overlays";
 import { ThemeProvider } from "../themes/ThemeProvider";
-import { personaThemes } from "../tokens";
+import { personaThemes, personaIdentity } from "../tokens";
 export type AppShellPersona = "patient" | "pharmacist" | "pharmacy" | "pharmacy-manager" | "admin";
 export interface AppShellProps { brand: ReactNode; navigation: NavItem[]; persona?: AppShellPersona; currentPath?: string; children?: ReactNode; header?: ReactNode; footer?: ReactNode; status?: ReactNode; }
 
@@ -12,11 +12,19 @@ type PersonaProperties = CSSProperties & Record<`--persona-${string}`, string>;
 function personaProperties(persona?: AppShellPersona): PersonaProperties | undefined {
   if (!persona) return undefined;
   const theme = personaThemes[persona];
+  const identity = personaIdentity[persona];
   return {
     "--persona-primary": theme.primary,
     "--persona-accent": theme.accent,
     "--persona-surface-page": theme.surfacePage,
     "--persona-surface-card": theme.surfaceCard,
+    "--persona-surface": identity.surface,
+    "--persona-foreground": identity.foreground,
+    "--persona-border": identity.border,
+    "--persona-hover": identity.hover,
+    "--persona-focus": identity.focus,
+    "--persona-dark-surface": identity.darkSurface,
+    "--persona-dark-foreground": identity.darkForeground,
   };
 }
 

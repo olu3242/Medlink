@@ -41,4 +41,33 @@ describe("medicine intelligence criteria", () => {
     expect(getFacets(candidate ? [candidate] : [], "2026-09-08").dosageForms).toEqual([{ value: "tablet", count: 1 }]);
     expect(getFacets([]).dosageForms).toEqual([]);
   });
+
+  it("never promotes missing ingredient data to an exact match", () => {
+    for (const ingredients of [[], [{ ingredientId: ingredient, preferredName: "Amoxicillin", amount: null, unit: null, primary: true }]]) {
+      const value = medicine({ ingredients });
+      expect(classifyCandidate(value, value, defaultMatchCriteria)?.tier).not.toBe("EXACT_EQUIVALENT");
+    }
+  });
+
+  it("checks per-ingredient amounts even when display strengths agree", () => {
+    const reference = medicine();
+    const candidate = medicine({ ingredients: [{ ...reference.ingredients[0]!, amount: 875 }] });
+    expect(classifyCandidate(reference, candidate, defaultMatchCriteria)).toBeNull();
+    expect(classifyCandidate(reference, candidate, criteriaForPreset("BROAD_CATALOG"))?.tier).toBe("SAME_INGREDIENT_DIFFERENT_STRENGTH");
+  });
+
+  it("rejects changed combination ratios and duplicate ingredient identifiers", () => {
+    const first = medicine().ingredients[0]!;
+    const second = { ...first, ingredientId: otherIngredient, amount: 125 };
+    const reference = medicine({ ingredients: [first, second] });
+    expect(classifyCandidate(reference, medicine({ ingredients: [{ ...first, amount: 125 }, { ...second, amount: 500 }] }), defaultMatchCriteria)).toBeNull();
+    const duplicate = medicine({ ingredients: [first, first] });
+    expect(classifyCandidate(duplicate, duplicate, defaultMatchCriteria)).toBeNull();
+  });
+
+  it("does not call retired references or non-Nigerian registrations exact", () => {
+    expect(classifyCandidate(medicine({ status: "retired" }), medicine(), defaultMatchCriteria)?.tier).not.toBe("EXACT_EQUIVALENT");
+    const value = medicine();
+    expect(classifyCandidate(value, medicine({ registrations: [{ ...value.registrations[0]!, countryCode: "US" }] }), defaultMatchCriteria)).toBeNull();
+  });
 });

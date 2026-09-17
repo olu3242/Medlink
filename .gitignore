@@ -19,3 +19,5 @@ packages/e2e/test-results/
 *.egg-info/
 __pycache__/
 .pytest_cache/
+.vercel
+.env*.local

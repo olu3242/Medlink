@@ -25,9 +25,9 @@ interface ManualItem extends MedicineMatch {
   directions: string;
 }
 
-export function ManualPrescriptionForm() {
+export function ManualPrescriptionForm({ initialQuery = "" }: { initialQuery?: string }) {
   const formRef = useRef<HTMLFormElement>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [matches, setMatches] = useState<MedicineMatch[]>([]);
   const [items, setItems] = useState<ManualItem[]>([]);
   const [searching, setSearching] = useState(false);

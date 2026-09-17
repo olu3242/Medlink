@@ -1,5 +1,9 @@
 import { authErrorMessage } from "../../../lib/auth-presentation";
 import { SignInForm } from "./sign-in-form";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { safeReturnPath, WORKSPACE_COOKIE, resolveActiveMembership, personaContractForRole, roles, isRouteAllowed, type Role } from "@medlink/platform";
+import { createSupabaseServerClient } from "../../../lib/supabase/server";
 
 type SignInPageProps = {
   searchParams: Promise<{ error?: string; sent?: string; signed_out?: string; next?: string }>;
@@ -7,11 +11,22 @@ type SignInPageProps = {
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
   const query = await searchParams;
-  const next = query.next?.startsWith("/") && !query.next.startsWith("//") ? query.next : "/";
+  const next = safeReturnPath(query.next);
+  const supabase = await createSupabaseServerClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth.user && query.error !== "sign_out_failed") {
+    const { data: memberships, error } = await supabase.from("organization_memberships")
+      .select("organization_id,role").eq("user_id", auth.user.id).is("deleted_at", null);
+    const selected = (await cookies()).get(WORKSPACE_COOKIE)?.value;
+    const membership = resolveActiveMembership(memberships ?? [], selected);
+    const contract = membership && roles.includes(membership.role as Role) ? personaContractForRole(membership.role as Role) : null;
+    if (error || !contract) redirect("/auth/workspaces");
+    redirect(isRouteAllowed(contract.role, next) ? next : `/${contract.portal}`);
+  }
   const errorMessage = authErrorMessage(query.error);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-slate-950">
+    <main data-auth-state={query.error === "session_expired" ? "SESSION_EXPIRED" : query.error ? "AUTH_ERROR" : "SIGNED_OUT"} className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-slate-950">
       <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm" aria-labelledby="sign-in-title">
         <p className="font-semibold text-teal-700">MedLink</p>
         <h1 className="mt-2 text-3xl font-bold" id="sign-in-title">Sign in securely</h1>

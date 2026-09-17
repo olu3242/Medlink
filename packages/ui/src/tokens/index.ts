@@ -15,3 +15,14 @@ export const personaThemes = {
   "pharmacy-manager": { primary: "#123b52", accent: "#18815b", surfacePage: "#f3f6f8", surfaceCard: "#ffffff" },
   admin: { primary: "#172554", accent: "#2563eb", surfacePage: "#f4f6fa", surfaceCard: "#ffffff" },
 } as const;
+
+// Extend the existing approved primary palette with semantic surfaces and
+// contrast pairs. Stock status continues to use --status-* independently.
+export const personaIdentity = {
+  patient: { surface: "#CCFBF1", foreground: "#ffffff", border: "#0F766E", hover: "#115E59", focus: "#0F766E", darkSurface: "#102A27", darkForeground: "#CCFBF1" },
+  pharmacist: { surface: "#DBEAFE", foreground: "#ffffff", border: "#1D4ED8", hover: "#1E40AF", focus: "#1D4ED8", darkSurface: "#10213D", darkForeground: "#DBEAFE" },
+  pharmacy: { surface: "#EDE9FE", foreground: "#ffffff", border: "#6D28D9", hover: "#5B21B6", focus: "#6D28D9", darkSurface: "#261B3B", darkForeground: "#EDE9FE" },
+  "pharmacy-manager": { surface: "#EDE9FE", foreground: "#ffffff", border: "#6D28D9", hover: "#5B21B6", focus: "#6D28D9", darkSurface: "#261B3B", darkForeground: "#EDE9FE" },
+  provider: { surface: "#E0F2FE", foreground: "#ffffff", border: "#0369A1", hover: "#075985", focus: "#0369A1", darkSurface: "#102B3D", darkForeground: "#E0F2FE" },
+  admin: { surface: "#FEF3C7", foreground: "#ffffff", border: "#B45309", hover: "#92400E", focus: "#B45309", darkSurface: "#332815", darkForeground: "#FEF3C7" },
+} as const;

@@ -197,7 +197,39 @@ function mapMedicine(row: unknown) {
 
 export class SupabaseCanonicalMedicineRepository
 implements CanonicalMedicineRepository {
-  constructor(private readonly database: SupabaseClient) {}
+  constructor(private readonly database: SupabaseClient, private readonly signal?: AbortSignal) {}
+
+  async formulationCandidates(reference: import("./intelligence").CanonicalMedicine) {
+    const ids = reference.ingredients.map((ingredient) => ingredient.ingredientId);
+    const medicines = new Map<string, import("./intelligence").CanonicalMedicine>();
+    if (ids.length) {
+      for (let offset = 0; ; offset += 200) {
+        const rows = z.array(z.unknown()).parse(await result(this.database.from("medicines")
+          .select(`${medicineColumns},ingredient_match:medicine_ingredients!inner(active_ingredient_id)`)
+          .in("ingredient_match.active_ingredient_id", ids)
+          .eq("status", "active").is("deleted_at", null)
+          .order("id").range(offset, offset + 199).abortSignal(this.signal ?? AbortSignal.timeout(15000))));
+        for (const row of rows) {
+          const medicine = mapMedicine(row);
+          medicines.set(medicine.id, medicine);
+        }
+        if (rows.length < 200) break;
+        if (offset >= 200) throw new RuntimeError("validation", "catalogue_candidate_limit", "This ingredient family exceeds the supported search size", 422, false);
+      }
+    }
+    const reviewed = z.array(z.object({ equivalent_medicine_id: z.string().uuid() })).parse(
+      await result(this.database.from("medicine_equivalences")
+        .select("equivalent_medicine_id").eq("source_medicine_id", reference.id)
+        .eq("kind", "therapeutic").eq("status", "active")
+        .not("approved_by", "is", null).not("approved_at", "is", null)
+        .lte("effective_from", new Date().toISOString().slice(0, 10)).is("deleted_at", null)
+        .limit(200).abortSignal(this.signal ?? AbortSignal.timeout(15000))));
+    for (const row of reviewed) {
+      const medicine = await this.find(row.equivalent_medicine_id);
+      if (medicine?.status === "active") medicines.set(medicine.id, medicine);
+    }
+    return { medicines: [...medicines.values()], therapeuticIds: reviewed.map((row) => row.equivalent_medicine_id) };
+  }
 
   async listIngredients() {
     const rows = z.array(z.object({
@@ -271,7 +303,7 @@ implements CanonicalMedicineRepository {
       .select(medicineColumns)
       .eq("id", id)
       .is("deleted_at", null)
-      .maybeSingle();
+      .abortSignal(this.signal ?? AbortSignal.timeout(15000)).maybeSingle();
     if (error) databaseFailure(error);
     return data === null ? null : mapMedicine(data);
   }

@@ -1,4 +1,5 @@
 export const authErrorMessages: Readonly<Record<string, string>> = {
+  session_expired: "Your session has expired. Sign in again to continue.",
   invalid_email: "Enter a valid email address.",
   sign_in_failed: "The authentication service could not start sign-in. Check your connection and try again.",
   missing_code: "This sign-in link is incomplete. Request a new secure link.",

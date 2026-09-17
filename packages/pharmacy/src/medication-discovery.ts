@@ -21,6 +21,9 @@ export interface MedicationDiscoveryOption {
   readonly pharmacyLocationId: string;
   readonly pharmacyName: string;
   readonly pharmacyLocality?: string;
+  readonly pharmacyPhone?: string | null;
+  readonly pharmacyLatitude?: number;
+  readonly pharmacyLongitude?: number;
   readonly distanceKm: number;
   readonly stockStatus: string;
   readonly expiresOn?: string;

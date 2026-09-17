@@ -1,7 +1,11 @@
 import { PrescriptionUploadForm } from "./prescription-upload-form";
 import { ManualPrescriptionForm } from "./manual-prescription-form";
 
-export default function NewPrescriptionPage() {
+export default async function NewPrescriptionPage({ searchParams }: {
+  searchParams: Promise<{ medicine?: string }>;
+}) {
+  const params = await searchParams;
+  const initialQuery = typeof params.medicine === "string" ? params.medicine.slice(0, 100) : "";
   return (
     <>
       <header className="head">
@@ -16,7 +20,7 @@ export default function NewPrescriptionPage() {
       </header>
       <div className="stack">
         <PrescriptionUploadForm />
-        <ManualPrescriptionForm />
+        <ManualPrescriptionForm initialQuery={initialQuery} />
       </div>
     </>
   );

@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { canonicalMedicineSchema } from "./canonical";
+import { normalizedAmount, normalizedStrength, normalizedText } from "./formulation-normalization";
 
 export type CanonicalMedicine = z.infer<typeof canonicalMedicineSchema>;
 
@@ -60,19 +61,32 @@ function ingredientIdentity(medicine: CanonicalMedicine): string[] {
     .sort();
 }
 
-function sameIngredients(left: CanonicalMedicine, right: CanonicalMedicine): boolean {
+export function sameIngredients(left: CanonicalMedicine, right: CanonicalMedicine): boolean {
   const a = ingredientIdentity(left);
   const b = ingredientIdentity(right);
-  return a.length === b.length && a.every((value, index) => value === b[index]);
+  return a.length > 0 && new Set(a).size === a.length
+    && new Set(b).size === b.length
+    && a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-function sameStrength(left: CanonicalMedicine, right: CanonicalMedicine): boolean {
-  return left.normalizedStrength === right.normalizedStrength;
+export function sameStrength(left: CanonicalMedicine, right: CanonicalMedicine): boolean {
+  // Display strings alone do not establish ingredient amounts or ratios.
+  const complete = (medicine: CanonicalMedicine) => medicine.ingredients.length > 0
+    && medicine.ingredients.every(({ amount, unit }) =>
+      amount !== null && Number.isFinite(amount) && amount > 0 && Boolean(unit?.trim()));
+  if (!complete(left) || !complete(right) || !sameIngredients(left, right)) return false;
+  return Boolean(left.normalizedStrength.trim())
+    && normalizedStrength(left.normalizedStrength) === normalizedStrength(right.normalizedStrength)
+    && left.ingredients.every((ingredient) => right.ingredients.some((other) =>
+      ingredient.ingredientId === other.ingredientId
+      && normalizedAmount(ingredient.amount, ingredient.unit) === normalizedAmount(other.amount, other.unit)));
 }
 
-function activeRegistration(medicine: CanonicalMedicine, today: string): boolean {
+export function activeRegistration(medicine: CanonicalMedicine, today: string): boolean {
   return medicine.registrations.some((registration) =>
-    registration.authorityCode === "NAFDAC"
+    normalizedText(registration.authorityCode) === "nafdac"
+    && normalizedText(registration.countryCode) === "ng"
+    && Boolean(registration.registrationNumber.trim())
     && (!registration.validFrom || registration.validFrom <= today)
     && (!registration.validUntil || registration.validUntil >= today),
   );
@@ -86,22 +100,23 @@ export function classifyCandidate(
 ): IntelligenceCandidate | null {
   if (criteria.activeIngredient && !sameIngredients(reference, candidate)) return null;
   if (criteria.strength && !sameStrength(reference, candidate)) return null;
-  if (criteria.dosageForm && reference.dosageForm !== candidate.dosageForm) return null;
-  if (criteria.route && reference.route !== candidate.route) return null;
+  if (criteria.dosageForm && normalizedText(reference.dosageForm) !== normalizedText(candidate.dosageForm)) return null;
+  if (criteria.route && normalizedText(reference.route) !== normalizedText(candidate.route)) return null;
   if (criteria.manufacturer && reference.manufacturer !== candidate.manufacturer) return null;
   if (criteria.activeRegistration && !activeRegistration(candidate, today)) return null;
   if (criteria.inStockOnly || criteria.pharmacyAvailability) return null;
 
   if (sameIngredients(reference, candidate) && sameStrength(reference, candidate)
-    && reference.dosageForm === candidate.dosageForm && reference.route === candidate.route
-    && candidate.status === "active" && activeRegistration(candidate, today)) {
+    && normalizedText(reference.dosageForm) === normalizedText(candidate.dosageForm) && normalizedText(reference.route) === normalizedText(candidate.route)
+    && reference.status === "active" && candidate.status === "active"
+    && activeRegistration(reference, today) && activeRegistration(candidate, today)) {
     return { medicine: candidate, tier: "EXACT_EQUIVALENT" };
   }
   if (sameIngredients(reference, candidate) && !sameStrength(reference, candidate)) {
     return { medicine: candidate, tier: "SAME_INGREDIENT_DIFFERENT_STRENGTH" };
   }
   if (sameIngredients(reference, candidate)
-    && (reference.dosageForm !== candidate.dosageForm || reference.route !== candidate.route)) {
+    && (normalizedText(reference.dosageForm) !== normalizedText(candidate.dosageForm) || normalizedText(reference.route) !== normalizedText(candidate.route))) {
     return { medicine: candidate, tier: "SAME_INGREDIENT_DIFFERENT_FORM_OR_ROUTE" };
   }
   return { medicine: candidate, tier: "RELATED_CATALOG_MATCH" };

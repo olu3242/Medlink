@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { canAccessPortal, personaContractForRole, roles, type ActivePortal, type Role } from "@medlink/platform";
+import { canAccessPortal, personaContractForRole, roles, WORKSPACE_COOKIE, resolveActiveMembership, type ActivePortal, type Role } from "@medlink/platform";
 
 interface PersonaMiddlewareOptions {
   readonly portal: ActivePortal;
@@ -72,12 +72,10 @@ export async function enforcePersonaRequest(request: NextRequest, options: Perso
     .select("organization_id,role")
     .eq("user_id", auth.user.id)
     .is("deleted_at", null);
-  const activeTenant = typeof auth.user.app_metadata.active_tenant_id === "string"
+  const activeTenant = request.cookies.get(WORKSPACE_COOKIE)?.value ?? (typeof auth.user.app_metadata.active_tenant_id === "string"
     ? auth.user.app_metadata.active_tenant_id
-    : undefined;
-  const membership = activeTenant
-    ? memberships?.find(({ organization_id }) => organization_id === activeTenant)
-    : memberships?.length === 1 ? memberships[0] : undefined;
+    : undefined);
+  const membership = resolveActiveMembership(memberships ?? [], activeTenant);
   const role = membership?.role as Role | undefined;
   if (error || !role || !roles.includes(role) || !canAccessPortal(role, options.portal)) {
     return redirectTo(request, options.signInPath, pendingCookies, "forbidden");

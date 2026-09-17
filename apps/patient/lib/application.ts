@@ -80,7 +80,7 @@ export function toMatch(row: InventoryRow) {
 }
 
 export class AccessApplication {
-  constructor(private readonly database: SupabaseClient) {}
+  constructor(private readonly database: SupabaseClient, private readonly signal?: AbortSignal) {}
 
   async inventory(organizationId: string, query?: string | undefined) {
     // Filters by matching medicine IDs first (the same ilike pattern
@@ -109,6 +109,7 @@ export class AccessApplication {
   async eligiblePharmacies(context: RuntimeContext, input: {
     medicineId: string; latitude: number;
     longitude: number; radiusKm: number; locationConsent: boolean;
+    includeContact?: boolean;
   }) {
     const consent = input.locationConsent
       ? await result(this.database.rpc("capture_marketplace_location_consent", {
@@ -116,9 +117,9 @@ export class AccessApplication {
           target_actor_id: context.userId,
           target_idempotency_key: `${context.requestId}:marketplace-location-consent`,
           target_policy_version: "marketplace-location-v1",
-        })) as { id: string }
+        }).abortSignal(this.signal ?? AbortSignal.timeout(15000))) as { id: string }
       : null;
-    const rows = (await result(this.database.rpc("discover_marketplace_inventory", {
+    const rows = (await result(this.database.rpc(input.includeContact ? "discover_catalogue_inventory" : "discover_marketplace_inventory", {
       target_patient_organization_id: context.organizationId,
       target_medicine_id: input.medicineId,
       target_latitude: input.latitude,
@@ -126,7 +127,7 @@ export class AccessApplication {
       target_radius_km: input.radiusKm,
       target_quantity: 1,
       target_consent_id: consent?.id ?? null,
-    })) ?? []) as Record<string, unknown>[];
+    }).abortSignal(this.signal ?? AbortSignal.timeout(15000))) ?? []) as Record<string, unknown>[];
     const options = rows.map((row): MedicationDiscoveryOption => ({
       relationship: row.relationship === "exact" ? "exact" : "generic_related",
       medicineId: String(row.medicine_id),
@@ -135,6 +136,11 @@ export class AccessApplication {
       pharmacyLocationId: String(row.pharmacy_location_id),
       pharmacyName: String(row.pharmacy_name),
       pharmacyLocality: String(row.pharmacy_locality),
+      ...(input.includeContact ? {
+        pharmacyPhone: row.pharmacy_phone == null ? null : String(row.pharmacy_phone),
+        pharmacyLatitude: Number(row.pharmacy_latitude),
+        pharmacyLongitude: Number(row.pharmacy_longitude),
+      } : {}),
       distanceKm: Number(row.distance_km),
       stockStatus: String(row.availability_state),
       inventoryTimestamp: String(row.inventory_timestamp),

@@ -5,7 +5,7 @@ export async function middleware(request: NextRequest) {
   const correlationId = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-correlation-id", correlationId);
-  requestHeaders.set("x-medlink-pathname", request.nextUrl.pathname);
+  requestHeaders.set("x-medlink-pathname", request.nextUrl.pathname + request.nextUrl.search);
 
   let response = NextResponse.next({ request: { headers: requestHeaders } });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -20,6 +20,7 @@ export async function middleware(request: NextRequest) {
       getAll: () => request.cookies.getAll(),
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        requestHeaders.set("cookie", request.cookies.toString());
         response = NextResponse.next({ request: { headers: requestHeaders } });
         cookiesToSet.forEach(({ name, value, options }) =>
           response.cookies.set(name, value, options),
@@ -28,6 +29,9 @@ export async function middleware(request: NextRequest) {
     },
   });
   await supabase.auth.getUser();
+  if (/^\/(patient|pharmacist|pharmacy|admin|provider|auth)(\/|$)/.test(request.nextUrl.pathname)) {
+    response.headers.set("Cache-Control", "private, no-store, max-age=0");
+  }
   response.headers.set("x-correlation-id", correlationId);
   return response;
 }

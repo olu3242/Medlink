@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
-import { resolveRoleLanding } from "../../../lib/role-landing";
+import { cookies } from "next/headers";
+import { safeReturnPath, resolveActiveMembership, WORKSPACE_COOKIE, personaContractForRole, roles, isRouteAllowed, type Role } from "@medlink/platform";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const requestedNext = request.nextUrl.searchParams.get("next");
-  const safeNext = requestedNext?.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
+  const safeNext = safeReturnPath(requestedNext);
   const destination = new URL(safeNext, request.url);
 
   if (!code) {
@@ -23,21 +24,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(destination);
   }
 
-  if (safeNext === "/") {
+  {
     const { data: auth } = await supabase.auth.getUser();
     if (auth.user) {
       const { data: memberships } = await supabase
         .from("organization_memberships")
-        .select("role")
+        .select("organization_id,role")
         .eq("user_id", auth.user.id)
         .is("deleted_at", null);
-      destination.pathname = resolveRoleLanding(
-        memberships?.map((membership) => membership.role) ?? [],
-      );
-      if (destination.pathname === "/") {
-        destination.pathname = "/auth/sign-in";
-        destination.searchParams.set("error", "permission_denied");
-      }
+      const membership = resolveActiveMembership(memberships ?? [], (await cookies()).get(WORKSPACE_COOKIE)?.value);
+      const contract = membership && roles.includes(membership.role as Role) ? personaContractForRole(membership.role as Role) : null;
+      if (!contract) { destination.pathname = "/auth/workspaces"; destination.search = ""; }
+      else if (!isRouteAllowed(contract.role, safeNext)) { destination.pathname = `/${contract.portal}`; destination.search = ""; }
     }
   }
 

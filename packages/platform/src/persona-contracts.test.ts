@@ -41,6 +41,8 @@ describe("persona convergence contract", () => {
     expect(canPerformObjectAction("pharmacy_staff", "ClinicalReview", "APPROVE", "pending_review")).toBe(false);
     expect(canPerformObjectAction("pharmacy_owner", "PlatformPolicy", "GOVERN")).toBe(false);
     expect(canPerformObjectAction("platform_admin", "ClinicalReview", "APPROVE", "pending_review")).toBe(false);
+    expect(canPerformObjectAction("tenant_admin", "PlatformPolicy", "GOVERN")).toBe(false);
+    expect(canPerformObjectAction("inventory_manager", "Reservation", "EXECUTE", "ready")).toBe(false);
   });
 
   it("enforces workflow state and deny-by-default behavior", () => {

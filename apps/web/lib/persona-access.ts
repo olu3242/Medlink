@@ -1,10 +1,19 @@
 import { redirect } from "next/navigation";
+import { cookies, headers } from "next/headers";
 
-import { canAccessPortal, roles, type ActivePortal, type Role } from "@medlink/platform";
+import {
+  canAccessPortal,
+  roles,
+  resolveActiveMembership,
+  safeReturnPath,
+  WORKSPACE_COOKIE,
+  type ActivePortal,
+  type Role,
+} from "@medlink/platform";
 
 import { createSupabaseServerClient } from "./supabase/server";
 
-export type PersonaRoute = ActivePortal;
+type PersonaRoute = ActivePortal;
 
 export function canAccessPersona(persona: PersonaRoute, candidateRoles: readonly string[]) {
   return candidateRoles.some((role) => roles.includes(role as Role) && canAccessPortal(role as Role, persona));
@@ -13,34 +22,74 @@ export function canAccessPersona(persona: PersonaRoute, candidateRoles: readonly
 export async function requirePersonaAccess(persona: PersonaRoute) {
   const supabase = await createSupabaseServerClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect(`/auth/sign-in?error=auth_required&next=/${persona}`);
 
-  const { data: memberships, error } = await supabase
+  if (!auth.user) {
+    const pathname = (await headers()).get("x-medlink-pathname");
+    const returnPath = safeReturnPath(pathname, `/${persona}`);
+
+    redirect(
+      `/auth/sign-in?error=auth_required&next=${encodeURIComponent(returnPath)}`,
+    );
+  }
+
+  const { data: memberships, error: membershipError } = await supabase
     .from("organization_memberships")
-    .select("organization_id,role")
+    .select("*")
     .eq("user_id", auth.user.id)
     .is("deleted_at", null);
 
-  const activeTenant = typeof auth.user.app_metadata.active_tenant_id === "string"
-    ? auth.user.app_metadata.active_tenant_id
-    : undefined;
-  const membership = activeTenant
-    ? memberships?.find(({ organization_id }) => organization_id === activeTenant)
-    : memberships?.length === 1 ? memberships[0] : undefined;
-  if (error || !membership || !roles.includes(membership.role as Role) || !canAccessPortal(membership.role as Role, persona)) {
-    redirect(`/auth/sign-in?error=permission_denied&next=/${persona}`);
+  const cookieTenantId = (await cookies()).get(WORKSPACE_COOKIE)?.value;
+
+  const metadataTenantId =
+    typeof auth.user.app_metadata.active_tenant_id === "string"
+      ? auth.user.app_metadata.active_tenant_id
+      : undefined;
+
+  const activeTenantId = cookieTenantId ?? metadataTenantId;
+
+  const membership = resolveActiveMembership(
+    memberships ?? [],
+    activeTenantId,
+  );
+
+  if (
+    membershipError ||
+    !membership ||
+    !roles.includes(membership.role as Role) ||
+    !canAccessPortal(membership.role as Role, persona)
+  ) {
+    redirect(
+      `/auth/workspaces?error=${
+        membershipError ? "auth_unavailable" : "permission_denied"
+      }`,
+    );
   }
-  const { data: organization } = await supabase
+
+  const { data: organization, error: organizationError } = await supabase
     .from("organizations")
-    .select("name")
+    .select("id, name")
     .eq("id", membership.organization_id)
+    .is("deleted_at", null)
     .maybeSingle();
-  const profileName = auth.user.user_metadata.full_name ?? auth.user.user_metadata.name;
+  if (organizationError || !organization) redirect("/auth/workspaces?error=permission_denied");
+
+  const profileName =
+    auth.user.user_metadata.full_name ??
+    auth.user.user_metadata.name;
+
   return {
     role: membership.role as Role,
+    memberships: memberships ?? [],
     organizationId: membership.organization_id,
-    organizationName: typeof organization?.name === "string" ? organization.name : "Organization context",
+    organizationName:
+      typeof organization?.name === "string"
+        ? organization.name
+        : "Organization context",
+    userId: auth.user.id,
     userEmail: auth.user.email ?? "Authenticated user",
-    userName: typeof profileName === "string" && profileName.trim() ? profileName : auth.user.email ?? "Authenticated user",
+    userName:
+      typeof profileName === "string"
+        ? profileName
+        : auth.user.email ?? "Authenticated user",
   };
 }

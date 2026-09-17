@@ -1,6 +1,6 @@
 import { createServerClient, parseCookieHeader } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { authorize, permissions, type Permission, type Role } from "@medlink/platform";
+import { authorize, permissions, WORKSPACE_COOKIE, type Permission, type Role } from "@medlink/platform";
 import { runtimeTracing, standardRuntimeHooks } from "@medlink/observability";
 import {
   createRuntime,
@@ -206,6 +206,7 @@ export async function runApi<TInput, TOutput>(
       // with zero or multiple memberships and no explicit header still
       // fails closed; neither is a case this function may guess at.
       const explicitTenantId = request.headers.get("x-medlink-tenant-id")
+        ?? parseCookieHeader(request.headers.get("cookie") ?? "").find((cookie) => cookie.name === WORKSPACE_COOKIE)?.value
         ?? (typeof auth.user.app_metadata.active_tenant_id === "string"
           ? auth.user.app_metadata.active_tenant_id
           : undefined);

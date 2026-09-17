@@ -19,9 +19,13 @@
   background: var(--persona-surface-page);
   color: var(--text-primary);
 }
-.ml-shell[data-persona] .ml-sidebar { background: var(--persona-primary); }
+.ml-shell[data-persona] .ml-sidebar { background: var(--persona-primary); color: var(--persona-foreground); }
 .ml-shell[data-persona] .ml-button { background: var(--persona-primary); }
 .ml-shell[data-persona] .ml-card { background: var(--persona-surface-card); }
 .ml-shell[data-persona] .ml-tabs button[aria-selected="true"] { color: var(--persona-primary); }
 .ml-shell[data-persona] :is(a, button, input, select, textarea):focus-visible { outline: 3px solid var(--persona-accent); outline-offset: 3px; box-shadow: 0 0 0 5px var(--persona-surface-page); }
 .ml-shell[data-persona] .ml-sidebar a:focus-visible { outline-color: #ffffff; box-shadow: none; }
+.ml-shell[data-persona] .ml-role-badge { border: 1px solid var(--persona-border); background: var(--persona-surface); color: var(--persona-primary); }
+.ml-shell[data-persona] .ml-logout:hover { background: var(--persona-hover); color: var(--persona-foreground); }
+.ml-shell[data-persona] :is(button, select, input):focus-visible { outline-color: var(--persona-focus); }
+[data-theme="dark"] .ml-shell[data-persona] { --persona-surface-page: var(--persona-dark-surface); --persona-surface-card: var(--persona-dark-surface); --text-primary: var(--persona-dark-foreground); }

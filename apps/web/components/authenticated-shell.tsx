@@ -3,7 +3,7 @@ import { AppShell } from "@medlink/ui";
 import { navigationForRole, personaContractForRole, type ActivePortal } from "@medlink/platform";
 
 import { requirePersonaAccess } from "../lib/persona-access";
-import { signOut } from "../app/auth/sign-in/actions";
+import { SessionControls } from "./session-controls";
 
 export async function AuthenticatedShell({ children, portal }: {
   children: import("react").ReactNode;
@@ -25,9 +25,10 @@ export async function AuthenticatedShell({ children, portal }: {
         <span>{session.userEmail} · {session.organizationName}</span>
       </div>
       <div className="ml-session-meta">
-        <span className="ml-role-badge">{contract.roleLabel}</span>
-        <form action={signOut}><button className="ml-logout" type="submit">Log out</button></form>
+        <span className="ml-role-badge"><span aria-hidden="true">{contract.theme === "patient" ? "♥" : contract.theme === "pharmacist" ? "✚" : contract.theme === "admin" ? "⚙" : "▣"}</span> {contract.roleLabel}</span>
+        <a href="/auth/workspaces">Switch workspace</a>
+        <SessionControls />
       </div>
     </div>}
-  >{children}</AppShell>;
+  ><div data-auth-state="AUTHENTICATED_AUTHORIZED"><p className="ml-workspace-heading">{contract.productLabel} · {contract.roleLabel}</p>{children}</div></AppShell>;
 }
