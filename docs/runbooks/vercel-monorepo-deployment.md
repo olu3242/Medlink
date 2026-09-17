@@ -4,7 +4,9 @@ MedLink uses one npm workspace lockfile and one Vercel project per independently
 
 ## Primary web project
 
-Configure `medlink-web` as follows:
+Configure `medlink` (the actual canonical Vercel project name; this document
+previously called it `medlink-web`, which does not exist as a project) as
+follows:
 
 | Setting | Value |
 | --- | --- |
@@ -23,14 +25,16 @@ Outside-root source access is required because `apps/web` consumes source packag
 
 | Vercel project | Root Directory | Classification |
 | --- | --- | --- |
-| `medlink-web` | `apps/web` | Primary production web/runtime application |
-| `medlink-patient` | `apps/patient` | Independently deployable patient application |
-| `medlink-pharmacy` | `apps/pharmacy` | Independently deployable pharmacy application |
-| `medlink-pharmacist` | `apps/pharmacist` | Independently deployable pharmacist application |
-| `medlink-admin` | `apps/admin` | Independently deployable administration application |
+| `medlink` | `apps/web` | CANONICAL — the only project with real persona implementation code (`/patient /pharmacist /pharmacy /provider /admin`); production auto-deploys from `main` |
+| `medlink-patient` | `apps/patient` | LEGACY — thin re-export stub of `apps/web`; no unique UI/API/webhook/cron logic of its own; kept only as a fallback/transitional standalone deployment |
+| `medlink-pharmacy` | `apps/pharmacy` | LEGACY — thin re-export stub of `apps/web`; no unique UI/API/webhook/cron logic of its own; kept only as a fallback/transitional standalone deployment |
+| `medlink-pharmacist` | `apps/pharmacist` | LEGACY — thin re-export stub of `apps/web`; no unique UI/API/webhook/cron logic of its own; kept only as a fallback/transitional standalone deployment |
+| `medlink-admin` | `apps/admin` | LEGACY — thin re-export stub of `apps/web`; no unique UI/API/webhook/cron logic of its own; kept only as a fallback/transitional standalone deployment |
 | `medlink-dashboard` | `apps/dashboard` | Build-capable internal/deferred application; no production project required yet |
 | `medlink-developer` | `apps/developer` | Build-capable internal/deferred application; no production project required yet |
 | `medlink-provider` | `apps/provider` | Build-capable deferred provider application; no production project required yet |
+
+Each of the four LEGACY projects still owns its own `/auth/sign-in`, `/auth/callback`, and `middleware.ts` — those are real, app-specific auth bootstrapping code, not re-export stubs, and are the only reason each project remains independently functional. No webhook, cron, or background-job route exists in any of them (confirmed by directory search); the only webhook receiver in the repository (`/api/whatsapp/webhook`) lives exclusively in `apps/web`.
 
 Each future Vercel project must use its application directory as Root Directory, leave framework/build/install/output settings at their detected defaults, and enable outside-root source files when it imports `@medlink/*` workspaces.
 
