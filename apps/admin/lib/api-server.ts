@@ -1,1 +1,1 @@
-export { runApi, type ApiOperation } from "@medlink/api";
+export * from "../../web/lib/admin/api-server";

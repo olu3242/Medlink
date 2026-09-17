@@ -1,7 +1,7 @@
 "use client";
 import { Alert, Button } from "@medlink/ui";
 import { useState } from "react";
-import { generatePickupCredential } from "../../lib/pickup-credential";
+import { generatePickupCredential } from "../../../lib/patient/pickup-credential";
 
 // Once issue_pickup_credential succeeds, the plaintext code lives only in
 // this component's own React state -- never in a URL, a server log, an

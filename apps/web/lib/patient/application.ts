@@ -1,0 +1,355 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { RuntimeError, type RuntimeContext } from "@medlink/runtime";
+import type {
+  MedicationDiscoveryOption,
+  MedicationDiscoveryResult,
+} from "@medlink/pharmacy";
+
+async function result<T>(
+  query: PromiseLike<{ data: T; error: { message: string } | null }>,
+): Promise<T> {
+  const { data, error } = await query;
+  if (error) {
+    throw new RuntimeError(
+      "infrastructure",
+      "database_operation_failed",
+      "The data operation could not be completed",
+      503,
+      true,
+      "Retry later.",
+      { cause: error },
+    );
+  }
+  return data;
+}
+
+export interface MarRow {
+  id: string;
+  state: string;
+  created_at: string;
+  requested_medicine_id?: string;
+  medicine?: { brand_name: string; generic_name: string } | null;
+}
+
+// apps/patient/lib/api.ts's Mar interface (rendered by app/page.tsx and
+// app/mar/[id]/page.tsx) expects camelCase `status`/`medicineName`/
+// `createdAt`. The medication_access_requests table has no `status` column
+// at all (its state column is `state`) and no `medicineName` column
+// (medicine identity lives on the joined medicines row) - routes returned
+// raw rows straight through, so the patient home page rendered a blank
+// status/name for every request, and the MAR detail page crashed outright
+// (`mar.status.toLowerCase()` called on undefined).
+export function toMar(row: MarRow) {
+  return {
+    id: row.id,
+    medicineId: row.requested_medicine_id,
+    status: row.state,
+    createdAt: row.created_at,
+    medicineName: row.medicine?.brand_name || row.medicine?.generic_name || "Requested medicine",
+  };
+}
+
+export interface InventoryRow {
+  id: string;
+  status: string;
+  pharmacy_location_id: string;
+  medicine?: { brand_name: string; generic_name: string } | null;
+  pharmacy?: { name: string; locality: string } | null;
+}
+
+// apps/patient/lib/api.ts's Match interface (rendered by app/search/page.tsx)
+// expects inventoryId/medicineName/pharmacyName/stockStatus; the raw
+// inventory_batches row has none of those names, only nested medicine/
+// pharmacy join columns, so every search result rendered blank. There is no
+// geospatial distance calculation anywhere in the repository, so this maps
+// to the pharmacy's locality (real data already on the join) instead of
+// fabricating a distanceKm value the UI previously called .toFixed(1) on
+// unconditionally. pharmacyLocationId is surfaced so the reserve page can
+// submit a POST /api/v1/reservations body that actually matches its schema
+// (marId/pharmacyLocationId/inventoryBatchId/quantity/expiresAt) instead of
+// the bare {inventoryId} it previously sent, which always failed validation.
+export function toMatch(row: InventoryRow) {
+  return {
+    inventoryId: row.id,
+    pharmacyLocationId: row.pharmacy_location_id,
+    medicineName: row.medicine?.brand_name || row.medicine?.generic_name || "Medicine",
+    pharmacyName: row.pharmacy?.name || "Pharmacy",
+    pharmacyLocality: row.pharmacy?.locality,
+    stockStatus: row.status,
+  };
+}
+
+export class AccessApplication {
+  constructor(private readonly database: SupabaseClient, private readonly signal?: AbortSignal) {}
+
+  async inventory(organizationId: string, query?: string | undefined) {
+    // Filters by matching medicine IDs first (the same ilike pattern
+    // CatalogApplication.list already uses) rather than a cross-table .or(),
+    // which needs an inner-join modifier to filter correctly and isn't used
+    // safely anywhere else in this codebase.
+    let medicineIds: string[] | undefined;
+    if (query) {
+      const escaped = query.replaceAll(",", "").replaceAll("%", "");
+      const matches = await result(this.database.from("medicines").select("id")
+        .or(`brand_name.ilike.%${escaped}%,generic_name.ilike.%${escaped}%`));
+      medicineIds = (matches ?? []).map((row: { id: string }) => row.id);
+      if (medicineIds.length === 0) return [];
+    }
+
+    let statement = this.database.from("inventory_batches")
+      .select("*, medicine:medicines(brand_name,generic_name), pharmacy:pharmacy_locations(name,locality)")
+      .eq("organization_id", organizationId).eq("status", "available")
+      .gt("available_quantity", 0)
+      .gte("expires_on", new Date().toISOString().slice(0, 10)).limit(100);
+    if (medicineIds) statement = statement.in("medicine_id", medicineIds);
+    const rows = (await result(statement)) ?? [];
+    return (rows as InventoryRow[]).map(toMatch);
+  }
+
+  async eligiblePharmacies(context: RuntimeContext, input: {
+    medicineId: string; latitude: number;
+    longitude: number; radiusKm: number; locationConsent: boolean;
+    includeContact?: boolean;
+  }) {
+    const consent = input.locationConsent
+      ? await result(this.database.rpc("capture_marketplace_location_consent", {
+          target_organization_id: context.organizationId,
+          target_actor_id: context.userId,
+          target_idempotency_key: `${context.requestId}:marketplace-location-consent`,
+          target_policy_version: "marketplace-location-v1",
+        }).abortSignal(this.signal ?? AbortSignal.timeout(15000))) as { id: string }
+      : null;
+    const rows = (await result(this.database.rpc(input.includeContact ? "discover_catalogue_inventory" : "discover_marketplace_inventory", {
+      target_patient_organization_id: context.organizationId,
+      target_medicine_id: input.medicineId,
+      target_latitude: input.latitude,
+      target_longitude: input.longitude,
+      target_radius_km: input.radiusKm,
+      target_quantity: 1,
+      target_consent_id: consent?.id ?? null,
+    }).abortSignal(this.signal ?? AbortSignal.timeout(15000))) ?? []) as Record<string, unknown>[];
+    const options = rows.map((row): MedicationDiscoveryOption => ({
+      relationship: row.relationship === "exact" ? "exact" : "generic_related",
+      medicineId: String(row.medicine_id),
+      medicineName: String(row.medicine_name),
+      inventoryId: String(row.inventory_id),
+      pharmacyLocationId: String(row.pharmacy_location_id),
+      pharmacyName: String(row.pharmacy_name),
+      pharmacyLocality: String(row.pharmacy_locality),
+      ...(input.includeContact ? {
+        pharmacyPhone: row.pharmacy_phone == null ? null : String(row.pharmacy_phone),
+        pharmacyLatitude: Number(row.pharmacy_latitude),
+        pharmacyLongitude: Number(row.pharmacy_longitude),
+      } : {}),
+      distanceKm: Number(row.distance_km),
+      stockStatus: String(row.availability_state),
+      inventoryTimestamp: String(row.inventory_timestamp),
+      unitPriceMinor: row.unit_price_minor == null ? null : Number(row.unit_price_minor),
+      currencyCode: row.currency_code == null ? null : String(row.currency_code),
+      priceStatus: row.unit_price_minor == null || row.currency_code == null
+        ? "PRICE_NOT_AVAILABLE" : "AVAILABLE",
+      reservationEligible: Boolean(row.reservation_eligible),
+      pharmacistReviewRequired: Boolean(row.pharmacist_review_required),
+    }));
+    const exact = options.filter((option) => option.relationship === "exact");
+    const generic = options.filter((option) => option.relationship === "generic_related");
+    const outcome = exact.length && generic.length ? "BOTH_AVAILABLE"
+      : exact.length ? "EXACT_BRAND_AVAILABLE"
+        : generic.length ? "GENERIC_AVAILABLE" : "NONE_AVAILABLE";
+    return {
+      requestedMedicineId: input.medicineId,
+      outcome,
+      exact,
+      generic,
+    } satisfies MedicationDiscoveryResult;
+  }
+
+  async pharmacies(organizationId: string) {
+    return (await result(this.database.from("pharmacy_locations").select("*")
+      .eq("organization_id", organizationId).eq("is_active", true)
+      .is("deleted_at", null))) ?? [];
+  }
+
+  async listMars(organizationId: string) {
+    const rows = (await result(this.database.from("medication_access_requests")
+      .select("*, medicine:medicines(brand_name,generic_name)")
+      .eq("organization_id", organizationId).is("deleted_at", null)
+      .order("created_at", { ascending: false }))) ?? [];
+    return (rows as MarRow[]).map(toMar);
+  }
+
+  async getMar(organizationId: string, id: string) {
+    const row = await result(this.database.from("medication_access_requests")
+      .select("*, medicine:medicines(brand_name,generic_name)")
+      .eq("organization_id", organizationId).eq("id", id).single());
+    return toMar(row as MarRow);
+  }
+
+  async matchInventory(
+    context: RuntimeContext,
+    id: string,
+    input: {
+      inventoryBatchId: string;
+      pharmacyLocationId: string;
+      idempotencyKey: string;
+    },
+  ) {
+    return result(this.database.rpc("match_inventory", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: input.idempotencyKey,
+      target_channel: context.channel,
+      target_mar_id: id,
+      target_inventory_batch_id: input.inventoryBatchId,
+      target_pharmacy_location_id: input.pharmacyLocationId,
+    }));
+  }
+
+  async timeline(organizationId: string, marId: string) {
+    return (await result(this.database.from("mar_audit_events")
+      .select("id,event_type,from_state,to_state,correlation_id,occurred_at,metadata")
+      .eq("organization_id", organizationId).eq("mar_id", marId)
+      .order("occurred_at", { ascending: true }).order("id", { ascending: true }))) ?? [];
+  }
+
+  async notifications(organizationId: string, recipientId: string) {
+    return (await result(this.database.from("notifications")
+      .select("id,channel,template_key,status,correlation_id,scheduled_for,sent_at,delivered_at,created_at")
+      .eq("organization_id", organizationId).eq("recipient_id", recipientId)
+      .order("created_at", { ascending: false }).limit(100))) ?? [];
+  }
+
+  // Atomic since migration 202607290016: create_mar commits the MAR row
+  // and its runtime evidence in one transaction (the MAR.Created domain
+  // audit event was already atomic via enforce_and_audit_mar_state()
+  // (migration 202607270003), but the platform evidence commit was not --
+  // this was a raw insert with no record_runtime_evidence call at all
+  // until now, exactly the gap docs/audit/RC1_BACKLOG.md's item 3 named
+  // and deferred to Wave 3).
+  async createMar(
+    context: RuntimeContext,
+    idempotencyKey: string,
+    input: {
+      prescriptionId?: string | undefined;
+      medicineId: string;
+      notes?: string | undefined;
+    },
+  ) {
+    return result(this.database.rpc("create_mar", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: idempotencyKey,
+      target_channel: context.channel,
+      target_patient_id: context.userId,
+      target_prescription_id: input.prescriptionId ?? null,
+      target_requested_medicine_id: input.medicineId,
+      target_patient_notes: input.notes ?? null,
+    }));
+  }
+
+  async reviews(organizationId: string) {
+    return (await result(this.database.from("clinical_reviews")
+      .select("*, mar:medication_access_requests(*), prescription:prescriptions(*)")
+      .eq("organization_id", organizationId).order("created_at"))) ?? [];
+  }
+
+  async review(organizationId: string, id: string) {
+    return result(this.database.from("clinical_reviews").select("*")
+      .eq("organization_id", organizationId).eq("id", id).single());
+  }
+
+  // Atomic and idempotent-replay-safe since migration 202607290017:
+  // decide_clinical_review commits the decision and its runtime evidence
+  // in one transaction, and returns the existing row rather than erroring
+  // when the same actor replays the same decision on an already-decided
+  // review -- the raw `.eq("decision", "pending")` update this replaced
+  // had no matching row (and so threw via `.single()`) on any repeat call.
+  // clinical_reviews has no per-decision idempotency-key column to key a
+  // client-supplied key on (see the migration), so this derives a stable
+  // one from the review's own identity rather than changing the API
+  // contract to require the caller supply one.
+  async decideReview(
+    context: RuntimeContext,
+    id: string,
+    input: {
+      decision: "approved" | "rejected" | "needs_information";
+      recommendation: string;
+    },
+  ) {
+    return result(this.database.rpc("decide_clinical_review", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: `${id}:decide`,
+      target_channel: context.channel,
+      target_review_id: id,
+      target_decision: input.decision,
+      target_recommendation: input.recommendation,
+    }));
+  }
+
+  async reservations(organizationId: string) {
+    return (await result(this.database.from("reservations").select(
+      "*, payments(id,status,amount_minor,currency_code,reconciliation_required,created_at)",
+    )
+      .eq("organization_id", organizationId)
+      .order("created_at", { ascending: false }))) ?? [];
+  }
+
+  async reserve(
+    context: RuntimeContext,
+    idempotencyKey: string,
+    input: {
+      marId: string;
+      pharmacyLocationId: string;
+      inventoryBatchId: string;
+      quantity: number;
+      expiresAt: string;
+    },
+  ) {
+    return result(this.database.rpc("reserve_inventory", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: idempotencyKey,
+      target_channel: context.channel,
+      target_mar_id: input.marId,
+      target_pharmacy_location_id: input.pharmacyLocationId,
+      target_inventory_batch_id: input.inventoryBatchId,
+      target_quantity: input.quantity,
+      target_expires_at: input.expiresAt,
+    }));
+  }
+
+  // Patient-owned pickup credential issuance. The plaintext code is
+  // generated and hashed entirely in the browser
+  // (apps/patient/lib/pickup-credential.ts) -- this method, like
+  // issue_pickup_credential itself, only ever receives/stores the hash.
+  // The idempotency key is derived the same way decideReservation/
+  // markReservationReady derive theirs (reservationId + step), which is
+  // what makes issue_pickup_credential's "no silent rotation" guarantee
+  // work: a second issuance attempt for the same reservation always
+  // collides with the first one's key rather than minting a new one.
+  async issueCredential(
+    context: RuntimeContext,
+    reservationId: string,
+    pickupCodeHash: string,
+  ) {
+    return result(this.database.rpc("issue_pickup_credential", {
+      target_organization_id: context.organizationId,
+      target_actor_id: context.userId,
+      target_correlation_id: context.correlationId,
+      target_request_id: context.requestId,
+      target_idempotency_key: `${reservationId}:credential_issued`,
+      target_channel: context.channel,
+      target_reservation_id: reservationId,
+      target_pickup_code_hash: pickupCodeHash,
+    }));
+  }
+}

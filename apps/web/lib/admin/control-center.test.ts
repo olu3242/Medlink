@@ -110,9 +110,9 @@ describe("ControlCenterService authorization", () => {
   });
 
   it("backs the reservations KPI with a real API and page route", async () => {
-    const root = join(import.meta.dirname, "..");
-    expect(existsSync(join(root, "app/api/v1/dashboard/reservations/route.ts"))).toBe(true);
-    expect(existsSync(join(root, "app/control-center/reservations/page.tsx"))).toBe(true);
+    const root = join(import.meta.dirname, "../../app/admin");
+    expect(existsSync(join(root, "api/v1/dashboard/reservations/route.ts"))).toBe(true);
+    expect(existsSync(join(root, "control-center/reservations/page.tsx"))).toBe(true);
     const { database } = recordingDatabase();
     const result = await new ControlCenterService(database as never).load("reservations", runtime("pharmacy_owner") as never);
     const first = "metrics" in result ? result.metrics[0] : undefined;

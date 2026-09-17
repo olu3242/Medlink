@@ -1,4 +1,4 @@
-import { CatalogApplication } from "../../../../admin/lib/application";
+import { CatalogApplication } from "../../../lib/admin/application";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
 
 export default async function ProviderMedicinesPage({

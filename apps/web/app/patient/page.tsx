@@ -1,5 +1,5 @@
 import Link from "next/link";
-import PatientRequests from "../../../patient/app/page";
+import PatientRequests from "./_home-content";
 
 export default async function PatientHome() {
   return <>

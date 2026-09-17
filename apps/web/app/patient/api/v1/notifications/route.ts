@@ -1,1 +1,7 @@
-export * from "../../../../../../patient/app/api/v1/notifications/route";
+import { z } from "zod";
+import { AccessApplication } from "../../../../../lib/patient/application";
+import { runExperienceApi } from "../../../../../lib/patient/api-server";
+export const GET = (request: Request) => runExperienceApi(request, "patient.notification.list", {
+  name: "notifications.list", permission: "mar:read", schema: z.object({}), input: async () => ({}),
+  execute: (_input, context, database) => new AccessApplication(database).notifications(context.organizationId, context.userId),
+});

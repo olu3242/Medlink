@@ -49,20 +49,20 @@ describe("single-app MedLink frontend contract", () => {
 
   it("preserves legacy Control Center compatibility without duplicating it", () => {
     expect(read("apps/web/app/control-center/[[...path]]/page.tsx")).toContain("/admin");
-    expect(read("apps/web/app/admin/page.tsx")).toContain("admin/app/control-center/page");
+    expect(read("apps/web/app/admin/page.tsx")).toContain("control-center/page");
   });
 
   it("uses same-host navigation and browser API paths", () => {
     for (const path of [
-      "apps/admin/components/medicine-form.tsx",
+      "apps/web/components/admin/medicine-form.tsx",
       "apps/patient/components/inventory-search.tsx",
-      "apps/pharmacist/components/decision-form.tsx",
-      "apps/pharmacy/components/inventory-dashboard.tsx",
+      "apps/web/components/pharmacist/decision-form.tsx",
+      "apps/web/components/pharmacy/inventory-dashboard.tsx",
     ]) expect(read(path), path).not.toMatch(/https?:\/\/[^`"']*vercel\.app/);
   });
 
   it("retains safe structured Admin diagnostics", () => {
-    const api = read("apps/admin/lib/api.ts");
+    const api = read("apps/web/lib/admin/api.ts");
     for (const field of ["portal", "route", "upstream", "status", "request_id", "correlation_id", "error_class"]) {
       expect(api).toContain(field);
     }
