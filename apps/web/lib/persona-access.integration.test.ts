@@ -17,7 +17,31 @@ vi.mock("./supabase/server", () => ({ createSupabaseServerClient: async () => ({
     return query;
   },
 }) }));
-import { requirePersonaAccess } from "./persona-access";
+import { requirePersonaAccess, resolveActiveSession } from "./persona-access";
+describe("resolveActiveSession server integration", () => {
+  beforeEach(() => {
+    state.user = { id: "user", email: "synthetic@example.test", app_metadata: {}, user_metadata: {} };
+    state.memberships = [{ organization_id: "own", role: "patient" }]; state.cookie = undefined;
+    state.organization = { name: "Test organization" }; state.membershipError = null; state.organizationError = null;
+    state.queries = []; state.pathname = "/patient/medicines?sort=brand";
+  });
+  it("returns null for an anonymous request instead of redirecting", async () => {
+    state.user = null;
+    expect(await resolveActiveSession()).toBeNull();
+  });
+  it("returns null for an unresolved membership", async () => {
+    state.memberships = [];
+    expect(await resolveActiveSession()).toBeNull();
+  });
+  it("returns null on a membership lookup failure", async () => {
+    state.membershipError = { message: "database failure" };
+    expect(await resolveActiveSession()).toBeNull();
+  });
+  it("resolves any authorized role without a portal check -- global search is not persona-scoped", async () => {
+    state.memberships = [{ organization_id: "own", role: "pharmacist" }];
+    await expect(resolveActiveSession()).resolves.toMatchObject({ role: "pharmacist", organizationId: "own" });
+  });
+});
 describe("requirePersonaAccess server integration", () => {
   beforeEach(() => {
     state.user = { id: "user", email: "synthetic@example.test", app_metadata: {}, user_metadata: {} };

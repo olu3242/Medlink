@@ -1,3 +1,7 @@
+import { redirect } from "next/navigation";
+import { personaContractForRole } from "@medlink/platform";
+
+import { resolveActiveSession } from "../lib/persona-access";
 import { AnimatedBackground } from "../components/marketing/AnimatedBackground";
 import { CallToAction } from "../components/marketing/CallToAction";
 import { FAQ } from "../components/marketing/FAQ";
@@ -14,7 +18,13 @@ import { SecuritySection } from "../components/marketing/SecuritySection";
 import { StakeholderWorkspace } from "../components/marketing/StakeholderWorkspace";
 import { TrustBar } from "../components/marketing/TrustBar";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await resolveActiveSession();
+  if (session) {
+    const contract = personaContractForRole(session.role);
+    if (contract) redirect(`/${contract.portal}`);
+  }
+
   return (
     <div className="marketing-shell">
       <a className="skip-link" href="#main-content">Skip to content</a>
