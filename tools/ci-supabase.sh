@@ -107,6 +107,27 @@ ci_supabase_remove_scoped_resources() {
   done
 }
 
+ci_supabase_dump_auth_logs() {
+  # Diagnostic-only: dumps the local GoTrue (auth) container's own logs.
+  # payment-reconciliation-self-review-live.test.ts has failed on
+  # AuthRetryableFetchError (HTTP 500, empty body) from admin.createUser()
+  # across 4 independent, disproven client-side hypotheses (concurrency,
+  # email_sent rate limit, run ordering, sign_in_sign_ups rate limit) -- the
+  # client-visible error carries no diagnostic body, so the next step is
+  # GoTrue's own server-side log for the same request, captured here before
+  # ci_supabase_cleanup tears the containers down.
+  command -v docker >/dev/null 2>&1 || return 0
+  local container
+  container="$(docker ps -a --filter "name=${CI_SUPABASE_PROJECT_ID}" --filter 'name=auth' --format '{{.Names}}' | head -n 1)"
+  if [[ -z "$container" ]]; then
+    printf 'CI_SUPABASE_AUTH_LOGS=no auth container matched name=%s,name=auth\n' "$CI_SUPABASE_PROJECT_ID" >&2
+    docker ps -a --filter "name=${CI_SUPABASE_PROJECT_ID}" --format 'CONTAINER={{.Names}} STATUS={{.Status}}' || true
+    return 0
+  fi
+  printf 'CI_SUPABASE_AUTH_LOGS=%s (last 400 lines)\n' "$container"
+  docker logs --tail 400 --timestamps "$container" 2>&1 || true
+}
+
 ci_supabase_retry_cleanup() {
   ci_supabase_runtime_inventory BEFORE_RETRY_CLEANUP
   ci_supabase_stop

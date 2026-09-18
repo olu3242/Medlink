@@ -49,6 +49,37 @@ live("resolve_payment_reconciliation_case self-review guard", () => {
       await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt));
     }
     if (!created || created.error || !created.data.user) {
+      // The supabase-js AuthRetryableFetchError carries no response body
+      // ("Serialized Error: { status: 500, code: undefined }"), which has
+      // made 4 independent client-side hypotheses (concurrency, email_sent,
+      // run ordering, sign_in_sign_ups) impossible to confirm or rule out
+      // directly. One raw fetch to the same admin endpoint, bypassing the
+      // SDK, captures the actual HTTP status/headers/body text GoTrue sent
+      // -- diagnostic only, not a retry (the 6 attempts above already gave
+      // this call every fair chance).
+      try {
+        const raw = await fetch(`${url}/auth/v1/admin/users`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            apikey: serviceKey!,
+            authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ email: `diag-${email}`, password, email_confirm: true }),
+        });
+        const rawText = await raw.text();
+        const rawHeaders: Record<string, string> = {};
+        raw.headers.forEach((value, key) => { rawHeaders[key] = value; });
+        console.error(
+          `[payment-reconciliation-self-review-live] raw admin.createUser diagnostic for ${label}: ` +
+            `status=${raw.status} headers=${JSON.stringify(rawHeaders)} body=${rawText}`,
+        );
+      } catch (rawError) {
+        console.error(
+          `[payment-reconciliation-self-review-live] raw admin.createUser diagnostic fetch itself failed for ${label}:`,
+          rawError,
+        );
+      }
       throw created?.error ?? new Error(`fixture ${label} was not created`);
     }
     const client = createClient(url!, anonKey!, { auth: { persistSession: false } });

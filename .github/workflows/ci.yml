@@ -150,6 +150,9 @@ jobs:
           MEDLINK_LIVE_SUPABASE_ANON_KEY="$PUBLISHABLE_KEY" \
           MEDLINK_LIVE_SUPABASE_SERVICE_KEY="$SECRET_KEY" \
           npm run test:live
+      - name: Dump GoTrue (auth) container logs on failure
+        if: failure()
+        run: source tools/ci-supabase.sh && ci_supabase_dump_auth_logs
       - if: always()
         run: source tools/ci-supabase.sh && ci_supabase_cleanup
 
