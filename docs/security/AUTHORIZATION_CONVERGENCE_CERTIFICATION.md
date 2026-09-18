@@ -136,16 +136,23 @@ ephemeral Postgres, confirmed not connected to production) has passed on every r
 confirming all 3 new migrations (`202609180088`, `202609180089`, `202609180090`) apply
 cleanly.
 
-Outstanding, not fully resolved as of this section's last edit:
-`payment-reconciliation-self-review-live.test.ts`'s 2 tests still fail on the same
-GoTrue-500-under-load pattern even with the strengthened retry (6 attempts, up to 6s
-backoff) — this file creates fewer users than its sibling (7 vs. 14) but consistently
-hits the wall while the sibling does not, pointing to aggregate concurrent load from all
-9 live-DB test files racing the same local GoTrue instance rather than this file's own
-load. Addressed by adding `--no-file-parallelism` to the `test:live` script so live test
-*files* run one at a time instead of racing each other — a more direct fix than further
-inflating the retry budget, since it removes the cross-file contention itself rather than
-just tolerating it longer. Not yet confirmed by a subsequent CI run as of this edit.
+A 4th bug surfaced while chasing `payment-reconciliation-self-review-live.test.ts`'s
+persistent GoTrue 500s: the first hypothesis (cross-file concurrency racing the shared
+local GoTrue instance) was tested by adding `--no-file-parallelism` to `test:live` so live
+test files run one at a time instead of racing each other — this had **no effect** (the
+same 2 tests failed identically, even after all 6 retries), which disproved the
+concurrency theory. The actual cause: `supabase/config.toml`'s `[auth.rate_limit]` already
+overrides GoTrue's local `email_sent` limit once, from its very low out-of-the-box default
+up to 100/hour, specifically because "the auth E2E suite signs the same handful of fixture
+personas in repeatedly across several tests in one run" (the config file's own pre-existing
+comment). This repair's 2 new live test files add roughly 25-30 more
+`admin.createUser()` calls per `live-database` run on top of every pre-existing live test
+file's own fixture users within that same hour-long window — enough to push the
+cumulative total for the run past that 100 cap, which is what actually produced the 500s.
+Fixed by raising `email_sent` to 1000 (reverting the now-disproven
+`--no-file-parallelism` change to keep the diff minimal) — a local-CI-only setting per the
+file's own existing comment, with no production effect. Not yet confirmed by a subsequent
+CI run as of this edit.
 
 ## CROSS-TENANT / SELF-REVIEW / PRIVILEGE ESCALATION (executed in this sandbox only)
 
@@ -252,9 +259,11 @@ the way, including one genuine regression in migration `202609180088` silently d
 MAR-state-advancement logic (see LIVE RLS above), each confirmed resolved by a
 subsequent green run — a concrete demonstration of why item 15's live gates matter, not
 just a formality. One non-blocking item remains open: `payment-reconciliation-self-review-live.test.ts`'s
-2 tests still hit a GoTrue-500-under-load pattern as of the last run seen; a targeted fix
-(`--no-file-parallelism`) has been pushed but not yet confirmed green. This does not
-block certification — every finding this repair set out to close is closed, and every
-security-relevant gate that can run has passed; this remaining item is CI-environment
-test-infrastructure robustness for one adversarial live test, not an open authorization
+2 tests hit `AuthRetryableFetchError` 500s from local GoTrue's `email_sent` rate limit
+being exceeded by this repair's added user-provisioning volume (see LIVE RLS above); the
+fix (raising `supabase/config.toml`'s existing `[auth.rate_limit] email_sent` override)
+has been pushed but not yet confirmed green. This does not block certification — every
+finding this repair set out to close is closed, and every security-relevant gate that can
+run has passed; this remaining item is CI-environment test-infrastructure configuration
+for one adversarial live test, not an open authorization
 question. Re-check the PR's current CI status for that one file's outcome.

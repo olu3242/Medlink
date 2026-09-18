@@ -35,5 +35,15 @@ jwt_expiry = 3600
 # three), well within GoTrue's default local rate limits meant for a
 # single human clicking "resend" by hand. Local/CI-only -- production
 # uses the hosted platform's own configured limits, not this file.
+#
+# Raised from 100: the live-database job's test:live run now also
+# provisions ~25-30 brand-new auth users per run across
+# clinical-review-self-review-live.test.ts and
+# payment-reconciliation-self-review-live.test.ts alone (each
+# admin.createUser() call counts against this limiter, confirmation
+# email or not), on top of every other live test file's own fixture
+# users within the same hour-long window -- CI logs showed
+# AuthRetryableFetchError 500s from createUser() specifically once the
+# cumulative total for the run climbed past the old 100 cap.
 [auth.rate_limit]
-email_sent = 100
+email_sent = 1000
