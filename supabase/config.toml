@@ -35,5 +35,21 @@ jwt_expiry = 3600
 # three), well within GoTrue's default local rate limits meant for a
 # single human clicking "resend" by hand. Local/CI-only -- production
 # uses the hosted platform's own configured limits, not this file.
+#
+# email_sent raised from 100: speculative first attempt at the
+# AuthRetryableFetchError 500s below -- disproven by CI, kept anyway since
+# it's harmless and the run does create ~25-30 new auth users. The actual
+# cause was sign_in_sign_ups (added below): admin.createUser() is a sign-up
+# for rate-limiting purposes regardless of email_confirm, and GoTrue's
+# default local bucket for it is small and burst-limited, not just an
+# hourly total -- CI logs showed payment-reconciliation-self-review-live's
+# two createUser() calls issued back-to-back with no intervening await
+# (packages/runtime/src/payment-reconciliation-self-review-live.test.ts's
+# buildReconciliationCase: pharmacist then staff, no request between them)
+# always failing on the second call, deterministically, even after raising
+# email_sent 10x and even when that file was reordered to run first in
+# test:live -- neither matches an hourly-total limiter, both match a
+# burst/short-window one.
 [auth.rate_limit]
-email_sent = 100
+email_sent = 1000
+sign_in_sign_ups = 1000

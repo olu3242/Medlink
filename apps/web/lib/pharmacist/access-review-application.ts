@@ -17,6 +17,47 @@ async function result<T>(query: PromiseLike<{ data: T; error: { message: string 
   return data;
 }
 
+// decide_clinical_review (migration 202607290017, self-review guard added in
+// 202609180088) raises these as deliberate denials, not transient failures --
+// mapping them through result()'s generic retryable 503 would tell a denied
+// caller to retry an operation that will never succeed, and would mask a
+// real authorization decision as an infrastructure fault. Same mapping as
+// apps/web/lib/clinical-review-decider.ts's SupabaseClinicalReviewDecider,
+// which wraps the same RPC for the packages/workflows orchestrator path;
+// this is the separate application class the browser-facing
+// /api/v1/access-reviews/[id] route actually calls.
+function decisionDeniedError(message: string): RuntimeError | null {
+  if (/self-review is prohibited/i.test(message)) {
+    return new RuntimeError("authorization", "clinical_review_self_review_denied", "You cannot decide a clinical review for a request you created", 403);
+  }
+  if (/only a licensed pharmacist may decide/i.test(message)) {
+    return new RuntimeError("authorization", "clinical_review_role_denied", "Only a licensed pharmacist may decide a clinical review", 403);
+  }
+  if (/authenticated actor mismatch/i.test(message)) {
+    return new RuntimeError("authentication", "clinical_review_actor_mismatch", "Authentication mismatch", 401);
+  }
+  if (/clinical review has already been decided/i.test(message)) {
+    return new RuntimeError("business_rule", "clinical_review_already_decided", "This clinical review has already been decided", 409);
+  }
+  return null;
+}
+
+async function decideResult<T>(query: PromiseLike<{ data: T; error: { message: string } | null }>): Promise<T> {
+  const { data, error } = await query;
+  if (error) {
+    throw decisionDeniedError(error.message ?? "") ?? new RuntimeError(
+      "infrastructure",
+      "database_operation_failed",
+      "The data operation could not be completed",
+      503,
+      true,
+      "Retry later.",
+      { cause: error },
+    );
+  }
+  return data;
+}
+
 export interface AccessReviewDetail {
   id: string;
   decision: string;
@@ -87,7 +128,7 @@ export class AccessReviewApplication {
     decision: "approved" | "rejected" | "needs_information",
     recommendation: string,
   ) {
-    return result(this.database.rpc("decide_clinical_review", {
+    return decideResult(this.database.rpc("decide_clinical_review", {
       target_organization_id: context.organizationId,
       target_actor_id: context.userId,
       target_correlation_id: context.correlationId,

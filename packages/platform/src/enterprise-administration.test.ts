@@ -49,4 +49,32 @@ describe("enterprise administration", () => {
       changes: { version: "2" },
     })).rejects.toThrow(/approval evidence/);
   });
+
+  it("denies every non-administrative role -- the check now routes through can(role, \"organization:manage\") instead of a hardcoded role-name comparison", async () => {
+    const service = new EnterpriseAdministrationService({ append: vi.fn() }, () => new Date());
+    for (const role of ["patient", "provider", "pharmacist", "pharmacy_owner", "pharmacy_staff", "inventory_manager"] as const) {
+      await expect(service.apply({ ...context, role }, {
+        id: "change-4",
+        tenantId,
+        resource: "pharmacy",
+        resourceId: "pharmacy-1",
+        operation: "update",
+        changes: { enabled: true },
+      })).rejects.toThrow(/Administrative role required/);
+    }
+  });
+
+  it("still allows platform_admin, including across tenants", async () => {
+    const append = vi.fn();
+    const service = new EnterpriseAdministrationService({ append }, () => new Date("2026-07-30T00:00:00Z"));
+    await service.apply({ ...context, role: "platform_admin" }, {
+      id: "change-5",
+      tenantId: "10000000-0000-4000-8000-000000000002",
+      resource: "pharmacy",
+      resourceId: "pharmacy-2",
+      operation: "update",
+      changes: { enabled: true },
+    });
+    expect(append).toHaveBeenCalledOnce();
+  });
 });
