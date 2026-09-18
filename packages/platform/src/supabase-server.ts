@@ -7,6 +7,14 @@ const environmentSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
 });
 
+// Canonical auth-flow server client (magic-link request + callback code
+// exchange, session cookie establish/refresh) for every persona app. Reused
+// verbatim -- not re-implemented -- by apps/web, apps/patient,
+// apps/pharmacist, and apps/pharmacy's own `lib/supabase/server.ts` (each
+// re-exports this under its existing `createSupabaseServerClient` name so
+// none of their call sites change), in addition to apps/admin's direct use
+// below. Ordinary domain reads/writes in each app still go through that
+// app's own API routes; this client's only job is the session cookie.
 export async function createPersonaSupabaseServerClient() {
   const cookieStore = await cookies();
   const environment = environmentSchema.parse(process.env);

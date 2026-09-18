@@ -19,6 +19,27 @@ function infrastructureError(cause: unknown): RuntimeError {
   );
 }
 
+// decide_clinical_review (migration 202607290017, self-review guard added in
+// 202609180088) raises these as deliberate denials, not transient failures --
+// mapping them to a generic retryable 503 would tell a denied caller to
+// retry an operation that will never succeed, and would mask a real
+// authorization decision as an infrastructure fault.
+function decisionDeniedError(message: string): RuntimeError | null {
+  if (/self-review is prohibited/i.test(message)) {
+    return new RuntimeError("authorization", "clinical_review_self_review_denied", "You cannot decide a clinical review for a request you created", 403);
+  }
+  if (/only a licensed pharmacist may decide/i.test(message)) {
+    return new RuntimeError("authorization", "clinical_review_role_denied", "Only a licensed pharmacist may decide a clinical review", 403);
+  }
+  if (/authenticated actor mismatch/i.test(message)) {
+    return new RuntimeError("authentication", "clinical_review_actor_mismatch", "Authentication mismatch", 401);
+  }
+  if (/clinical review has already been decided/i.test(message)) {
+    return new RuntimeError("business_rule", "clinical_review_already_decided", "This clinical review has already been decided", 409);
+  }
+  return null;
+}
+
 interface DecideClinicalReviewRpcRow {
   id: string;
   decision: string;
@@ -46,7 +67,7 @@ export class SupabaseClinicalReviewDecider implements ClinicalReviewDecider {
       target_decision: input.decision,
       target_recommendation: input.recommendation,
     });
-    if (error) throw infrastructureError(error);
+    if (error) throw decisionDeniedError(error.message ?? "") ?? infrastructureError(error);
     const row = data as DecideClinicalReviewRpcRow;
     return { id: row.id, decision: row.decision };
   }

@@ -1,4 +1,5 @@
 import { can } from "./authorization";
+import type { FieldAccess } from "./control-center";
 import type { Permission, Role } from "./roles";
 
 export const canonicalPersonas = [
@@ -10,7 +11,11 @@ export type ActivePortal = "patient" | "pharmacist" | "pharmacy" | "provider" | 
 export type PersonaTheme = "patient" | "pharmacist" | "pharmacy" | "pharmacy-manager" | "provider" | "admin";
 export type ObjectAction = "READ" | "CREATE" | "UPDATE" | "DELETE" | "RECOMMEND" | "APPROVE" | "EXECUTE" | "CANCEL" | "REFUND" | "SETTLE" | "CONFIGURE" | "GOVERN";
 export type ObjectScope = "own" | "organization" | "assigned" | "network" | "none";
-export type FieldVisibility = "hidden" | "masked" | "read_only" | "editable";
+// Same concept as control-center.ts's FieldAccess (persona field projection
+// vs. platform/org/role effective-access merging are different call sites,
+// but the same four states) -- aliased here instead of re-declared so the
+// two can never silently drift apart.
+export type FieldVisibility = FieldAccess;
 
 export interface PersonaNavigationItem { readonly label: string; readonly href: string; readonly permission?: Permission; }
 export interface ObjectPermission { readonly object: string; readonly actions: readonly ObjectAction[]; readonly scope: ObjectScope; readonly conditions?: readonly string[]; }

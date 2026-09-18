@@ -1,28 +1,8 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-
-import { getPublicEnvironment } from "../env";
-
-export async function createSupabaseServerClient() {
-  const cookieStore = await cookies();
-  const environment = getPublicEnvironment();
-
-  return createServerClient(
-    environment.NEXT_PUBLIC_SUPABASE_URL,
-    environment.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
-            );
-          } catch {
-            // Server components cannot set cookies. Middleware refreshes sessions.
-          }
-        },
-      },
-    },
-  );
-}
+// Auth client convergence (authorization convergence repair, item 9): this
+// was an independent createServerClient(...) construction identical to
+// packages/platform/src/supabase-server.ts's createPersonaSupabaseServerClient
+// (and to apps/patient, apps/pharmacist, apps/pharmacy's own copies of the
+// same code) -- same cookies() source, same NEXT_PUBLIC_SUPABASE_* env pair,
+// same cookie-set try/catch. Re-exported under this app's existing name so
+// none of its call sites (e.g. lib/request-context.ts) need to change.
+export { createPersonaSupabaseServerClient as createSupabaseServerClient } from "@medlink/platform/supabase-server";

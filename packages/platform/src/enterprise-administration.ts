@@ -1,3 +1,4 @@
+import { can } from "./authorization";
 import type { RequestContext } from "./request-context";
 
 export type AdministrativeResource =
@@ -38,9 +39,18 @@ export class EnterpriseAdministrationService {
   ) {}
 
   async apply(context: RequestContext, change: AdministrativeChange): Promise<void> {
-    if (context.role !== "platform_admin" && context.role !== "tenant_admin") {
+    // organization:manage is granted to exactly platform_admin and
+    // tenant_admin (verified against packages/platform/src/authorization.ts's
+    // rolePermissions table) -- routing through the canonical permission
+    // rather than comparing role names directly means this stays correct if
+    // that grant ever changes, instead of silently drifting from it.
+    if (!can(context.role, "organization:manage")) {
       throw new Error("Administrative role required");
     }
+    // Cross-tenant scope, not a role/permission decision: platform_admin is
+    // the one role with platform-wide (not single-tenant) authority. There is
+    // no existing canonical "may act across tenants" permission to route this
+    // through without inventing one, so this stays an explicit role check.
     if (context.role !== "platform_admin" && context.tenantId !== change.tenantId) {
       throw new Error("Cross-tenant administration denied");
     }

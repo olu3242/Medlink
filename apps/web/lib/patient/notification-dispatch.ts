@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { buildReservationNotificationDispatcher } from "@medlink/notifications";
+import { createSupabaseServiceRoleClient } from "../supabase/service-role";
 
 // G09 minimum slice: best-effort only. A patient's reservation has already
 // committed by the time this runs -- a WhatsApp outage, missing
@@ -8,16 +8,20 @@ import { buildReservationNotificationDispatcher } from "@medlink/notifications";
 // stays pending/retrying in runtime_outbox_events for the next matching
 // request to pick up (see buildReservationNotificationDispatcher's own
 // comment on why there is no scheduler in this environment).
+//
+// Auth client convergence (authorization convergence repair, item 9): this
+// used to construct its own createClient(url, serviceRoleKey, ...) instead
+// of reusing apps/web/lib/supabase/service-role.ts's canonical factory. The
+// patient caller who triggers this can only ever cause the fixed
+// dispatcher.dispatch() call below to run (draining the notification
+// outbox) -- they never get a handle to the service-role client itself, so
+// this does not change the item 10 service-role isolation boundary.
 export async function dispatchPendingReservationNotifications(): Promise<void> {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const whatsAppAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    if (!supabaseUrl || !serviceRoleKey || !whatsAppAccessToken) return;
+    if (!whatsAppAccessToken) return;
 
-    const database = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+    const database = createSupabaseServiceRoleClient();
     const dispatcher = buildReservationNotificationDispatcher(database, whatsAppAccessToken);
     await dispatcher.dispatch("patient-reservations-worker", 5);
   } catch {

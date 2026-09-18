@@ -1,5 +1,12 @@
 # MedLink Authorization Convergence — Inventory
 
+> **Repair status:** all 8 items in this document's Summary section have been closed by
+> the authorization convergence repair batch. See
+> `docs/security/AUTHORIZATION_CONVERGENCE_CERTIFICATION.md` for the finding-by-finding
+> disposition (FIXED/VERIFIED_EXISTING/INTENTIONAL/DEFERRED/BLOCKED), evidence, and the
+> two corrections this repair made to findings below (item 3's `runWebApi` scope, and a
+> narrow existing consent mechanism the original Section 15 missed).
+
 Read-only audit, produced before any convergence work began. Scope: every existing
 authentication, membership, persona, role, permission, object, field, workflow-state,
 delegation, approval, RLS, audit, and service-role implementation in the repository.
@@ -222,16 +229,53 @@ but intentionally non-functional pending further design, not a working authorize
 ## Summary: real convergence targets (not a new-registry build)
 
 1. Unify the 3-4 duplicate page/API auth-client constructions behind one shared factory.
+   **FIXED.** `packages/platform/src/supabase-server.ts::createPersonaSupabaseServerClient()`
+   is now the single factory; `apps/web`, `apps/patient`, `apps/pharmacist`, `apps/pharmacy`'s
+   `lib/supabase/server.ts` each re-export it. Two more, previously-undocumented duplicate
+   *service-role* client constructions found and converged during implementation
+   (`apps/web/lib/{patient,pharmacy}/notification-dispatch.ts` → `createSupabaseServiceRoleClient()`).
 2. Fix `resolveRequestContext()` to consult `WORKSPACE_COOKIE` (matches 3 existing peers).
+   **FIXED.** `apps/web/lib/request-context.ts` rewritten to the same
+   user → memberships → requested/active workspace → verify → authorize sequence as its
+   3 peers, header priority matching `runApi`. 10 new tests. Two previously-undocumented
+   bugs found and fixed in the same file/its caller during implementation: `runWebApi`
+   mapped unauthenticated calls to a 500 instead of 401, and `/api/v1/context` wrongly
+   required an unrelated `organization:read` permission that excluded the patient role.
 3. Decide and resolve the `runWebApi` contract-role-pinning gap relative to `runApi`.
+   **CORRECTED FINDING.** This document's original text implied `/api/v1/partner/applications/*`
+   shared `runWebApi`'s gap. It does not: that route imports a *different*,
+   identically-named `runWebApi` from `apps/web/lib/partner.ts`, an intentionally separate
+   pre-tenant boundary for applicants with no org membership yet. Only
+   `apps/web/lib/api-runtime.ts::runWebApi()` (sole consumer: `/api/v1/context`) had the
+   gap; resolved as INTENTIONAL — see certification doc item 3.
 4. Replace the 2 hardcoded role-string comparisons with `can()`/declared permissions.
-5. Unify `FieldVisibility`/`FieldAccess` into one type.
+   **PARTIAL — see certification doc item 4.** `enterprise-administration.ts`'s
+   administrative-role check now calls `can(role, "organization:manage")`. Its separate
+   cross-tenant-scope check and `persona-certification.ts`'s Test-As identity gate remain
+   intentional role comparisons (not security-permission decisions); reasoning documented
+   inline at each site.
+5. Unify `FieldVisibility`/`FieldAccess` into one type. **FIXED.**
+   `persona-contracts.ts`'s `FieldVisibility` is now a type alias of `control-center.ts`'s
+   `FieldAccess`, not a separately declared duplicate.
 6. Decide, with product input, whether `decide_clinical_review` needs a self-review guard.
+   **FIXED**, per the product decision recorded in the certification doc (self-review
+   prohibited for independent clinical approval): migration `202609180088` adds the guard,
+   modeled on `decide_partner_application`'s. Live and unit test coverage added.
 7. Confirm refund/settlement dispatch is intentionally automated (no human approval gate).
-8. Decide whether a TS/SQL role-vocabulary drift check is worth adding to CI.
+   **FIXED**, per the product decision recorded in the certification doc (SoD for
+   manual/high-risk actions, no gate on automated processing): automated payment/refund
+   paths confirmed unchanged; the one manual financial action in the codebase,
+   `resolve_payment_reconciliation_case`, gained a self-review guard (migration
+   `202609180089`) reusing `payments.created_by` rather than inventing a schema column.
+8. Decide whether a TS/SQL role-vocabulary drift check is worth adding to CI. **FIXED.**
+   `packages/platform/src/role-enum-drift.test.ts` parses the actual `member_role`
+   migration SQL (no second hardcoded role list) and fails on any difference from
+   `roles.ts`; runs under the existing unconditional `npm run test`/`check` CI step.
 
-None of these require a new abstraction — each is a small, targeted fix to an existing,
+None of these required a new abstraction — each was a small, targeted fix to an existing,
 otherwise-sound canonical layer. Consent-as-authorization-input and general end-user
-delegation are genuine, larger gaps, both already either undocumented (consent) or
-explicitly deferred by product decision (delegation, per ADR 0010) — closing either is
-a real feature design task, not a convergence fix, and should be scoped separately.
+delegation remain genuine, larger topics: Section 15's "no consent model exists anywhere"
+was itself imprecise (a real, narrow `consent_records` mechanism exists and gates
+marketplace location discovery — see certification doc item 11); delegation remains
+explicitly deferred by product decision (ADR 0010, certification doc item 12). Neither
+was implemented as part of this repair, per instruction.
