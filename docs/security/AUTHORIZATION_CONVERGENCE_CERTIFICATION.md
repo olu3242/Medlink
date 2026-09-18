@@ -103,12 +103,21 @@ execution found 3 real bugs this session then fixed (all now pushed):
 1. `clinical-review-self-review-live.test.ts`'s self-review test tried to pass the same
    user id as both `patient_id` and `pharmacist_id` into the shared fixture RPC, which
    violates `organization_memberships`' unique `(organization_id, user_id)` constraint.
-   Fixed by provisioning a normal, distinct fixture patient and reassigning the MAR's
-   `created_by` via a new dedicated fixture RPC
-   (`202609180090_mar_creator_reassignment_fixture.sql`) instead — `service_role` has no
-   `UPDATE` grant on `medication_access_requests` directly (`SELECT` only, per
-   `202608150033_reservation_fulfillment_read_grants.sql`), which a first attempt at this
-   fix (a direct table update) also had to discover the hard way.
+   Fixed in two stages. The first attempt provisioned a distinct fixture patient and then
+   reassigned the MAR's `created_by` afterward via a dedicated fixture RPC — first tried as
+   a direct table `UPDATE` (rejected: `service_role` has no `UPDATE` grant on
+   `medication_access_requests`, `SELECT` only, per
+   `202608150033_reservation_fulfillment_read_grants.sql`), then as a service-role-only RPC
+   doing the same `UPDATE` internally. CI caught that this second version was *also* wrong,
+   for a different reason: `enforce_and_audit_mar_state`'s pre-existing ownership-immutability
+   trigger on `medication_access_requests` (`202607270003_medication_access_core.sql`,
+   predates this repair entirely) unconditionally rejects any `UPDATE` that changes
+   `created_by` ("MAR ownership fields are immutable"), which blocked the RPC just as it
+   would have blocked a direct table update. The trigger only guards `UPDATE`, not `INSERT`,
+   so the final fix (`202609180090_clinical_review_self_review_fixture.sql`) replaced the
+   reassignment approach entirely with a dedicated fixture that sets `created_by` to the
+   reviewing pharmacist directly at insert time — sidestepping the trigger rather than
+   fighting it.
 2. Both new live test files' `signedInUser()` helper hit transient GoTrue 500s
    (`AuthRetryableFetchError`) under the concurrent user-creation load of 9 live test
    files running at once; a short 3-attempt/500ms retry was insufficient, strengthened to
@@ -129,41 +138,77 @@ execution found 3 real bugs this session then fixed (all now pushed):
 `medication-golden-loop-e2e` — the full real browser medication-access flow (WhatsApp →
 patient → pharmacist → patient → pharmacy → patient → pharmacy) — passed on the run after
 the migration was rebased, after failing identically on all 3 runs before it.
-`clinical-review-self-review-live.test.ts` also now passes all 4/4 tests (confirming bugs
-1 and 2's fixes for that file). No adversarial live test was faked,
-skipped-and-reported-as-passing, or run against production; `migration-apply` (isolated
-ephemeral Postgres, confirmed not connected to production) has passed on every run,
-confirming all 3 new migrations (`202609180088`, `202609180089`, `202609180090`) apply
-cleanly.
+`clinical-review-self-review-live.test.ts` also now passes all 4/4 tests, confirmed by CI
+on the current head commit (confirming bug 1's final fix above and bug 2's retry fix for
+this file). No adversarial live test was faked, skipped-and-reported-as-passing, or run
+against production; `migration-apply` (isolated ephemeral Postgres, confirmed not
+connected to production) has passed on every run, confirming all 3 new migrations
+(`202609180088`, `202609180089`, `202609180090`) apply cleanly.
 
-A 4th bug surfaced while chasing `payment-reconciliation-self-review-live.test.ts`'s
-persistent GoTrue 500s: the first hypothesis (cross-file concurrency racing the shared
-local GoTrue instance) was tested by adding `--no-file-parallelism` to `test:live` so live
-test files run one at a time instead of racing each other — this had **no effect** (the
-same 2 tests failed identically, even after all 6 retries), which disproved the
-concurrency theory. The actual cause: `supabase/config.toml`'s `[auth.rate_limit]` already
-overrides GoTrue's local `email_sent` limit once, from its very low out-of-the-box default
-up to 100/hour, specifically because "the auth E2E suite signs the same handful of fixture
-personas in repeatedly across several tests in one run" (the config file's own pre-existing
-comment). This repair's 2 new live test files add roughly 25-30 more
-`admin.createUser()` calls per `live-database` run on top of every pre-existing live test
-file's own fixture users within that same hour-long window — enough to push the
-cumulative total for the run past that 100 cap, which is what actually produced the 500s.
-Fixed by raising `email_sent` to 1000 (reverting the now-disproven
-`--no-file-parallelism` change to keep the diff minimal) — a local-CI-only setting per the
-file's own existing comment, with no production effect. Not yet confirmed by a subsequent
-CI run as of this edit.
+**`payment-reconciliation-self-review-live.test.ts`'s 2 tests remain unresolved: a genuine,
+reproducible CI-environment issue, not an authorization defect.** Both tests fail
+deterministically on `admin.createUser()` inside `buildReconciliationCase`, always on the
+call immediately following the prior `signedInUser()` call with no other request between
+them, raising `AuthRetryableFetchError` (HTTP 500, no body) from local GoTrue every single
+time. Four independent, evidence-based hypotheses were tested across 4 separate CI runs on
+this PR, each addressing a real, specific piece of evidence, and each disproven by the
+identical failure recurring on the next run:
+
+1. **Cross-file concurrency** (9 live test files racing one local GoTrue instance) — tested
+   by adding `--no-file-parallelism` to `test:live` so files run strictly one at a time.
+   No effect: identical failure.
+2. **`email_sent` rate limit** — `supabase/config.toml`'s `[auth.rate_limit]` already
+   overrode GoTrue's default `email_sent` cap for pre-existing reasons documented in the
+   file; this repair's 2 new live files add ~25-30 more `admin.createUser()` calls per run,
+   plausibly pushing a run's cumulative total past the prior 100 cap. Raised to 1000. No
+   effect: identical failure.
+3. **Run-position / cumulative resource exhaustion** — both failures always hit each test's
+   own *last* `signedInUser()` call, and the file was literally last in `test:live`'s list;
+   reordered it to run first. No effect: identical failure, at the same internal point
+   within the file, even though it was no longer last overall — this ruled out both simple
+   concurrency and whole-run cumulative state as the cause.
+4. **`sign_in_sign_ups` rate limit** — found a second, separate GoTrue rate-limit bucket
+   (`auth.rate_limit.sign_in_sign_ups`, distinct from `email_sent`) that config.toml had
+   never configured; its default burst-oriented bucket structurally matched the observed
+   pattern (always the *second* of two `createUser()` calls issued back-to-back with no
+   intervening request) better than an hourly-total limiter does. Added it alongside
+   `email_sent`, confirmed accepted by the Supabase CLI (no config-validation warning in
+   CI's logs). No effect: identical failure, same 2 tests, same call sites.
+
+One more piece of evidence sharpens what remains unexplained: `signedInUser()`'s retry loop
+makes 6 attempts with cumulative backoff up to ~15 seconds, and every single attempt fails
+identically on every run — not one of the 6 retries, on any of the 4 runs, ever succeeded.
+A true rate-limit-under-load condition would be expected to clear within that window at
+least occasionally. That it never does points away from a rate limit as the mechanism at
+all, and toward something more specific to this exact request pattern that none of the 4
+hypotheses tested — a genuine unknown, not a rate-limit tuning problem, and not something
+further blind config changes are likely to fix.
+
+Per this repair's own instruction not to fake, substitute, or hand-wave missing live
+evidence, this item is reported as exactly what it is: **unresolved after 4 genuine
+diagnostic attempts**, not silently dropped, not falsely claimed fixed. It does not
+indicate an authorization defect — the identical self-review-guard SQL pattern
+(`resolve_payment_reconciliation_case`'s guard added in `202609180089`, structurally the
+same as `decide_clinical_review`'s in `202609180088`) is proven live via
+`clinical-review-self-review-live.test.ts`'s clean 4/4 pass, and is additionally covered by
+the RLS matrix and this repair's sandbox-executed unit tests. Resolving this specific test
+file's `AuthRetryableFetchError` pattern needs direct access to GoTrue's own server-side
+logs or debug instrumentation during a failing run — access this session does not have —
+rather than further guesses from client-side error signatures alone.
 
 ## CROSS-TENANT / SELF-REVIEW / PRIVILEGE ESCALATION (executed in this sandbox only)
 
 - **CROSS-TENANT: 3/3 PASS** — `request-context.test.ts` (forged/foreign organization
   cookie rejected), `enterprise-administration.test.ts` (cross-tenant action denied for
   `tenant_admin`; `platform_admin`'s cross-tenant exception still correctly allowed).
-- **SELF-REVIEW: 1/1 PASS** (executed) — `clinical-review-decider.test.ts` (self-review
-  mapped to 403, not a retryable infrastructure error). 2 additional self-review
-  adversarial cases (clinical review cross-tenant/independent-review live test, payment
-  reconciliation live test) were written but not executed — see LIVE RLS above; not
-  counted in this tally.
+- **SELF-REVIEW: 1/1 PASS** (executed in this sandbox) — `clinical-review-decider.test.ts`
+  (self-review mapped to 403, not a retryable infrastructure error). Additionally, via real
+  CI execution (see LIVE RLS above): `clinical-review-self-review-live.test.ts`'s 4/4 tests
+  pass, including its dedicated self-review denial case, confirming the same guard pattern
+  live at the database layer. `payment-reconciliation-self-review-live.test.ts`'s 2 tests
+  (independent-review pass case and self-review denial case for
+  `resolve_payment_reconciliation_case`) were written and are believed correct, but could
+  not be confirmed by execution — see LIVE RLS above; not counted in this tally.
 - **PRIVILEGE ESCALATION: 9/9 PASS** — `request-context.test.ts` (revoked/soft-deleted
   membership rejected even when explicitly requested), `enterprise-administration.test.ts`
   (all 6 non-administrative roles denied, one assertion each),
@@ -185,9 +230,11 @@ Supabase service role.
 
 - **UNIT/INTEGRATION: PASS.** `npx vitest run` (full monorepo): 222 test files passed,
   1292 tests passed, 17 files / 69 tests skipped in this sandbox (all live-DB-gated,
-  consistent with no live credentials here) — 6 of those tests (the 2 new live-DB files)
-  are confirmed passing for real by CI (see LIVE RLS above), leaving only
-  `payment-reconciliation-self-review-live.test.ts`'s 2 tests as genuinely outstanding.
+  consistent with no live credentials here) — `clinical-review-self-review-live.test.ts`'s
+  4 tests are confirmed passing for real by CI (see LIVE RLS above), leaving
+  `payment-reconciliation-self-review-live.test.ts`'s 2 tests as the sole tests in the
+  whole suite whose live execution remains unconfirmed, for the CI-environment reason
+  documented in LIVE RLS above (not an authorization defect).
 - **TYPECHECK: PASS.** `npm run typecheck` (`tsc --noEmit -p tsconfig.json`, whole
   monorepo): clean.
 - **LINT: PASS.** `npm run lint` (`eslint .`): clean.
@@ -237,11 +284,14 @@ after.
 - No Docker daemon in this sandbox and no `MEDLINK_LIVE_SUPABASE_URL/ANON_KEY/SERVICE_KEY`
   here — neither blocked CI, which confirmed `RUN_LIVE_DATABASE_TESTS` is enabled for this
   repository and supplied real execution evidence on every push to PR #58.
-- `payment-reconciliation-self-review-live.test.ts`'s 2 tests were still failing on the
-  GoTrue-500-under-load pattern as of the last CI run seen, even with a strengthened
-  retry. Addressed by adding `--no-file-parallelism` to `test:live` (see LIVE RLS above)
-  so the 9 live-DB test files stop racing the same local GoTrue instance for user
-  creation; not yet confirmed by a subsequent CI run as of this section's last edit.
+- `payment-reconciliation-self-review-live.test.ts`'s 2 tests fail deterministically on a
+  GoTrue `AuthRetryableFetchError` (HTTP 500) pattern that 4 independent, evidence-based
+  fix attempts across 4 separate CI runs did not resolve (see LIVE RLS above for the full
+  account: file-parallelism, `email_sent` rate limit, run ordering, and a second
+  `sign_in_sign_ups` rate limit were each tested and each disproven). This session does not
+  have access to GoTrue's own server-side logs or debug instrumentation during a failing
+  CI run, which is what resolving this would need next. Handed off as an open,
+  non-blocking, disclosed CI-environment limitation rather than continuing to guess blind.
 
 ## FINAL_STATUS
 
@@ -256,14 +306,22 @@ sandbox), plus, via real CI execution against an isolated ephemeral Postgres
 browser-auth-e2e, and medication-golden-loop-e2e (the full real medication-access
 browser flow) — passes. That CI execution found and drove the fix for 3 real bugs along
 the way, including one genuine regression in migration `202609180088` silently dropping
-MAR-state-advancement logic (see LIVE RLS above), each confirmed resolved by a
-subsequent green run — a concrete demonstration of why item 15's live gates matter, not
-just a formality. One non-blocking item remains open: `payment-reconciliation-self-review-live.test.ts`'s
-2 tests hit `AuthRetryableFetchError` 500s from local GoTrue's `email_sent` rate limit
-being exceeded by this repair's added user-provisioning volume (see LIVE RLS above); the
-fix (raising `supabase/config.toml`'s existing `[auth.rate_limit] email_sent` override)
-has been pushed but not yet confirmed green. This does not block certification — every
-finding this repair set out to close is closed, and every security-relevant gate that can
-run has passed; this remaining item is CI-environment test-infrastructure configuration
-for one adversarial live test, not an open authorization
-question. Re-check the PR's current CI status for that one file's outcome.
+MAR-state-advancement logic, and a second genuine bug where the self-review test fixture's
+`UPDATE`-based `created_by` reassignment was rejected by a pre-existing ownership-immutability
+trigger (see LIVE RLS above) — each confirmed resolved by a subsequent green run, a concrete
+demonstration of why item 15's live gates matter, not just a formality.
+
+One non-blocking item remains open: `payment-reconciliation-self-review-live.test.ts`'s 2
+tests fail deterministically on `AuthRetryableFetchError` 500s from local GoTrue's
+`admin.createUser()`, across all 4 CI runs on this PR, despite 4 separate, independent,
+evidence-based fix attempts (file-parallelism, `email_sent` rate limit, run ordering,
+`sign_in_sign_ups` rate limit — see LIVE RLS above for the full account of each and why it
+was ruled out). This is reported honestly as **unresolved**, not silently dropped and not
+falsely claimed fixed. It does not block certification: every finding this repair set out
+to close is closed, every security-relevant gate that can run has passed, and the identical
+self-review-guard SQL pattern this specific test targets is already proven live via
+`clinical-review-self-review-live.test.ts`'s clean 4/4 CI pass plus this repair's
+sandbox-executed unit tests. This remaining item is a CI-environment/GoTrue-behavior
+limitation for one adversarial live test file, not an open authorization question, and it
+needs a human with direct GoTrue/CI debug access to resolve rather than further blind
+configuration guesses.
