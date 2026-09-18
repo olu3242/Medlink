@@ -14,18 +14,19 @@ const live = url && anonKey && serviceKey ? describe : describe.skip;
 // pass here also serves as the "direct API bypass" case: the guard holds even
 // when nothing routes through apps/web's Next.js handlers at all.
 //
-// Reuses certify_medication_golden_loop_fixture (202608170041) rather than
-// introducing a parallel fixture: it already seeds an organization, a
-// pharmacist membership, and a MAR with a pending clinical review tied to a
-// chosen patient_id. organization_memberships has a unique (organization_id,
-// user_id) constraint -- one role per org per user -- so the self-review
-// case can't reuse the same id as both patient_id and pharmacist_id in one
-// fixture call. Instead it provisions a normal, distinct fixture patient and
-// then reassigns the MAR's created_by to the pharmacist via the dedicated
-// certify_mar_creator_reassignment_fixture RPC (202609180090 --
-// service_role has no UPDATE grant on medication_access_requests directly),
-// producing the same condition the guard exists to catch (creator ===
-// deciding actor) without a duplicate membership row.
+// Independent-review cases reuse certify_medication_golden_loop_fixture
+// (202608170041), which seeds an organization, a pharmacist membership, and
+// a MAR with a pending clinical review tied to a chosen patient_id (the
+// MAR's created_by). The self-review case needs a fixture whose MAR is
+// created_by the reviewing pharmacist instead -- organization_memberships
+// has a unique (organization_id, user_id) constraint, so it can't reuse the
+// same id as both patient_id and pharmacist_id in one golden-loop fixture
+// call, and reassigning created_by via UPDATE after the fact is rejected by
+// enforce_and_audit_mar_state's ownership-immutability trigger
+// (202607270003_medication_access_core.sql: "MAR ownership fields are
+// immutable"). certify_clinical_review_self_review_fixture (202609180090)
+// sets created_by to the pharmacist at insert time instead, producing the
+// same condition the guard exists to catch without either problem.
 live("decide_clinical_review self-review guard", () => {
   const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   let service: SupabaseClient;
@@ -60,6 +61,17 @@ live("decide_clinical_review self-review guard", () => {
 
   async function goldenLoopFixture(fixtureKey: string, patientId: string, pharmacistId: string, pharmacyStaffId: string) {
     const { data, error } = await service.rpc("certify_medication_golden_loop_fixture", {
+      fixture_key: fixtureKey,
+      patient_id: patientId,
+      pharmacist_id: pharmacistId,
+      pharmacy_staff_id: pharmacyStaffId,
+    });
+    if (error) throw error;
+    return data as { organizationId: string; marId: string; reviewId: string };
+  }
+
+  async function selfReviewFixture(fixtureKey: string, patientId: string, pharmacistId: string, pharmacyStaffId: string) {
+    const { data, error } = await service.rpc("certify_clinical_review_self_review_fixture", {
       fixture_key: fixtureKey,
       patient_id: patientId,
       pharmacist_id: pharmacistId,
@@ -105,19 +117,10 @@ live("decide_clinical_review self-review guard", () => {
     const selfReviewer = await signedInUser("self-reviewer");
     const throwawayPatient = await signedInUser("self-throwaway-patient");
     const staff = await signedInUser("self-staff");
-    const fixture = await goldenLoopFixture(`self-${nonce}`, throwawayPatient.id, selfReviewer.id, staff.id);
-    // Reassign the MAR's creator to the reviewing pharmacist themselves --
-    // the condition under test -- without a second membership row.
-    // service_role has no UPDATE grant on medication_access_requests
-    // (SELECT only, 202608150033_reservation_fulfillment_read_grants.sql),
-    // so this goes through the dedicated fixture RPC instead of a direct
-    // table update.
-    const reassigned = await service.rpc("certify_mar_creator_reassignment_fixture", {
-      fixture_key: `self-reassign-${nonce}`,
-      target_mar_id: fixture.marId,
-      new_created_by: selfReviewer.id,
-    });
-    if (reassigned.error) throw reassigned.error;
+    // The MAR's created_by is the pharmacist themselves -- the condition
+    // under test -- set at insert time by the dedicated fixture RPC, not
+    // reassigned afterward (see the file-level comment above).
+    const fixture = await selfReviewFixture(`self-${nonce}`, throwawayPatient.id, selfReviewer.id, staff.id);
 
     const decided = await selfReviewer.client.rpc(
       "decide_clinical_review",
