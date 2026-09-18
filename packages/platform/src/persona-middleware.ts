@@ -28,6 +28,36 @@ function redirectTo(request: NextRequest, path: string, cookies: readonly Pendin
   return responseWithCookies(NextResponse.redirect(destination), cookies);
 }
 
+interface LegacyRetirementOptions {
+  readonly portal: ActivePortal;
+  readonly canonicalOrigin: string | undefined;
+}
+
+// A standalone persona app's own page routes are redirected to their canonical
+// apps/web equivalent (e.g. /medicines -> https://canonical/patient/medicines);
+// /auth/* and /api/* never redirect, so sign-in, callback, and every API route
+// this app's own frontend or an external integration depends on keep working
+// locally, exactly as enforcePersonaRequest already carves them out. Redirect
+// is opt-in per deployment: no canonicalOrigin configured means no redirect at
+// all, so merging this is a no-op until a project's own env explicitly enables it.
+export function legacyRetirementRedirect(request: NextRequest, options: LegacyRetirementOptions): NextResponse | null {
+  if (!options.canonicalOrigin) return null;
+  const pathname = request.nextUrl.pathname;
+  const isAuthRoute = pathname === "/auth" || pathname.includes("/auth/");
+  const isApiRoute = pathname === "/api" || pathname.includes("/api/");
+  if (isAuthRoute || isApiRoute) return null;
+
+  const { portal } = options;
+  const targetPath = pathname === "/" || pathname === `/${portal}`
+    ? `/${portal}`
+    : pathname.startsWith(`/${portal}/`)
+      ? pathname
+      : `/${portal}${pathname}`;
+  const destination = new URL(targetPath, options.canonicalOrigin);
+  destination.search = request.nextUrl.search;
+  return NextResponse.redirect(destination, 307);
+}
+
 export async function enforcePersonaRequest(request: NextRequest, options: PersonaMiddlewareOptions) {
   const correlationId = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
   const requestHeaders = new Headers(request.headers);
