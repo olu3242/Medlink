@@ -36,14 +36,17 @@ live("resolve_payment_reconciliation_case self-review guard", () => {
     // This file and its siblings all create real Supabase Auth users
     // concurrently against the same ephemeral local GoTrue instance in CI;
     // under that concurrent load GoTrue occasionally returns a transient
-    // 500 (AuthRetryableFetchError) rather than a real rejection -- retried
-    // a few times with a short backoff before treating it as a failure.
+    // 500 (AuthRetryableFetchError) rather than a real rejection -- a light
+    // 3-attempt/500ms retry was not enough headroom in practice (still
+    // failed under the full 9-live-file concurrent run), so this retries
+    // more persistently with a longer backoff before treating it as a
+    // failure.
     let created: Awaited<ReturnType<typeof service.auth.admin.createUser>> | undefined;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= 6; attempt += 1) {
       created = await service.auth.admin.createUser({ email, password, email_confirm: true });
       if (!created.error) break;
-      if (attempt === 3) break;
-      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      if (attempt === 6) break;
+      await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt));
     }
     if (!created || created.error || !created.data.user) {
       throw created?.error ?? new Error(`fixture ${label} was not created`);

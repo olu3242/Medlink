@@ -42,7 +42,7 @@ architecture was introduced.
 | 3 | `runWebApi` contract-role-pinning gap vs. `runApi` | **INTENTIONAL, corrected finding** | The inventory document's own text was imprecise: it implied `/api/v1/partner/applications/*` shared this gap. Direct inspection during implementation showed those routes import a *different*, identically-named `runWebApi` from `apps/web/lib/partner.ts` — an intentional, already-documented "pre-tenant boundary" for partner applicants who have no organization membership yet, genuinely unable to use `runApi`'s tenant resolution. Only `apps/web/lib/api-runtime.ts::runWebApi()` had the real gap, and its sole consumer is `/api/v1/context`, which needs no object-level permission beyond authentication + active membership (already enforced by `resolveRequestContext()`) — it returns only the caller's own already-authorized identity. No contract-role pinning was added because there is no per-role restriction to pin: every authenticated role may read their own session. Documented inline in `api-runtime.ts` and `route.ts`. |
 | 4 | 2 hardcoded role-string comparisons | **PARTIAL — 1 fixed, 2 confirmed intentional** | `enterprise-administration.ts::EnterpriseAdministrationService.apply()`'s administrative-role gate now calls `can(context.role, "organization:manage")` instead of comparing role names directly (`organization:manage` is granted to exactly `platform_admin`/`tenant_admin` in `authorization.ts`'s table, verified before the change). 4/4 tests passing, including 2 new: all 6 non-administrative roles denied, `platform_admin` still works cross-tenant. The same function's separate cross-tenant-scope check (`role !== "platform_admin"`) is **not** a permission decision — it selects *whose* tenant-scope check applies, and no canonical "may act across tenants" permission exists to route it through without inventing one — left as an explicit, documented role check. `persona-certification.ts::authorizeTestAsRequest()`'s `role !== "platform_admin"` gate is a deliberate, non-delegable identity check for Test-As impersonation (itself unconditionally blocked elsewhere by `authorizeTestAsSession`'s architectural tripwire, per the original audit) — making it a permission would incorrectly imply it could ever be granted to another role. Both are documented inline as intentional. |
 | 5 | Unify `FieldVisibility`/`FieldAccess` | **FIXED** | `persona-contracts.ts`'s `FieldVisibility` is now `export type FieldVisibility = FieldAccess;`, aliasing `control-center.ts`'s type instead of independently declaring the same 4 states. No third abstraction created; the two resolver *functions* remain separate (different call sites, as the audit noted) but can never again drift on vocabulary. `npm run typecheck` clean; `persona-contracts.test.ts`, `control-center.test.ts`, `access-governance.test.ts`, `authorization.test.ts` all passing (27 tests). |
-| 6 | `decide_clinical_review` self-review guard | **FIXED** | Migration `202609180088_clinical_review_self_review_guard.sql`, modeled directly on `decide_partner_application`'s existing guard: looks up the underlying `medication_access_requests.created_by` via the review's `mar_id`, raises `'Self-review is prohibited'` if it matches the deciding actor, before any state mutation. Runs after the existing role/replay checks, not instead of them. App-layer bug found and fixed in the same item: `apps/web/lib/clinical-review-decider.ts` was mapping every RPC error — including this deliberate denial — to a generic retryable 503 "infrastructure" error; added `decisionDeniedError()` to map self-review (403), non-pharmacist role (403), actor mismatch (401), and already-decided (409) to their correct statuses. `apps/web/lib/clinical-review-decider.test.ts`, 6/6 passing. Adversarial live-DB coverage written in `packages/runtime/src/clinical-review-self-review-live.test.ts` (independent-review positive case, self-review denial, cross-tenant pharmacist denial, non-pharmacist role denial) — see LIVE RLS below for execution status. |
+| 6 | `decide_clinical_review` self-review guard | **FIXED (regression caught and corrected by CI)** | Migration `202609180088_clinical_review_self_review_guard.sql`, modeled directly on `decide_partner_application`'s existing guard: looks up the underlying `medication_access_requests.created_by` via the review's `mar_id`, raises `'Self-review is prohibited'` if it matches the deciding actor, before any state mutation. Runs after the existing role/replay checks, not instead of them. App-layer bug found and fixed in the same item: `apps/web/lib/clinical-review-decider.ts` was mapping every RPC error — including this deliberate denial — to a generic retryable 503 "infrastructure" error; added `decisionDeniedError()` to map self-review (403), non-pharmacist role (403), actor mismatch (401), and already-decided (409) to their correct statuses. A second, separate occurrence of the exact same 503-blanket-mapping bug was found and fixed in `apps/web/lib/pharmacist/access-review-application.ts::AccessReviewApplication.decide()` — the application class actually behind the browser-facing `/api/v1/access-reviews/[id]` route (`apps/pharmacist` re-exports it from `apps/web`). **A real regression was also caught here by CI's `medication-golden-loop-e2e` job**, not by this session's own review: the migration's first version was based on the original `202607290017_decide_clinical_review.sql`, but a later migration (`202607290019_mar_reviewed_on_approval.sql`) had already redefined the same function to add MAR-state advancement (`validated` → `reviewed` on approval) and a concurrency-safe `UPDATE ... WHERE decision = 'pending'` guard with a not-found fallback re-check — overwriting `202607290019`'s definition with a self-review-guard-only version silently dropped both, so an approval would record on `clinical_reviews` but the linked MAR would never advance to `reviewed`. Corrected by rebasing the migration on `202607290019`'s full logic with only the self-review check added; all 3 CI runs before the fix failed identically at this exact step, and confirming which prior migration actually defines a function before writing `create or replace function` over it is the lesson this leaves for any future migration touching an already-redefined function. `apps/web/lib/clinical-review-decider.test.ts` (6/6) and `apps/web/lib/pharmacist/access-review-application.test.ts` (6/6) passing. Adversarial live-DB coverage in `packages/runtime/src/clinical-review-self-review-live.test.ts` (independent-review positive case, self-review denial, cross-tenant pharmacist denial, non-pharmacist role denial) — see LIVE RLS below for execution status. |
 | 7 | Refund/settlement approval boundary | **FIXED** | Investigation (see disposition below) found exactly one manual/high-risk financial action in the entire codebase — `resolve_payment_reconciliation_case` — and confirmed every other money-moving path (`apply_payment_provider_event`, `apply_refund_provider_event`, `initiate_reservation_refund_on_exit`, `capture_payment_reconciliation_event`, `open_payment_reconciliation_case`) is automated, provider/trigger-driven, with no human decision step; these are unchanged, per the business rule that automated provider-confirmed processing should not require unnecessary human approval. `payment_reconciliation_cases` has no human-initiator column (cases are exclusively system-opened), so there was no initiator to separate from the resolving admin via that table directly — migration `202609180089_payment_reconciliation_self_review_guard.sql` instead reuses the existing `payments.created_by` relationship (via the case's `payment_id`) to prohibit a platform admin from resolving a reconciliation case for a payment they themselves made, the same self-review-guard shape as items 6/`decide_partner_application`, without inventing a new column. Adversarial live-DB coverage written in `packages/runtime/src/payment-reconciliation-self-review-live.test.ts` (independent resolution positive case, self-review denial) — see LIVE RLS below for execution status. |
 | 8 | TS/SQL role-vocabulary drift check | **FIXED** | `packages/platform/src/role-enum-drift.test.ts` parses the actual `create type public.member_role as enum (...)` and every `alter type ... add value ...` across `supabase/migrations/*.sql` (no second hardcoded role list) and asserts set-equality with `roles.ts`'s `Role` array. Sanity-checked by temporarily injecting a fake role into `roles.ts`: the test correctly failed with the exact diff, then passed again after reverting. Runs under the existing unconditional `npm run test` (`check` script), no new CI wiring needed — real drift will fail CI on every PR, not just a scheduled/live job. |
 
@@ -92,29 +92,54 @@ policy exists (5-table `workerOnly` allowlist unchanged by this repair).
 
 ## LIVE RLS / LIVE DATABASE
 
-**BLOCKED_ENVIRONMENT.** This sandbox has no `MEDLINK_LIVE_SUPABASE_URL/ANON_KEY/SERVICE_KEY`
-and no reachable Docker daemon (`docker ps` fails: no `/var/run/docker.sock`), so neither
-a live Supabase connection nor a local ephemeral Postgres (`tools/ci-supabase.sh`, which
-CI's `migration-apply`/`live-database` jobs use) is available here. No adversarial live
-test was faked, skipped-and-reported-as-passing, or run against production.
+**EXECUTED — real CI evidence, not sandbox-simulated.** This sandbox itself has no
+`MEDLINK_LIVE_SUPABASE_URL/ANON_KEY/SERVICE_KEY` and no reachable Docker daemon, so no
+live test ran inside this sandbox. But `RUN_LIVE_DATABASE_TESTS` turned out to be enabled
+for this repository, so pushing this branch's PR (#58) triggered CI's `migration-apply`
+and `live-database` jobs against a real, isolated, ephemeral local Postgres — supplying
+exactly the execution evidence the first version of this report said was missing. That
+execution found 3 real bugs this session then fixed (all now pushed):
 
-What was actually done instead:
-- Two new adversarial live-DB test files were written against the real RPC surface,
-  following the repository's established `describe.skip`-gated pattern
-  (`packages/runtime/src/reserve-inventory-active-location-live.test.ts`'s convention) so
-  they will genuinely execute — not just parse — the moment real credentials are present:
-  `clinical-review-self-review-live.test.ts` (4 tests) and
-  `payment-reconciliation-self-review-live.test.ts` (2 tests). Both were confirmed to
-  parse and correctly `describe.skip` (not error) in this sandbox, and both were added to
-  the `test:live` npm script so CI's `live-database` job (`vars.RUN_LIVE_DATABASE_TESTS
-  == 'true'`) picks them up automatically with real local-Postgres credentials.
-- New migrations `202609180088`/`202609180089` were reviewed line-by-line against the
-  real table/column schema they touch but were **not** applied to any Postgres instance
-  in this sandbox — CI's `migration-apply` job (isolated ephemeral local Postgres,
-  confirmed not connected to production) will be the first real execution.
-- Whether `RUN_LIVE_DATABASE_TESTS` is actually enabled for this PR's CI run is outside
-  this session's visibility (a GitHub Actions repository/environment variable) — flagged
-  as an external item to check once CI runs, not assumed either way.
+1. `clinical-review-self-review-live.test.ts`'s self-review test tried to pass the same
+   user id as both `patient_id` and `pharmacist_id` into the shared fixture RPC, which
+   violates `organization_memberships`' unique `(organization_id, user_id)` constraint.
+   Fixed by provisioning a normal, distinct fixture patient and reassigning the MAR's
+   `created_by` via a new dedicated fixture RPC
+   (`202609180090_mar_creator_reassignment_fixture.sql`) instead — `service_role` has no
+   `UPDATE` grant on `medication_access_requests` directly (`SELECT` only, per
+   `202608150033_reservation_fulfillment_read_grants.sql`), which a first attempt at this
+   fix (a direct table update) also had to discover the hard way.
+2. Both new live test files' `signedInUser()` helper hit transient GoTrue 500s
+   (`AuthRetryableFetchError`) under the concurrent user-creation load of 9 live test
+   files running at once; a short 3-attempt/500ms retry was insufficient, strengthened to
+   6 attempts with up to a 6s backoff.
+3. **A real regression, caught by CI's `medication-golden-loop-e2e` job, not by this
+   session's own review**: migration `202609180088`'s first version was based on the
+   *original* `202607290017_decide_clinical_review.sql` rather than the *later*
+   `202607290019_mar_reviewed_on_approval.sql`, which had already redefined the same
+   function to add MAR-state advancement (`validated` → `reviewed` on approval) and a
+   concurrency-safe `UPDATE ... WHERE decision = 'pending'` guard. Overwriting that later
+   definition silently dropped both — an approval recorded on `clinical_reviews` but the
+   linked MAR never advanced, so the patient's own MAR page never reflected it. The
+   migration was rebased on `202607290019`'s full logic with only the self-review check
+   added on top; every one of the 3 CI runs before this fix failed identically at this
+   exact assertion.
+
+As of this section's last edit, the fix for bug 3 has been pushed but this session has
+not yet seen a fully green CI run confirm it — see the PR for the current run's actual
+result before treating `medication-golden-loop-e2e` as PASS. Bugs 1 and 2 were confirmed
+fixed by a subsequent green `live-database` run (payment-reconciliation's tests aside —
+see below). No adversarial live test was faked, skipped-and-reported-as-passing, or run
+against production; `migration-apply` (isolated ephemeral Postgres, confirmed not
+connected to production) has passed on every run, confirming all 3 new migrations
+(`202609180088`, `202609180089`, `202609180090`) apply cleanly.
+
+Outstanding, not yet resolved: `payment-reconciliation-self-review-live.test.ts`'s 2
+tests were still failing as of the last CI run seen, on the same GoTrue-500-under-load
+pattern as bug 2 above even after the retry strengthening — this file creates fewer
+users than its sibling (7 vs. 14) but consistently hits the wall while the sibling does
+not, suggesting timing/ordering relative to the other 7 concurrent live-DB files rather
+than this file's own load. Not yet root-caused further.
 
 ## CROSS-TENANT / SELF-REVIEW / PRIVILEGE ESCALATION (executed in this sandbox only)
 
@@ -154,16 +179,22 @@ Supabase service role.
 - **LINT: PASS.** `npm run lint` (`eslint .`): clean.
 - **BUILD: PASS.** `npm run build --workspaces --if-present`: all workspaces built,
   exit code 0, no errors.
-- **MIGRATION_APPLY: BLOCKED_ENVIRONMENT.** No Docker daemon reachable in this sandbox
-  (`ci_supabase_start` requires it); CI's isolated `migration-apply` job will be the
-  first real execution of the two new migration files.
+- **MIGRATION_APPLY: PASS (real CI execution).** No Docker daemon is reachable in this
+  sandbox, but `RUN_LIVE_DATABASE_TESTS` is enabled for this repository, so CI's isolated
+  `migration-apply` job actually ran against a real, ephemeral local Postgres on every
+  push to PR #58, and passed on all of them — the 3 new migration files apply cleanly.
 
 ## BROWSER
 
-**BLOCKED_ENVIRONMENT.** The browser-auth-e2e and medication-golden-loop-e2e CI jobs
-require a live local Supabase instance plus built persona apps and are gated the same
-way as `live-database` (`RUN_LIVE_DATABASE_TESTS`); neither Docker nor
-`MEDLINK_LIVE_SUPABASE_*` credentials are available in this sandbox.
+**MIXED — real CI execution, not sandbox-simulated.** Neither Docker nor
+`MEDLINK_LIVE_SUPABASE_*` credentials are available in this sandbox, but
+`RUN_LIVE_DATABASE_TESTS` is enabled for this repository, so CI's `browser-auth-e2e` and
+`medication-golden-loop-e2e` jobs actually ran on every push to PR #58.
+`browser-auth-e2e` (the auth-only gate) passed on the most recent run seen.
+`medication-golden-loop-e2e` (the full medication-access flow) failed identically on all
+3 runs seen so far, all traced to the same real regression documented under LIVE RLS
+above (item 6's migration silently dropping MAR-state advancement) — the fix has been
+pushed but not yet confirmed green by a subsequent CI run as of this section's last edit.
 
 ## REMAINING AUTHORIZATION GAPS
 
@@ -189,13 +220,16 @@ way as `live-database` (`RUN_LIVE_DATABASE_TESTS`); neither Docker nor
 ## EXTERNAL BLOCKERS
 
 - No Docker daemon in this sandbox (`docker ps` → `no such file or directory` for
-  `/var/run/docker.sock`) — blocks local migration-apply verification and local Supabase
-  for live tests.
-- No `MEDLINK_LIVE_SUPABASE_URL/ANON_KEY/SERVICE_KEY` in this sandbox's environment.
-- Whether GitHub Actions variable `RUN_LIVE_DATABASE_TESTS` is set for this repository/PR
-  is unknown from this session — determines whether the `live-database`,
-  `browser-auth-e2e`, and `medication-golden-loop-e2e` CI jobs actually execute (rather
-  than no-op via their `if:` guard) once this PR's CI runs.
+  `/var/run/docker.sock`) and no `MEDLINK_LIVE_SUPABASE_URL/ANON_KEY/SERVICE_KEY` here —
+  neither blocks CI, which confirmed `RUN_LIVE_DATABASE_TESTS` is enabled for this
+  repository and has been supplying real execution evidence on every push to PR #58.
+- `payment-reconciliation-self-review-live.test.ts`'s 2 tests were still failing on the
+  GoTrue-500-under-load pattern as of the last run seen despite a strengthened retry —
+  not yet root-caused further; see LIVE RLS above.
+- Whether the fix for the `decide_clinical_review` MAR-advancement regression (LIVE RLS
+  above, bug 3) has produced a fully green `medication-golden-loop-e2e` run had not yet
+  been confirmed by this session as of this section's last edit — check the PR's current
+  CI status rather than assuming either outcome.
 
 ## FINAL_STATUS
 
@@ -204,11 +238,13 @@ way as `live-database` (`RUN_LIVE_DATABASE_TESTS`); neither Docker nor
 All 8 convergence findings are closed (7 FIXED, 1 PARTIAL-with-documented-intentional-remainder),
 both required business-rule decisions are implemented and tested, consent and delegation
 are accurately documented (not silently dropped, not falsely marked implemented), and
-every gate this sandbox can execute — unit, integration, typecheck, lint, build, RLS
-matrix — passes. The blockers are entirely environmental (no Docker, no live Supabase
-credentials in this sandbox) rather than unresolved findings: the two new migrations and
-four new adversarial live-DB tests are written and wired into CI but have not yet been
-executed against a real Postgres. CI's `migration-apply` and (if
-`RUN_LIVE_DATABASE_TESTS` is enabled) `live-database` jobs on this PR will supply that
-missing execution evidence; this report should be revisited once those results are in
-before treating this as fully certified.
+every gate this sandbox itself can execute — unit, integration, typecheck, lint, build,
+RLS matrix — passes. Beyond this sandbox, real CI execution against an isolated ephemeral
+Postgres (`RUN_LIVE_DATABASE_TESTS` is enabled for this repository) found and drove the
+fix for 3 real bugs, including one genuine regression in migration `202609180088` (see
+LIVE RLS above) — a materially better outcome than the environmentally-blocked status
+this report originally carried, and a concrete demonstration of why item 15's live gates
+matter. Two things remain open, not blocking findings: confirming the regression fix's
+CI run comes back green, and root-causing `payment-reconciliation-self-review-live.test.ts`'s
+persistent GoTrue-500-under-load failures. Re-check the PR's current CI status before
+treating this as fully certified.

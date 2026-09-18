@@ -21,9 +21,11 @@ const live = url && anonKey && serviceKey ? describe : describe.skip;
 // user_id) constraint -- one role per org per user -- so the self-review
 // case can't reuse the same id as both patient_id and pharmacist_id in one
 // fixture call. Instead it provisions a normal, distinct fixture patient and
-// then reassigns the MAR's created_by to the pharmacist directly via the
-// service-role client, producing the same condition the guard exists to
-// catch (creator === deciding actor) without a duplicate membership row.
+// then reassigns the MAR's created_by to the pharmacist via the dedicated
+// certify_mar_creator_reassignment_fixture RPC (202609180090 --
+// service_role has no UPDATE grant on medication_access_requests directly),
+// producing the same condition the guard exists to catch (creator ===
+// deciding actor) without a duplicate membership row.
 live("decide_clinical_review self-review guard", () => {
   const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   let service: SupabaseClient;
@@ -35,13 +37,15 @@ live("decide_clinical_review self-review guard", () => {
     // concurrently against the same ephemeral local GoTrue instance in CI;
     // under that concurrent load GoTrue occasionally returns a transient
     // 500 (AuthRetryableFetchError) rather than a real rejection -- retried
-    // a few times with a short backoff before treating it as a failure.
+    // persistently with a longer backoff (matching
+    // payment-reconciliation-self-review-live.test.ts's sibling helper)
+    // before treating it as a failure.
     let created: Awaited<ReturnType<typeof service.auth.admin.createUser>> | undefined;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= 6; attempt += 1) {
       created = await service.auth.admin.createUser({ email, password, email_confirm: true });
       if (!created.error) break;
-      if (attempt === 3) break;
-      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      if (attempt === 6) break;
+      await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt));
     }
     if (!created || created.error || !created.data.user) {
       throw created?.error ?? new Error(`fixture ${label} was not created`);
@@ -104,10 +108,15 @@ live("decide_clinical_review self-review guard", () => {
     const fixture = await goldenLoopFixture(`self-${nonce}`, throwawayPatient.id, selfReviewer.id, staff.id);
     // Reassign the MAR's creator to the reviewing pharmacist themselves --
     // the condition under test -- without a second membership row.
-    const reassigned = await service
-      .from("medication_access_requests")
-      .update({ created_by: selfReviewer.id })
-      .eq("id", fixture.marId);
+    // service_role has no UPDATE grant on medication_access_requests
+    // (SELECT only, 202608150033_reservation_fulfillment_read_grants.sql),
+    // so this goes through the dedicated fixture RPC instead of a direct
+    // table update.
+    const reassigned = await service.rpc("certify_mar_creator_reassignment_fixture", {
+      fixture_key: `self-reassign-${nonce}`,
+      target_mar_id: fixture.marId,
+      new_created_by: selfReviewer.id,
+    });
     if (reassigned.error) throw reassigned.error;
 
     const decided = await selfReviewer.client.rpc(
