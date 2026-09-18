@@ -17,10 +17,13 @@ const live = url && anonKey && serviceKey ? describe : describe.skip;
 // Reuses certify_medication_golden_loop_fixture (202608170041) rather than
 // introducing a parallel fixture: it already seeds an organization, a
 // pharmacist membership, and a MAR with a pending clinical review tied to a
-// chosen patient_id. Passing the SAME id as both patient_id and
-// pharmacist_id gives that one user both the MAR's created_by and a
-// pharmacist membership in the same organization -- exactly the self-review
-// condition the guard exists to catch.
+// chosen patient_id. organization_memberships has a unique (organization_id,
+// user_id) constraint -- one role per org per user -- so the self-review
+// case can't reuse the same id as both patient_id and pharmacist_id in one
+// fixture call. Instead it provisions a normal, distinct fixture patient and
+// then reassigns the MAR's created_by to the pharmacist directly via the
+// service-role client, producing the same condition the guard exists to
+// catch (creator === deciding actor) without a duplicate membership row.
 live("decide_clinical_review self-review guard", () => {
   const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   let service: SupabaseClient;
@@ -28,9 +31,20 @@ live("decide_clinical_review self-review guard", () => {
   async function signedInUser(label: string) {
     const email = `clinical-review-${label}-${nonce}@medlink.test`;
     const password = `ClinicalReview-${label}-${nonce}-Strong!`;
-    const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
-    if (created.error || !created.data.user) {
-      throw created.error ?? new Error(`fixture ${label} was not created`);
+    // This file and its siblings all create real Supabase Auth users
+    // concurrently against the same ephemeral local GoTrue instance in CI;
+    // under that concurrent load GoTrue occasionally returns a transient
+    // 500 (AuthRetryableFetchError) rather than a real rejection -- retried
+    // a few times with a short backoff before treating it as a failure.
+    let created: Awaited<ReturnType<typeof service.auth.admin.createUser>> | undefined;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      created = await service.auth.admin.createUser({ email, password, email_confirm: true });
+      if (!created.error) break;
+      if (attempt === 3) break;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+    if (!created || created.error || !created.data.user) {
+      throw created?.error ?? new Error(`fixture ${label} was not created`);
     }
     const client = createClient(url!, anonKey!, { auth: { persistSession: false } });
     const signedIn = await client.auth.signInWithPassword({ email, password });
@@ -85,9 +99,16 @@ live("decide_clinical_review self-review guard", () => {
 
   it("denies self-review when the deciding pharmacist created the underlying request", async () => {
     const selfReviewer = await signedInUser("self-reviewer");
+    const throwawayPatient = await signedInUser("self-throwaway-patient");
     const staff = await signedInUser("self-staff");
-    // Same id as both patient_id (MAR creator) and pharmacist_id (deciding role).
-    const fixture = await goldenLoopFixture(`self-${nonce}`, selfReviewer.id, selfReviewer.id, staff.id);
+    const fixture = await goldenLoopFixture(`self-${nonce}`, throwawayPatient.id, selfReviewer.id, staff.id);
+    // Reassign the MAR's creator to the reviewing pharmacist themselves --
+    // the condition under test -- without a second membership row.
+    const reassigned = await service
+      .from("medication_access_requests")
+      .update({ created_by: selfReviewer.id })
+      .eq("id", fixture.marId);
+    if (reassigned.error) throw reassigned.error;
 
     const decided = await selfReviewer.client.rpc(
       "decide_clinical_review",
