@@ -196,6 +196,45 @@ file's `AuthRetryableFetchError` pattern needs direct access to GoTrue's own ser
 logs or debug instrumentation during a failing run — access this session does not have —
 rather than further guesses from client-side error signatures alone.
 
+## MIGRATION SEMANTIC SAFETY
+
+**PASS — explicit semantic-diff evidence for every function this branch modifies.**
+This branch redefines exactly 2 pre-existing functions (`grep -rl "create or replace
+function public.<name>" supabase/migrations/*.sql` against both names, confirming the
+full redefinition history) and introduces 1 brand-new one:
+
+- **`decide_clinical_review`** — 3 total definitions exist:
+  `202607290017_decide_clinical_review.sql` (original),
+  `202607290019_mar_reviewed_on_approval.sql` (latest pre-branch, adds MAR-state
+  advancement + a concurrency-safe `UPDATE ... WHERE decision = 'pending'` guard), and
+  `202609180088_clinical_review_self_review_guard.sql` (this branch). A `diff` of
+  `202607290019`'s function body against `202609180088`'s shows exactly one addition: a
+  `request_creator uuid` declaration plus an 8-line self-review guard block inserted
+  right after fetching the existing review row and before the already-decided check.
+  Every other line — MAR-state advancement, the concurrency guard, and audit-evidence
+  recording — is byte-for-byte unchanged. (This is the corrected version, after CI caught
+  and this session fixed an earlier mistaken rebase onto the *original* `202607290017`
+  instead of `202607290019` — see LIVE RLS above.)
+- **`resolve_payment_reconciliation_case`** — 2 total definitions exist:
+  `202608180070_network_transaction_policy.sql` (original and only prior) and
+  `202609180089_payment_reconciliation_self_review_guard.sql` (this branch) — no
+  stale-base risk was possible here since there was only one prior version to rebase on.
+  A `diff` of the two function bodies shows exactly one addition: a `payment_initiator
+  uuid` declaration plus a 7-line self-review guard block inserted right after the
+  already-resolved idempotent-replay check and before the resolution mutation. Every
+  other line — the `for update` row lock, the idempotent-replay check, the resolution
+  `UPDATE`, the `governance_audit_events` insert, and the `payments.reconciliation_required`
+  clearing logic — is byte-for-byte unchanged.
+- **`certify_clinical_review_self_review_fixture`** (`202609180090`) — brand new,
+  test-only, `service_role`-only fixture function; no prior definition exists to diff
+  against, no collision risk.
+
+No other function is redefined by this branch (confirmed by the same `grep -rl`
+methodology against the full migration set, not just these two names in isolation —
+`git diff origin/main...authorization-convergence-repair -- supabase/migrations` shows
+only `202609180088`, `202609180089`, and `202609180090` as new files; no existing
+migration file was edited).
+
 ## CROSS-TENANT / SELF-REVIEW / PRIVILEGE ESCALATION (executed in this sandbox only)
 
 - **CROSS-TENANT: 3/3 PASS** — `request-context.test.ts` (forged/foreign organization
