@@ -26,7 +26,7 @@ vi.mock("@supabase/ssr", () => ({
   }),
 }));
 
-import { enforcePersonaRequest } from "./persona-middleware";
+import { enforcePersonaRequest, legacyRetirementRedirect } from "./persona-middleware";
 
 function request(pathname: string, cookie?: string) {
   const headers = new Headers();
@@ -100,5 +100,45 @@ describe("enforcePersonaRequest", () => {
     expect(response.status).toBe(307);
     const location = new URL(response.headers.get("location")!);
     expect(location.searchParams.get("error")).toBe("forbidden");
+  });
+});
+
+describe("legacyRetirementRedirect", () => {
+  it("is a no-op with no canonical origin configured -- retirement redirect is opt-in per deployment", () => {
+    expect(legacyRetirementRedirect(request("/medicines"), { portal: "patient", canonicalOrigin: undefined })).toBeNull();
+  });
+
+  it("never redirects an auth route, even with a canonical origin configured", () => {
+    expect(legacyRetirementRedirect(request("/auth/sign-in"), { portal: "patient", canonicalOrigin: "https://canonical.example" })).toBeNull();
+    expect(legacyRetirementRedirect(request("/auth/callback"), { portal: "patient", canonicalOrigin: "https://canonical.example" })).toBeNull();
+  });
+
+  it("never redirects an api route, even with a canonical origin configured", () => {
+    expect(legacyRetirementRedirect(request("/api/v1/medicines/search"), { portal: "patient", canonicalOrigin: "https://canonical.example" })).toBeNull();
+  });
+
+  it("redirects the root to the canonical persona home", () => {
+    const response = legacyRetirementRedirect(request("/"), { portal: "patient", canonicalOrigin: "https://canonical.example" });
+    expect(response?.status).toBe(307);
+    expect(new URL(response!.headers.get("location")!).pathname).toBe("/patient");
+  });
+
+  it("redirects a native root-relative page path to its canonical persona-prefixed equivalent", () => {
+    const response = legacyRetirementRedirect(request("/medicines/med-1"), { portal: "patient", canonicalOrigin: "https://canonical.example" });
+    const location = new URL(response!.headers.get("location")!);
+    expect(location.origin).toBe("https://canonical.example");
+    expect(location.pathname).toBe("/patient/medicines/med-1");
+  });
+
+  it("does not double-prefix a path the standalone app's own rewrite already serves under /{portal}", () => {
+    const response = legacyRetirementRedirect(request("/patient/medicines"), { portal: "patient", canonicalOrigin: "https://canonical.example" });
+    expect(new URL(response!.headers.get("location")!).pathname).toBe("/patient/medicines");
+  });
+
+  it("preserves the query string", () => {
+    const response = legacyRetirementRedirect(request("/search?q=amoxicillin"), { portal: "patient", canonicalOrigin: "https://canonical.example" });
+    const location = new URL(response!.headers.get("location")!);
+    expect(location.pathname).toBe("/patient/search");
+    expect(location.searchParams.get("q")).toBe("amoxicillin");
   });
 });
