@@ -141,6 +141,17 @@ live("cross-organization transaction through the same Partner-generated pharmacy
         `insert into public.medicines(brand_name,generic_name,dosage_form,route,strength_display,pack_size,manufacturer_name,status)
          values('Network Generic Alternative','Network Generic Ingredient','tablet','oral','10 mg','30 tablets','MedLink Certification','active') returning id`,
       )).rows[0].id as string;
+      // 202608240001 requires a currently-valid medicine_registrations row
+      // for a medicine to appear in discover_marketplace_inventory at all
+      // (exact or generic_related) -- without these, every assertion below
+      // that expects a result row would regress to NONE_AVAILABLE.
+      for (const registeredMedicineId of [medicineId, genericMedicineId]) {
+        await db.query(
+          `insert into public.medicine_registrations(medicine_id,country_code,authority_code,registration_number,valid_from,valid_until)
+           values($1,'NG','NAFDAC',$2,current_date - interval '1 year',current_date + interval '1 year')`,
+          [registeredMedicineId, `NETWORK-REG-${registeredMedicineId}`],
+        );
+      }
       const inventoryDocument = {
         pharmacyLocationId: locationId,
         medicineId,
